@@ -31,14 +31,14 @@ describe.skipIf(!DATABASE_URL)(
       await sql.end();
     });
 
-    it("minimal 7 tabel diperiksa (T06: businesses, outlets, profiles, memberships, employees, devices, permissions_override) — supaya test ini tidak lolos diam-diam di database kosong", async () => {
+    it("minimal 16 tabel diperiksa (T06: 7 tabel tenancy + T08: 9 tabel katalog) — supaya test ini tidak lolos diam-diam di database yang kurang lengkap", async () => {
       const allTables = await sql<{ tablename: string }[]>`
         select tablename
         from pg_tables
         where schemaname = 'public'
       `;
 
-      expect(allTables.length).toBeGreaterThanOrEqual(7);
+      expect(allTables.length).toBeGreaterThanOrEqual(16);
     });
 
     it("tidak ada tabel tanpa rowsecurity aktif", async () => {

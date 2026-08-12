@@ -8,11 +8,13 @@ import {
   pgEnum,
   pgPolicy,
   pgTable,
+  primaryKey,
   text,
   time,
   timestamp,
   unique,
   uuid,
+  type AnyPgColumn,
 } from "drizzle-orm/pg-core";
 
 /**
@@ -241,6 +243,320 @@ export const permissionsOverride = pgTable(
         select 1 from employees e
         where e.id = ${t.employeeId}
           and e.business_id = any(auth_business_ids())
+      )`,
+    }),
+  ]
+).enableRLS();
+
+/**
+ * Skema katalog — BLUEPRINT §3.2 (Master Data & Katalog), T08.
+ *
+ * `product_variants`, `product_prices`, `modifiers`, `product_modifier_groups`,
+ * dan `product_bundle_items` TIDAK punya kolom business_id langsung (sesuai
+ * BLUEPRINT) — policy RLS-nya lewat EXISTS join ke tabel induk yang punya
+ * business_id (products atau modifier_groups), pola yang sama seperti
+ * permissions_override di T07.
+ */
+
+export const productTypeEnum = pgEnum("product_type", [
+  "simple",
+  "recipe",
+  "bundle",
+  "service",
+  "open_price",
+]);
+
+export const categories = pgTable(
+  "categories",
+  {
+    id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+    businessId: uuid("business_id")
+      .notNull()
+      .references(() => businesses.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    color: text("color"),
+    sortOrder: integer("sort_order").notNull().default(0),
+    parentId: uuid("parent_id").references((): AnyPgColumn => categories.id),
+  },
+  (t) => [
+    pgPolicy("categories_select", {
+      for: "select",
+      using: sql`${t.businessId} = any(auth_business_ids())`,
+    }),
+    pgPolicy("categories_insert", {
+      for: "insert",
+      withCheck: sql`${t.businessId} = any(auth_business_ids())`,
+    }),
+  ]
+).enableRLS();
+
+export const products = pgTable(
+  "products",
+  {
+    id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+    businessId: uuid("business_id")
+      .notNull()
+      .references(() => businesses.id, { onDelete: "cascade" }),
+    categoryId: uuid("category_id").references(() => categories.id),
+    sku: text("sku"),
+    barcode: text("barcode"),
+    name: text("name").notNull(),
+    description: text("description"),
+    imageUrl: text("image_url"),
+    productType: productTypeEnum("product_type").notNull().default("recipe"),
+    // 'simple'  : dijual utuh, stok dikurangi langsung (botol Aqua, snack)
+    // 'recipe'  : dibuat dari bahan, stok bahan yang dikurangi (latte, nasi goreng)
+    // 'bundle'  : paket dari beberapa produk
+    // 'service' : tidak ada stok (biaya kemasan, tip)
+    trackStock: boolean("track_stock").notNull().default(true),
+    isFavorite: boolean("is_favorite").notNull().default(false),
+    isTaxable: boolean("is_taxable").notNull().default(true),
+    prepStation: text("prep_station"), // 'kitchen' | 'bar' | 'dessert' -> routing KDS
+    prepMinutes: integer("prep_minutes"),
+    sortOrder: integer("sort_order").notNull().default(0),
+    isActive: boolean("is_active").notNull().default(true),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    pgPolicy("products_select", {
+      for: "select",
+      using: sql`${t.businessId} = any(auth_business_ids())`,
+    }),
+    pgPolicy("products_insert", {
+      for: "insert",
+      withCheck: sql`${t.businessId} = any(auth_business_ids())`,
+    }),
+  ]
+).enableRLS();
+
+export const productVariants = pgTable(
+  "product_variants",
+  {
+    id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+    productId: uuid("product_id")
+      .notNull()
+      .references(() => products.id, { onDelete: "cascade" }),
+    name: text("name").notNull(), // 'Regular', 'Large', 'Hot', 'Iced'
+    sku: text("sku"),
+    priceDelta: numeric("price_delta", { precision: 16, scale: 2 })
+      .notNull()
+      .default("0"),
+    isDefault: boolean("is_default").notNull().default(false),
+    isActive: boolean("is_active").notNull().default(true),
+  },
+  (t) => [
+    pgPolicy("product_variants_select", {
+      for: "select",
+      using: sql`exists (
+        select 1 from products p
+        where p.id = ${t.productId}
+          and p.business_id = any(auth_business_ids())
+      )`,
+    }),
+    pgPolicy("product_variants_insert", {
+      for: "insert",
+      withCheck: sql`exists (
+        select 1 from products p
+        where p.id = ${t.productId}
+          and p.business_id = any(auth_business_ids())
+      )`,
+    }),
+  ]
+).enableRLS();
+
+// MULTI HARGA (fitur kunci Kasirini): dine-in, takeaway, GoFood, member
+export const priceTiers = pgTable(
+  "price_tiers",
+  {
+    id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+    businessId: uuid("business_id")
+      .notNull()
+      .references(() => businesses.id, { onDelete: "cascade" }),
+    code: text("code").notNull(), // 'DINEIN','TAKEAWAY','GOFOOD','MEMBER'
+    name: text("name").notNull(),
+    channel: text("channel"), // link ke sales channel
+    // numeric(7,4) sesuai BLUEPRINT §3.0. Tanpa notNull() -- BLUEPRINT cuma
+    // kasih default 0, bukan "not null".
+    markupPercent: numeric("markup_percent", { precision: 7, scale: 4 }).default(
+      "0"
+    ),
+    isDefault: boolean("is_default").notNull().default(false),
+  },
+  (t) => [
+    unique().on(t.businessId, t.code),
+    pgPolicy("price_tiers_select", {
+      for: "select",
+      using: sql`${t.businessId} = any(auth_business_ids())`,
+    }),
+    pgPolicy("price_tiers_insert", {
+      for: "insert",
+      withCheck: sql`${t.businessId} = any(auth_business_ids())`,
+    }),
+  ]
+).enableRLS();
+
+export const productPrices = pgTable(
+  "product_prices",
+  {
+    id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+    productId: uuid("product_id")
+      .notNull()
+      .references(() => products.id, { onDelete: "cascade" }),
+    variantId: uuid("variant_id").references(() => productVariants.id, {
+      onDelete: "cascade",
+    }),
+    priceTierId: uuid("price_tier_id")
+      .notNull()
+      .references(() => priceTiers.id, { onDelete: "cascade" }),
+    outletId: uuid("outlet_id").references(() => outlets.id), // null = berlaku semua outlet
+    price: numeric("price", { precision: 16, scale: 2 }).notNull(),
+    validFrom: date("valid_from"),
+    validTo: date("valid_to"),
+  },
+  (t) => [
+    unique()
+      .on(t.productId, t.variantId, t.priceTierId, t.outletId, t.validFrom)
+      .nullsNotDistinct(),
+    pgPolicy("product_prices_select", {
+      for: "select",
+      using: sql`exists (
+        select 1 from products p
+        where p.id = ${t.productId}
+          and p.business_id = any(auth_business_ids())
+      )`,
+    }),
+    pgPolicy("product_prices_insert", {
+      for: "insert",
+      withCheck: sql`exists (
+        select 1 from products p
+        where p.id = ${t.productId}
+          and p.business_id = any(auth_business_ids())
+      )`,
+    }),
+  ]
+).enableRLS();
+
+// MODIFIER (extra shot, less sugar, level pedas)
+export const modifierGroups = pgTable(
+  "modifier_groups",
+  {
+    id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+    businessId: uuid("business_id")
+      .notNull()
+      .references(() => businesses.id, { onDelete: "cascade" }),
+    name: text("name").notNull(), // 'Level Gula', 'Topping'
+    minSelect: integer("min_select").notNull().default(0),
+    maxSelect: integer("max_select").notNull().default(1),
+    isRequired: boolean("is_required").notNull().default(false),
+  },
+  (t) => [
+    pgPolicy("modifier_groups_select", {
+      for: "select",
+      using: sql`${t.businessId} = any(auth_business_ids())`,
+    }),
+    pgPolicy("modifier_groups_insert", {
+      for: "insert",
+      withCheck: sql`${t.businessId} = any(auth_business_ids())`,
+    }),
+  ]
+).enableRLS();
+
+export const modifiers = pgTable(
+  "modifiers",
+  {
+    id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+    modifierGroupId: uuid("modifier_group_id")
+      .notNull()
+      .references(() => modifierGroups.id, { onDelete: "cascade" }),
+    name: text("name").notNull(), // 'Extra Shot', 'Less Ice'
+    price: numeric("price", { precision: 16, scale: 2 }).notNull().default("0"),
+    ingredientId: uuid("ingredient_id"), // konsumsi bahan -- tabel ingredients belum ada (Fase 2)
+    ingredientQty: numeric("ingredient_qty", { precision: 16, scale: 4 }), // misal extra shot = 9 gram kopi
+    sortOrder: integer("sort_order").notNull().default(0),
+  },
+  (t) => [
+    pgPolicy("modifiers_select", {
+      for: "select",
+      using: sql`exists (
+        select 1 from modifier_groups mg
+        where mg.id = ${t.modifierGroupId}
+          and mg.business_id = any(auth_business_ids())
+      )`,
+    }),
+    pgPolicy("modifiers_insert", {
+      for: "insert",
+      withCheck: sql`exists (
+        select 1 from modifier_groups mg
+        where mg.id = ${t.modifierGroupId}
+          and mg.business_id = any(auth_business_ids())
+      )`,
+    }),
+  ]
+).enableRLS();
+
+export const productModifierGroups = pgTable(
+  "product_modifier_groups",
+  {
+    productId: uuid("product_id")
+      .notNull()
+      .references(() => products.id, { onDelete: "cascade" }),
+    modifierGroupId: uuid("modifier_group_id")
+      .notNull()
+      .references(() => modifierGroups.id, { onDelete: "cascade" }),
+  },
+  (t) => [
+    primaryKey({ columns: [t.productId, t.modifierGroupId] }),
+    pgPolicy("product_modifier_groups_select", {
+      for: "select",
+      using: sql`exists (
+        select 1 from products p
+        where p.id = ${t.productId}
+          and p.business_id = any(auth_business_ids())
+      )`,
+    }),
+    pgPolicy("product_modifier_groups_insert", {
+      for: "insert",
+      withCheck: sql`exists (
+        select 1 from products p
+        where p.id = ${t.productId}
+          and p.business_id = any(auth_business_ids())
+      )`,
+    }),
+  ]
+).enableRLS();
+
+export const productBundleItems = pgTable(
+  "product_bundle_items",
+  {
+    bundleId: uuid("bundle_id")
+      .notNull()
+      .references(() => products.id, { onDelete: "cascade" }),
+    productId: uuid("product_id")
+      .notNull()
+      .references(() => products.id),
+    variantId: uuid("variant_id")
+      .notNull()
+      .references(() => productVariants.id),
+    qty: numeric("qty", { precision: 16, scale: 4 }).notNull().default("1"),
+  },
+  (t) => [
+    primaryKey({ columns: [t.bundleId, t.productId, t.variantId] }),
+    pgPolicy("product_bundle_items_select", {
+      for: "select",
+      using: sql`exists (
+        select 1 from products p
+        where p.id = ${t.bundleId}
+          and p.business_id = any(auth_business_ids())
+      )`,
+    }),
+    pgPolicy("product_bundle_items_insert", {
+      for: "insert",
+      withCheck: sql`exists (
+        select 1 from products p
+        where p.id = ${t.bundleId}
+          and p.business_id = any(auth_business_ids())
       )`,
     }),
   ]
