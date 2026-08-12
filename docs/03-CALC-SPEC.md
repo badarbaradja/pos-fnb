@@ -222,12 +222,18 @@ Assertion: rounding >= 0
 
 ## B. HPP / COGS (`lib/calc/cogs.ts`)
 
+> Semua *rate* di `lib/calc/` memakai pecahan (0.03 = 3%, 1.0 = 100%), sama
+> seperti `*Percent` di bagian A. Konversi dari input UI (yang memakai 3
+> atau 100) dilakukan di layer pemanggil, bukan di dalam kalkulator. Field
+> di bawah sengaja dinamai `wasteRate`/`yieldRate` (bukan `...Percent`)
+> supaya tidak ada yang terkecoh mengira perlu dibagi 100 lagi.
+
 ### B.1 HPP per produk dari resep
 
 ```
 Untuk tiap bahan dalam resep:
-  effectiveQty  = recipeQty × (1 + wastePercent/100)
-  effectiveCost = avgCost / (yieldPercent / 100)
+  effectiveQty  = recipeQty × (1 + wasteRate)
+  effectiveCost = avgCost / yieldRate
   lineCost      = effectiveQty × effectiveCost
 
 hppProduk = Σ lineCost + (overheadCost / outputQty)
@@ -235,21 +241,23 @@ hppProduk = Σ lineCost + (overheadCost / outputQty)
 
 Kalau bahan berstatus `is_semi_finished`, jalankan resepnya secara rekursif.
 **Batas rekursi maksimal 5 level**, dan wajib deteksi circular reference → lempar error jelas.
+Hasil rekursi (hppProduk bahan semi-finished, dihitung untuk `outputQty` unit)
+dibagi `outputQty` dulu sebelum dipakai sebagai `avgCost` per unit di level induknya.
 
 **TC-08 — HPP Caffe Latte**
 ```
-Biji kopi   18 g   × avgCost 145       (145),    yield 100%, waste 3%  → 2.688,30  (2688.30)
-Susu UHT   200 ml  × avgCost 18,5      (18.5),   yield 100%, waste 0%  → 3.700,00  (3700.00)
-Gula cair   10 ml  × avgCost 12        (12),      yield 100%, waste 0%  →   120,00  (120.00)
-Cup + lid    1 pcs × avgCost 1.350     (1350),    yield 100%, waste 0%  → 1.350,00  (1350.00)
-────────────────────────────────────────────────────────────────────────────────────────────────
+Biji kopi   18 g   × avgCost 145       (145),    yieldRate 1 (yield 100%), wasteRate 0.03 (waste 3%)  → 2.688,30  (2688.30)
+Susu UHT   200 ml  × avgCost 18,5      (18.5),   yieldRate 1 (yield 100%), wasteRate 0    (waste 0%)  → 3.700,00  (3700.00)
+Gula cair   10 ml  × avgCost 12        (12),      yieldRate 1 (yield 100%), wasteRate 0    (waste 0%)  →   120,00  (120.00)
+Cup + lid    1 pcs × avgCost 1.350     (1350),    yieldRate 1 (yield 100%), wasteRate 0    (waste 0%)  → 1.350,00  (1350.00)
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
 hpp = 7.858,30  (7858.30)
 ```
 Turunan: harga jual 28.000 (28000) → foodCostPercent = 28,06% (28.06%)
 
 **TC-09 — Yield di bawah 100%**
 ```
-Ayam fillet: recipeQty 150 g, avgCost 45/g (45), yield 80%
+Ayam fillet: recipeQty 150 g, avgCost 45/g (45), yieldRate 0.8 (yield 80%)
 → effectiveCost = 45 / 0,8   (45 / 0.8)   = 56,25  (56.25)
 → lineCost      = 150 × 56,25 (150 × 56.25) = 8.437,50 (8437.50)
 ```
@@ -260,7 +268,12 @@ Ayam fillet: recipeQty 150 g, avgCost 45/g (45), yield 80%
 newAvgCost = (qtyLama × avgCostLama + qtyMasuk × costMasuk) / (qtyLama + qtyMasuk)
 
 costMasuk per base unit =
-  (hargaBeliPerPurchaseUnit − diskonPerUnit + alokasiOngkirPerUnit) / purchaseFactor
+  (lineTotal − lineDiscount + allocatedShipping) / (qtyPurchaseUnit × purchaseFactor)
+  // lineTotal, lineDiscount, allocatedShipping: nilai PER BARIS PEMBELIAN
+  //   (total baris, BUKAN harga per satu purchase unit — penamaan lama
+  //   "...PerUnit" ambigu dan sudah diganti)
+  // qtyPurchaseUnit: jumlah purchase unit yang dibeli di baris ini (mis. 5, untuk 5 kg)
+  // purchaseFactor: konversi 1 purchase unit -> base unit (mis. 1 kg = 1000 g)
 
 alokasiOngkir_i = ongkirTotal × (lineTotal_i / Σ lineTotal)
 ```
@@ -284,6 +297,16 @@ Ongkir 50.000 (50000)
 → alokasi kopi = 50.000 × 725/1095 (50000 × 725/1095) = 33.105,02 (33105.02) → per gram +6,62 (+6.62)
 → alokasi susu = 50.000 × 370/1095 (50000 × 370/1095) = 16.894,98 (16894.98) → per ml   +0,84 (+0.84)
 Assertion: Σ alokasi === ongkirTotal
+```
+
+**TC-18 — costMasuk per base unit, termasuk alokasi ongkir**
+```
+qtyPurchaseUnit 5, lineTotal 725.000 (725000), lineDiscount 0,
+allocatedShipping 33.105,02 (33105.02) [dari TC-12], purchaseFactor 1.000 (1000)
+→ costMasuk = (725000 − 0 + 33105.02) / (5 × 1000) = 151,621004 (151.621004) per gram
+  Tanpa ongkir: 725000 / 5000 = 145 (145) — kenaikan karena ongkir = 6,621004 (6.621004),
+  konsisten dengan TC-12 (dibulatkan 33105.02/5000 ≈ 6,62 (6.62) per gram).
+Assertion: qtyPurchaseUnit = 0 atau purchaseFactor = 0 → lempar error, bukan Infinity.
 ```
 
 ### B.3 Variance

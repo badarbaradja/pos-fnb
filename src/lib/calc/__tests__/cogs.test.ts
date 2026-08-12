@@ -1,31 +1,26 @@
 /**
  * T04 — Test untuk src/lib/calc/cogs.ts, CALC-SPEC bagian B.
- * TC-08 s/d TC-12 pakai nilai numerik polos. Nilai ekspektasi TC-08..TC-12
- * TIDAK BOLEH diubah. Test circular reference, kedalaman maksimal, dan
- * calculateVariance ditambahkan sendiri (tidak ada golden case di spec untuk
- * kasus-kasus ini).
+ * TC-08 s/d TC-12, TC-18 pakai nilai numerik polos. Nilai ekspektasi TC-08..
+ * TC-12 TIDAK BOLEH diubah. Test circular reference, kedalaman maksimal,
+ * calculateVariance, dan pembagi nol calculateIncomingCost ditambahkan
+ * sendiri (tidak ada golden case di spec untuk kasus-kasus ini).
  *
  * Catatan desain penting (bukan tebakan bisnis, murni pembacaan literal rumus):
  *
- * 1. Di bagian B, rumus "effectiveQty = recipeQty × (1 + wastePercent/100)" dan
- *    "effectiveCost = avgCost / (yieldPercent/100)" MEMAKAI /100 secara eksplisit.
- *    Ini KEBALIKAN dari CalcSettings.*Percent di bagian A (yang pecahan, tanpa
- *    /100). Jadi di cogs.ts, wastePercent/yieldPercent adalah ANGKA PERSEN
- *    POLOS (3 = 3%, 100 = 100%), bukan pecahan. Dibuktikan oleh TC-09:
- *    45 / (80/100) = 56.25 — hanya cocok kalau yieldPercent diisi 80, bukan 0.8.
+ * 1. `wasteRate`/`yieldRate` adalah PECAHAN (0.03 = 3%, 1 = 100%), sama
+ *    seperti CalcSettings.*Percent di order-calculator.ts. Rumus B.1 di
+ *    CALC-SPEC sudah diperbarui (tanpa /100) supaya konvensinya seragam
+ *    di seluruh lib/calc/.
  * 2. Signature calculateRecipeCost() tidak diberikan eksplisit di CALC-SPEC
  *    (beda dari calculateOrder() yang punya A.1). Didesain menerima resep +
  *    "katalog bahan" (map id -> definisi bahan) supaya rekursi ke bahan
  *    semi-finished bisa dilakukan tanpa akses database (tetap fungsi murni) —
  *    katalog sudah harus di-resolve penuh oleh pemanggil sebelum dipanggil.
- * 3. "costMasuk per base unit" (formula tanpa nama di B.2, kombinasi
- *    hargaBeliPerPurchaseUnit − diskonPerUnit + alokasiOngkirPerUnit, dibagi
- *    purchaseFactor) SENGAJA TIDAK diimplementasikan di T04 ini. Tidak ada
- *    golden test yang menguji rumus itu end-to-end, dan penamaan field
- *    "PerUnit" ambigu: tidak jelas apakah itu nilai per satu purchase unit
- *    atau total per baris pembelian (TC-12 sendiri memberi contoh dengan
- *    "hargaBeli 5kg = 725.000" yang merupakan TOTAL baris, bukan harga per kg).
- *    Ditandai untuk ditanyakan, bukan ditebak.
+ * 3. TC-18 (di bawah): nilai presisi penuh hasil (725000-0+33105.02)/5000
+ *    adalah 151.621004, bukan 151.62100 — keduanya sama kalau dibulatkan ke
+ *    5 desimal (digit ke-6 adalah 4, jadi pembulatan ke bawah). calculateIncomingCost()
+ *    tidak melakukan pembulatan apa pun (konsisten dengan B.1 yang juga tidak
+ *    dibulatkan), jadi test ini memakai nilai presisi penuh.
  */
 import { describe, it, expect } from "vitest";
 import { Decimal } from "../../utils/money";
@@ -33,6 +28,7 @@ import {
   calculateRecipeCost,
   calculateNewAvgCost,
   allocateShippingCost,
+  calculateIncomingCost,
   calculateVariance,
 } from "../cogs";
 import type { IngredientCatalog, RecipeLine } from "../cogs";
@@ -48,10 +44,10 @@ describe("TC-08 — HPP Caffe Latte", () => {
       "cup-lid": { name: "Cup + lid", isSemiFinished: false, avgCost: D(1350) },
     };
     const recipe: RecipeLine[] = [
-      { ingredientId: "biji-kopi", recipeQty: D(18), wastePercent: D(3), yieldPercent: D(100) },
-      { ingredientId: "susu-uht", recipeQty: D(200), wastePercent: D(0), yieldPercent: D(100) },
-      { ingredientId: "gula-cair", recipeQty: D(10), wastePercent: D(0), yieldPercent: D(100) },
-      { ingredientId: "cup-lid", recipeQty: D(1), wastePercent: D(0), yieldPercent: D(100) },
+      { ingredientId: "biji-kopi", recipeQty: D(18), wasteRate: D(0.03), yieldRate: D(1) },
+      { ingredientId: "susu-uht", recipeQty: D(200), wasteRate: D(0), yieldRate: D(1) },
+      { ingredientId: "gula-cair", recipeQty: D(10), wasteRate: D(0), yieldRate: D(1) },
+      { ingredientId: "cup-lid", recipeQty: D(1), wasteRate: D(0), yieldRate: D(1) },
     ];
 
     const hpp = calculateRecipeCost(recipe, D(0), D(1), catalog);
@@ -69,8 +65,8 @@ describe("TC-09 — yield di bawah 100%", () => {
       {
         ingredientId: "ayam-fillet",
         recipeQty: D(150),
-        wastePercent: D(0),
-        yieldPercent: D(80),
+        wasteRate: D(0),
+        yieldRate: D(0.8),
       },
     ];
 
@@ -89,7 +85,7 @@ describe("calculateRecipeCost — rekursi bahan semi-finished", () => {
         name: "Sirup gula",
         isSemiFinished: true,
         recipe: [
-          { ingredientId: "gula", recipeQty: D(100), wastePercent: D(0), yieldPercent: D(100) },
+          { ingredientId: "gula", recipeQty: D(100), wasteRate: D(0), yieldRate: D(1) },
         ],
         overheadCost: D(0),
         outputQty: D(100), // hpp per unit output sirup = (100*12)/100 = 12
@@ -99,14 +95,14 @@ describe("calculateRecipeCost — rekursi bahan semi-finished", () => {
       {
         ingredientId: "sirup-gula",
         recipeQty: D(10),
-        wastePercent: D(0),
-        yieldPercent: D(100),
+        wasteRate: D(0),
+        yieldRate: D(1),
       },
     ];
 
     const hpp = calculateRecipeCost(recipe, D(0), D(1), catalog);
 
-    // effectiveCost sirup = 12 (hpp per unit sirup) / (100/100) = 12
+    // effectiveCost sirup = 12 (hpp per unit sirup) / 1 = 12
     // lineCost = 10 * 12 = 120
     expect(hpp.toString()).toBe("120");
   });
@@ -116,7 +112,7 @@ describe("calculateRecipeCost — rekursi bahan semi-finished", () => {
       gula: { name: "Gula pasir", isSemiFinished: false, avgCost: D(12) },
     };
     const recipe: RecipeLine[] = [
-      { ingredientId: "gula", recipeQty: D(10), wastePercent: D(0), yieldPercent: D(100) },
+      { ingredientId: "gula", recipeQty: D(10), wasteRate: D(0), yieldRate: D(1) },
     ];
 
     // lineCost = 10*12 = 120; overhead 50 / outputQty 5 = 10 -> hpp = 130
@@ -128,7 +124,7 @@ describe("calculateRecipeCost — rekursi bahan semi-finished", () => {
   it("melempar error kalau bahan tidak ditemukan di katalog", () => {
     const catalog: IngredientCatalog = {};
     const recipe: RecipeLine[] = [
-      { ingredientId: "tidak-ada", recipeQty: D(1), wastePercent: D(0), yieldPercent: D(100) },
+      { ingredientId: "tidak-ada", recipeQty: D(1), wasteRate: D(0), yieldRate: D(1) },
     ];
 
     expect(() => calculateRecipeCost(recipe, D(0), D(1), catalog)).toThrow(
@@ -142,7 +138,7 @@ describe("calculateRecipeCost — rekursi bahan semi-finished", () => {
         name: "Sirup A",
         isSemiFinished: true,
         recipe: [
-          { ingredientId: "sirup-b", recipeQty: D(1), wastePercent: D(0), yieldPercent: D(100) },
+          { ingredientId: "sirup-b", recipeQty: D(1), wasteRate: D(0), yieldRate: D(1) },
         ],
         overheadCost: D(0),
         outputQty: D(1),
@@ -151,14 +147,14 @@ describe("calculateRecipeCost — rekursi bahan semi-finished", () => {
         name: "Sirup B",
         isSemiFinished: true,
         recipe: [
-          { ingredientId: "sirup-a", recipeQty: D(1), wastePercent: D(0), yieldPercent: D(100) },
+          { ingredientId: "sirup-a", recipeQty: D(1), wasteRate: D(0), yieldRate: D(1) },
         ],
         overheadCost: D(0),
         outputQty: D(1),
       },
     };
     const recipe: RecipeLine[] = [
-      { ingredientId: "sirup-a", recipeQty: D(1), wastePercent: D(0), yieldPercent: D(100) },
+      { ingredientId: "sirup-a", recipeQty: D(1), wasteRate: D(0), yieldRate: D(1) },
     ];
 
     expect(() => calculateRecipeCost(recipe, D(0), D(1), catalog)).toThrow(
@@ -177,7 +173,7 @@ describe("calculateRecipeCost — rekursi bahan semi-finished", () => {
       name,
       isSemiFinished: true,
       recipe: [
-        { ingredientId: next, recipeQty: D(1), wastePercent: D(0), yieldPercent: D(100) },
+        { ingredientId: next, recipeQty: D(1), wasteRate: D(0), yieldRate: D(1) },
       ],
       overheadCost: D(0),
       outputQty: D(1),
@@ -192,7 +188,7 @@ describe("calculateRecipeCost — rekursi bahan semi-finished", () => {
       L1: semi("L1", "L2"),
     };
     const recipe: RecipeLine[] = [
-      { ingredientId: "L1", recipeQty: D(1), wastePercent: D(0), yieldPercent: D(100) },
+      { ingredientId: "L1", recipeQty: D(1), wasteRate: D(0), yieldRate: D(1) },
     ];
 
     expect(() => calculateRecipeCost(recipe, D(0), D(1), catalog)).toThrow(
@@ -210,7 +206,7 @@ describe("calculateRecipeCost — rekursi bahan semi-finished", () => {
       name,
       isSemiFinished: true,
       recipe: [
-        { ingredientId: next, recipeQty: D(1), wastePercent: D(0), yieldPercent: D(100) },
+        { ingredientId: next, recipeQty: D(1), wasteRate: D(0), yieldRate: D(1) },
       ],
       overheadCost: D(0),
       outputQty: D(1),
@@ -225,7 +221,7 @@ describe("calculateRecipeCost — rekursi bahan semi-finished", () => {
     };
     // root(1) -> L1(2) -> L2(3) -> L3(4) -> L4(5) -> raw : tepat 5 level
     const recipe: RecipeLine[] = [
-      { ingredientId: "L1", recipeQty: D(1), wastePercent: D(0), yieldPercent: D(100) },
+      { ingredientId: "L1", recipeQty: D(1), wasteRate: D(0), yieldRate: D(1) },
     ];
 
     expect(() => calculateRecipeCost(recipe, D(0), D(1), catalog)).not.toThrow();
@@ -277,6 +273,60 @@ describe("TC-12 — alokasi ongkir", () => {
     const result = allocateShippingCost(D(50000), [D(0), D(0)]);
     expect(result[0]!.toString()).toBe("0");
     expect(result[1]!.toString()).toBe("0");
+  });
+});
+
+describe("TC-18 — costMasuk per base unit, termasuk alokasi ongkir", () => {
+  it("costMasuk = 151.621004 per gram (lihat catatan presisi di atas)", () => {
+    const costMasuk = calculateIncomingCost({
+      qtyPurchaseUnit: D(5),
+      lineTotal: D(725000),
+      lineDiscount: D(0),
+      allocatedShipping: D(33105.02),
+      purchaseFactor: D(1000),
+    });
+
+    expect(costMasuk.toString()).toBe("151.621004");
+    // dibulatkan 5 desimal untuk keterbacaan, sesuai penulisan di CALC-SPEC
+    expect(costMasuk.toFixed(5)).toBe("151.62100");
+
+    // tanpa ongkir -> 145 persis (konsisten dengan avgCost kopi di TC-08)
+    const withoutShipping = calculateIncomingCost({
+      qtyPurchaseUnit: D(5),
+      lineTotal: D(725000),
+      lineDiscount: D(0),
+      allocatedShipping: D(0),
+      purchaseFactor: D(1000),
+    });
+    expect(withoutShipping.toString()).toBe("145");
+
+    // kenaikan karena ongkir konsisten dengan TC-12 (33105.02/5000 = 6.621004 ≈ 6.62)
+    const increase = costMasuk.minus(withoutShipping);
+    expect(increase.toDecimalPlaces(2).toString()).toBe("6.62");
+  });
+
+  it("melempar error kalau qtyPurchaseUnit nol (bukan Infinity)", () => {
+    expect(() =>
+      calculateIncomingCost({
+        qtyPurchaseUnit: D(0),
+        lineTotal: D(725000),
+        lineDiscount: D(0),
+        allocatedShipping: D(33105.02),
+        purchaseFactor: D(1000),
+      })
+    ).toThrow();
+  });
+
+  it("melempar error kalau purchaseFactor nol (bukan Infinity)", () => {
+    expect(() =>
+      calculateIncomingCost({
+        qtyPurchaseUnit: D(5),
+        lineTotal: D(725000),
+        lineDiscount: D(0),
+        allocatedShipping: D(33105.02),
+        purchaseFactor: D(0),
+      })
+    ).toThrow();
   });
 });
 

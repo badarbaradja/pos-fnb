@@ -4,21 +4,19 @@ import { Decimal, round2 } from "../utils/money";
  * HPP / COGS — CALC-SPEC bagian B. Fungsi murni: tanpa akses database, tanpa
  * fetch, tanpa Date.now().
  *
- * PENTING: `wastePercent` dan `yieldPercent` di bawah adalah ANGKA PERSEN
- * POLOS (3 = 3%, 100 = 100%), BUKAN pecahan — kebalikan dari `CalcSettings.*Percent`
- * di order-calculator.ts (yang pecahan, 0.10 = 10%). Ini konsekuensi langsung
- * dari rumus B.1 yang memakai "/100" eksplisit, beda dari rumus A.3 yang tidak.
+ * Semua *rate* di lib/calc/ memakai PECAHAN (0.03 = 3%, 1.0 = 100%), sama
+ * seperti CalcSettings.*Percent di order-calculator.ts. Konversi dari input
+ * UI (yang memakai 3 atau 100) dilakukan di layer pemanggil.
  */
 
 const ZERO = new Decimal(0);
-const HUNDRED = new Decimal(100);
 const MAX_RECIPE_DEPTH = 5;
 
 export type RecipeLine = {
   ingredientId: string;
   recipeQty: Decimal;
-  wastePercent: Decimal; // ANGKA PERSEN (3 = 3%)
-  yieldPercent: Decimal; // ANGKA PERSEN (100 = 100%)
+  wasteRate: Decimal; // pecahan (0.03 = 3%)
+  yieldRate: Decimal; // pecahan (1 = 100%)
 };
 
 export type IngredientCost =
@@ -64,9 +62,7 @@ function resolveRecipeCost(
   let total = ZERO;
 
   for (const line of recipe) {
-    const effectiveQty = line.recipeQty.times(
-      new Decimal(1).plus(line.wastePercent.dividedBy(HUNDRED))
-    );
+    const effectiveQty = line.recipeQty.times(new Decimal(1).plus(line.wasteRate));
 
     const ingredient = catalog[line.ingredientId];
     if (!ingredient) {
@@ -103,7 +99,7 @@ function resolveRecipeCost(
       baseCost = ingredient.avgCost;
     }
 
-    const effectiveCost = baseCost.dividedBy(line.yieldPercent.dividedBy(HUNDRED));
+    const effectiveCost = baseCost.dividedBy(line.yieldRate);
     const lineCost = effectiveQty.times(effectiveCost);
     total = total.plus(lineCost);
   }
@@ -159,6 +155,33 @@ export function allocateShippingCost(
   }
 
   return allocated;
+}
+
+/**
+ * calculateIncomingCost() — CALC-SPEC B.2, "costMasuk per base unit".
+ * (lineTotal − lineDiscount + allocatedShipping) / (qtyPurchaseUnit × purchaseFactor)
+ * Semua field input adalah nilai PER BARIS PEMBELIAN, bukan per satu
+ * purchase unit (TC-18). Hasilnya dipakai sebagai `costMasuk` di
+ * calculateNewAvgCost(). Melempar error kalau pembagi nol, bukan Infinity.
+ */
+export function calculateIncomingCost(params: {
+  qtyPurchaseUnit: Decimal;
+  lineTotal: Decimal;
+  lineDiscount: Decimal;
+  allocatedShipping: Decimal;
+  purchaseFactor: Decimal;
+}): Decimal {
+  const denominator = params.qtyPurchaseUnit.times(params.purchaseFactor);
+  if (denominator.isZero()) {
+    throw new Error(
+      "calculateIncomingCost: qtyPurchaseUnit × purchaseFactor tidak boleh nol"
+    );
+  }
+
+  return params.lineTotal
+    .minus(params.lineDiscount)
+    .plus(params.allocatedShipping)
+    .dividedBy(denominator);
 }
 
 export type VarianceUsageLine = {
