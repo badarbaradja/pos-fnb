@@ -204,3 +204,66 @@ ilustratif di CALC-SPEC, bukan golden test formal) dan angka *literal* di
 narasi/tabel, lihat bagian "Notasi Angka" di kepala dokumen itu) — konvensi
 pecahan ini berlaku untuk **nilai di dalam kode**, bukan cara CALC-SPEC
 menulis penjelasan dalam bahasa manusia.
+
+---
+
+## 7. RLS untuk tabel tanpa `business_id` — policy lewat `EXISTS` join ke tabel induk
+
+Beberapa tabel BLUEPRINT sengaja **tidak** punya kolom `business_id`
+sendiri — mereka anak langsung dari satu tabel induk yang sudah
+ber-`business_id`, dan `business_id`-nya dianggap "diwariskan" lewat FK.
+Ditemui pertama kali di T07 (`permissions_override`, anak dari
+`employees`), lalu berulang di T08 untuk lima tabel katalog:
+
+| Tabel | Induk yang dipakai untuk RLS |
+|---|---|
+| `product_variants` | `products` (lewat `product_id`) |
+| `product_prices` | `products` (lewat `product_id`) |
+| `modifiers` | `modifier_groups` (lewat `modifier_group_id`) |
+| `product_modifier_groups` | `products` (lewat `product_id`) |
+| `product_bundle_items` | `products` (lewat `bundle_id`) |
+
+Pola policy-nya seragam, `SELECT` dan `INSERT` sama-sama pakai `EXISTS`:
+
+```sql
+using: exists (
+  select 1 from products p
+  where p.id = <tabel_ini>.product_id
+    and p.business_id = any(auth_business_ids())
+)
+```
+
+**Kenapa `EXISTS` join, bukan duplikasi kolom `business_id` ke setiap
+tabel anak:**
+
+1. **Itu desain BLUEPRINT, bukan pilihan kita untuk diubah.** Skema di
+   BLUEPRINT §3.2 (dan tabel-tabel Fase 2 nanti) sudah didefinisikan tanpa
+   `business_id` di tabel-tabel ini. Menambahkannya berarti menyimpang dari
+   dokumen sumber kebenaran tanpa alasan bisnis, cuma demi kemudahan RLS.
+2. **`business_id` yang diduplikasi bisa jadi tidak sinkron.** Kalau
+   `product_variants.business_id` disimpan terpisah dari
+   `products.business_id`, tidak ada yang memaksa keduanya tetap sama
+   kecuali trigger tambahan atau disiplin aplikasi — sumber kebenaran ganda
+   untuk satu fakta yang sama. Join ke induk membuat `business_id` cuma
+   punya SATU tempat penyimpanan; anak-anaknya otomatis ikut benar selama
+   FK-nya benar.
+3. **Konsisten dengan aturan "RLS lapisan terakhir, bukan satu-satunya"**
+   (CLAUDE.md §3.4) — query aplikasi tetap wajib filter eksplisit (mis.
+   lewat `product_id` yang sudah diketahui scope-nya dari request), `EXISTS`
+   join di policy cuma jaring pengaman tambahan, bukan jalur utama
+   penentuan akses.
+
+**Trade-off yang disadari:** setiap `SELECT`/`INSERT` ke tabel-tabel ini
+menanggung satu subquery/join tambahan dibanding kalau `business_id` ada
+langsung di tabel. Untuk ukuran data katalog (produk per bisnis biasanya
+puluhan-ratusan baris, bukan jutaan), ini tidak jadi masalah performa —
+kalau nanti terbukti jadi bottleneck di tabel transaksi volume tinggi,
+evaluasi ulang per tabel, jangan generalisasi keputusan ini ke semuanya.
+
+**Ini akan muncul lagi.** Fase 2 (`order_items`, `recipe_items`,
+`purchase_items`, dan kemungkinan besar tabel *_items lain) polanya sama:
+anak dari satu induk ber-`business_id`, tanpa `business_id` sendiri. Pakai
+pola `EXISTS` join yang sama di atas — pilih induk yang paling langsung
+merepresentasikan "pemilik" barisnya (biasanya FK yang `not null`), beri
+alias pendek satu-dua huruf (`p` untuk `products`, `mg` untuk
+`modifier_groups`, dst.) supaya konsisten dibaca lintas tabel.
