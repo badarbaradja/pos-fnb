@@ -19,11 +19,14 @@ export function getDb(): Db {
   const connectionString = process.env["DATABASE_URL"];
   if (!connectionString) {
     throw new Error(
-      "DATABASE_URL belum diset. Isi .env berdasarkan .env.example (Supabase: Settings > Database > Connection string, Session pooler)."
+      "DATABASE_URL belum diset. Isi .env.local berdasarkan .env.example (Supabase: Settings > Database > Connection string, Session pooler)."
     );
   }
 
-  const queryClient = postgres(connectionString);
+  // prepare: false — wajib kalau DATABASE_URL mengarah ke transaction pooler
+  // Supabase (port 6543, pgbouncer). Prepared statement tidak didukung di
+  // mode itu. Tidak berbahaya dipakai di connection direct/session juga.
+  const queryClient = postgres(connectionString, { prepare: false });
   cached = drizzle(queryClient, { schema });
   return cached;
 }

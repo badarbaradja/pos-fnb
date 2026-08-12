@@ -5,18 +5,16 @@
  * tabel baru ditambahkan, biarkan ia menangkap yang lupa di-RLS.
  *
  * Butuh koneksi Postgres sungguhan (DATABASE_URL), beda dari test
- * lib/calc/lib/utils yang murni fungsi. Kalau .env belum diisi, seluruh
- * describe di bawah di-skip otomatis (bukan gagal) — isi DATABASE_URL di
- * .env (lihat .env.example) supaya test ini benar-benar jalan.
+ * lib/calc/lib/utils yang murni fungsi. Kalau .env.local/.env belum diisi,
+ * seluruh describe di bawah di-skip otomatis (bukan gagal) — isi
+ * DATABASE_URL di .env.local (lihat .env.example) supaya test ini benar-benar
+ * jalan.
  */
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import postgres from "postgres";
+import { config as loadEnv } from "dotenv";
 
-try {
-  process.loadEnvFile();
-} catch {
-  // .env belum ada — DATABASE_URL tetap kosong, describe di bawah di-skip.
-}
+loadEnv({ path: [".env.local", ".env"], quiet: true });
 
 const DATABASE_URL = process.env["DATABASE_URL"];
 
@@ -26,11 +24,21 @@ describe.skipIf(!DATABASE_URL)(
     let sql: ReturnType<typeof postgres>;
 
     beforeAll(() => {
-      sql = postgres(DATABASE_URL!);
+      sql = postgres(DATABASE_URL!, { prepare: false });
     });
 
     afterAll(async () => {
       await sql.end();
+    });
+
+    it("minimal 7 tabel diperiksa (T06: businesses, outlets, profiles, memberships, employees, devices, permissions_override) — supaya test ini tidak lolos diam-diam di database kosong", async () => {
+      const allTables = await sql<{ tablename: string }[]>`
+        select tablename
+        from pg_tables
+        where schemaname = 'public'
+      `;
+
+      expect(allTables.length).toBeGreaterThanOrEqual(7);
     });
 
     it("tidak ada tabel tanpa rowsecurity aktif", async () => {

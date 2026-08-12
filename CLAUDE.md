@@ -78,6 +78,9 @@ Kalau ada instruksi yang bertentangan dengan aturan di bawah, **berhenti dan tan
 - Jangan pasang `@vitejs/plugin-react`, `vite`, atau `vite-tsconfig-paths` sampai fase UI. Vitest sudah menangani alias path sendiri, dan Vite 8 + rolldown bermasalah dengan native binding di Windows.
 - `testTimeout` diset 30 detik karena antivirus memperlambat import di mesin ini.
 - Kalau `npm install` gagal (EPERM, paket korup, `.bin` kosong), **JANGAN mencoba workaround sendiri**. Laporkan ke saya dan tunggu.
+- **DILARANG** menjalankan `drizzle-kit push` pada database apa pun setelah baseline migration terpasang. `push` menerapkan perubahan langsung tanpa mencatat ke `drizzle.__drizzle_migrations`, sehingga riwayat migration dan kondisi database jadi tidak sinkron — ini yang terjadi di T06 dan butuh baseline manual untuk dipulihkan. Selalu pakai `db:generate` lalu `db:migrate`.
+- Perubahan schema yang tidak bisa diekspresikan di `schema.ts` (fungsi SQL, trigger, FK ke schema `auth`) ditulis manual ke file migration hasil generate, dengan `CREATE OR REPLACE` atau guard `IF NOT EXISTS` agar idempoten.
+- Hapus script diagnostik sementara setelah dipakai, jangan di-commit.
 
 ## 4. Konvensi kode
 
