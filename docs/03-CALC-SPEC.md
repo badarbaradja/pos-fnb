@@ -363,17 +363,19 @@ pajak 0
 ## D. KPI (`lib/calc/kpi.ts`)
 
 ```
-foodCostPercent   = cogs / netSales × 100
-laborCostPercent  = laborCost / netSales × 100
-primeCostPercent  = foodCostPercent + laborCostPercent     // target ≤ 65%
-averageCheck      = netSales / orderCount
-salesPerGuest     = netSales / guestCount
-voidRate          = voidCount / orderCount × 100
-discountRate      = discountTotal / grossSales × 100
-wastePercent      = wasteValue / cogs × 100
+foodCostPercent      = cogs / netSales × 100
+laborCostPercent     = laborCost / netSales × 100
+occupancyCostPercent = occupancyCost / netSales × 100
+primeCostPercent     = foodCostPercent + laborCostPercent     // target ≤ 65%
+averageCheck         = netSales / orderCount
+salesPerGuest        = netSales / guestCount
+voidRate             = voidCount / orderCount × 100
+discountRate         = discountTotal / grossSales × 100
+wastePercent         = wasteValue / cogs × 100
 
 contributionMarginRatio = (netSales − variableCost) / netSales
 bepRupiah               = fixedCost / contributionMarginRatio
+bepPorsi                = fixedCost / (avgPrice − avgHpp)     // BEP dalam jumlah porsi
 marginOfSafetyPercent   = (netSales − bepRupiah) / netSales × 100
 ```
 
