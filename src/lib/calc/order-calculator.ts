@@ -17,8 +17,12 @@ export type CalcLine = {
 };
 
 export type CalcSettings = {
-  orderDiscountPercent: Decimal; // pecahan, 0.10 = 10%. 0 kalau tidak ada.
-  orderDiscountAmount: Decimal; // nominal, dipakai kalau > 0 (lihat catatan di bawah)
+  discountType: "amount" | "percent" | "none"; // default 'none', lihat CALC-SPEC A.2
+  orderDiscountPercent: Decimal; // PECAHAN (0.10 = 10%), bukan angka persen.
+  // Konversi dari input UI (yang memakai 10) dilakukan di layer pemanggil,
+  // bukan di dalam kalkulator. Berlaku juga untuk serviceChargePercent
+  // dan taxPercent di bawah.
+  orderDiscountAmount: Decimal; // dipakai kalau discountType = 'amount'
   maxDiscount: Decimal | null; // cap
   serviceChargePercent: Decimal; // pecahan
   taxPercent: Decimal; // pecahan
@@ -49,6 +53,7 @@ export type CalcResult = {
   totalBeforeRounding: Decimal;
   rounding: Decimal;
   total: Decimal;
+  // discountTotal = itemDiscountTotal + orderDiscount
 };
 
 const ZERO = new Decimal(0);
@@ -77,12 +82,19 @@ export function calculateOrder(lines: CalcLine[], s: CalcSettings): CalcResult {
   const itemDiscountTotal = lines.reduce((sum, l) => sum.plus(l.itemDiscount), ZERO);
   const discountBase = lineCalcs.reduce((sum, lc) => sum.plus(lc.afterItemDisc), ZERO);
 
-  // 4. orderDiscount — dipilih dari orderDiscountAmount kalau > 0, selain itu
-  // dari orderDiscountPercent × discountBase (spec: "ATAU", kedua golden case
-  // yang memakainya tidak pernah mengisi keduanya sekaligus).
-  let orderDiscount = s.orderDiscountAmount.greaterThan(0)
-    ? s.orderDiscountAmount
-    : s.orderDiscountPercent.times(discountBase);
+  // 4. orderDiscount — ditentukan oleh discountType (CALC-SPEC A.2)
+  let orderDiscount: Decimal;
+  switch (s.discountType) {
+    case "amount":
+      orderDiscount = s.orderDiscountAmount;
+      break;
+    case "percent":
+      orderDiscount = s.orderDiscountPercent.times(discountBase);
+      break;
+    case "none":
+      orderDiscount = ZERO;
+      break;
+  }
   if (s.maxDiscount !== null) {
     orderDiscount = Decimal.min(orderDiscount, s.maxDiscount);
   }

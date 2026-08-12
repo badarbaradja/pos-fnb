@@ -4,22 +4,17 @@
  * polos (yang di dalam kurung di CALC-SPEC), bukan notasi Indonesia.
  * JANGAN UBAH ANGKA EKSPEKTASI DI FILE INI.
  *
- * Catatan penting hasil pembacaan spesifikasi (bukan tebakan bisnis baru,
- * murni konsekuensi aritmetik dari rumus & golden case yang sudah ada):
+ * Catatan (sekarang bagian resmi CALC-SPEC A.1/A.2, bukan tebakan lokal):
  *
  * 1. Field *Percent (orderDiscountPercent, serviceChargePercent, taxPercent)
- *    menyimpan PECAHAN (0.10 = 10%), bukan 10. Dibuktikan dari TC-01:
- *    rumus langkah 4 "orderDiscountPercent × discountBase" tanpa /100, dan
- *    9600 = 96000 × 0.10 (bukan × 10). Sama untuk service charge & pajak.
+ *    menyimpan PECAHAN (0.10 = 10%), bukan 10. Konversi dari input UI
+ *    (yang memakai 10) dilakukan di layer pemanggil.
  * 2. `discountBase` bukan field CalcResult (tidak ada di signature A.1).
  *    Tapi discountBase = subtotal - itemDiscountTotal secara aljabar
  *    (ΣafterItemDisc = Σgross - Σitemdiscount), jadi TC-01 mengecek nilai
  *    ini lewat kombinasi `result.subtotal` dan `result.itemDiscountTotal`.
- * 3. Langkah 4 "orderDiscount = orderDiscountAmount, ATAU orderDiscountPercent
- *    × discountBase" — spec tidak menyebut field penentu mode secara eksplisit.
- *    Diasumsikan: kalau orderDiscountAmount > 0, pakai itu; kalau tidak, pakai
- *    persen. Semua golden test hanya mengisi salah satu (tidak pernah dua-duanya
- *    sekaligus), jadi asumsi ini tidak memengaruhi angka ekspektasi manapun.
+ * 3. orderDiscount ditentukan oleh field diskriminator eksplisit
+ *    `discountType: 'amount' | 'percent' | 'none'` (default 'none').
  */
 import { describe, it, expect } from "vitest";
 import { Decimal } from "../../utils/money";
@@ -40,6 +35,7 @@ function line(overrides: Partial<CalcLine> & { id: string }): CalcLine {
 
 function baseSettings(overrides: Partial<CalcSettings> = {}): CalcSettings {
   return {
+    discountType: "none",
     orderDiscountPercent: new Decimal(0),
     orderDiscountAmount: new Decimal(0),
     maxDiscount: null,
@@ -74,6 +70,7 @@ describe("TC-01 — kasus standar (wajib lolos persis)", () => {
       }),
     ];
     const settings = baseSettings({
+      discountType: "percent",
       orderDiscountPercent: new Decimal(0.1),
       maxDiscount: new Decimal(15000),
       serviceChargePercent: new Decimal(0.05),
@@ -149,7 +146,10 @@ describe("TC-04 — sisa pembulatan alokasi diserap baris terakhir", () => {
       line({ id: "L2", qty: new Decimal(1), unitPrice: new Decimal(10000) }),
       line({ id: "L3", qty: new Decimal(1), unitPrice: new Decimal(10000) }),
     ];
-    const settings = baseSettings({ orderDiscountAmount: new Decimal(10000) });
+    const settings = baseSettings({
+      discountType: "amount",
+      orderDiscountAmount: new Decimal(10000),
+    });
 
     const result = calculateOrder(lines, settings);
 
@@ -177,7 +177,10 @@ describe("TC-05 — diskon melebihi tagihan", () => {
     const lines: CalcLine[] = [
       line({ id: "L1", qty: new Decimal(1), unitPrice: new Decimal(50000) }),
     ];
-    const settings = baseSettings({ orderDiscountAmount: new Decimal(80000) });
+    const settings = baseSettings({
+      discountType: "amount",
+      orderDiscountAmount: new Decimal(80000),
+    });
 
     const result = calculateOrder(lines, settings);
 
@@ -308,19 +311,26 @@ function randomOrder(
     });
   }
 
-  const useAmountDiscount = randBool(rng, 0.5);
-  const orderDiscountPercent = useAmountDiscount
-    ? new Decimal(0)
-    : new Decimal(randInt(rng, 0, 30)).dividedBy(100);
-  const orderDiscountAmount = useAmountDiscount
-    ? new Decimal(randInt(rng, 0, Math.max(1, Math.round(discountBaseApprox * 1.5))))
-    : new Decimal(0);
+  const discountType = randChoice(rng, [
+    "none",
+    "amount",
+    "percent",
+  ] as const);
+  const orderDiscountPercent =
+    discountType === "percent"
+      ? new Decimal(randInt(rng, 0, 30)).dividedBy(100)
+      : new Decimal(0);
+  const orderDiscountAmount =
+    discountType === "amount"
+      ? new Decimal(randInt(rng, 0, Math.max(1, Math.round(discountBaseApprox * 1.5))))
+      : new Decimal(0);
 
   const maxDiscount = randBool(rng, 0.5)
     ? new Decimal(randInt(rng, 0, Math.max(1, Math.round(discountBaseApprox * 1.2))))
     : null;
 
   const settings: CalcSettings = {
+    discountType,
     orderDiscountPercent,
     orderDiscountAmount,
     maxDiscount,

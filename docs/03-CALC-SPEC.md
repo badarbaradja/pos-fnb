@@ -39,11 +39,16 @@ type CalcLine = {
 };
 
 type CalcSettings = {
-  orderDiscountPercent: Decimal;   // 0 kalau tidak ada
-  orderDiscountAmount: Decimal;    // dipakai kalau diskon nominal
+  discountType: 'amount' | 'percent' | 'none';  // default 'none', lihat A.2
+  orderDiscountPercent: Decimal;   // PECAHAN (0.10 = 10%), bukan angka persen.
+                                    // Konversi dari input UI (yang memakai 10)
+                                    // dilakukan di layer pemanggil, bukan di
+                                    // dalam kalkulator. Berlaku juga untuk
+                                    // serviceChargePercent dan taxPercent di bawah.
+  orderDiscountAmount: Decimal;    // dipakai kalau discountType = 'amount'
   maxDiscount: Decimal | null;     // cap
-  serviceChargePercent: Decimal;
-  taxPercent: Decimal;
+  serviceChargePercent: Decimal;   // pecahan, lihat catatan di atas
+  taxPercent: Decimal;             // pecahan, lihat catatan di atas
   taxInclusive: boolean;
   serviceChargeInTaxBase: boolean; // setting per outlet, default true
   roundingTo: number;              // 100 = bulatkan ke Rp 100
@@ -58,6 +63,7 @@ type CalcResult = {
   subtotal, itemDiscountTotal, orderDiscount, discountTotal,
   netSales, serviceCharge, taxBase, taxAmount,
   totalBeforeRounding, rounding, total: Decimal;
+  // discountTotal = itemDiscountTotal + orderDiscount
 };
 
 export function calculateOrder(lines: CalcLine[], s: CalcSettings): CalcResult
@@ -77,6 +83,12 @@ roundTo(x, roundingTo, mode):
               rounding selalu >= 0
   'down'    → Math.floor(x / roundingTo) * roundingTo
               rounding selalu <= 0
+
+discountType:
+  'none'    → orderDiscount = 0
+  'amount'  → orderDiscount = orderDiscountAmount
+  'percent' → orderDiscount = orderDiscountPercent × discountBase
+  (hasil ini masih di-cap oleh maxDiscount dan discountBase — lihat langkah 4)
 ```
 
 ### A.3 Urutan langkah (WAJIB berurutan)
@@ -87,8 +99,7 @@ roundTo(x, roundingTo, mode):
 3.  subtotal             = Σ grossAmount_i
     itemDiscountTotal    = Σ itemDiscount_i
     discountBase         = Σ afterItemDisc_i
-4.  orderDiscount        = orderDiscountAmount, ATAU
-                           orderDiscountPercent × discountBase
+4.  orderDiscount        = ditentukan oleh `discountType` (lihat A.2)
     orderDiscount        = min(orderDiscount, maxDiscount)      [kalau maxDiscount ada]
     orderDiscount        = min(orderDiscount, discountBase)     [tidak boleh melebihi tagihan]
 5.  allocated_i          = round2(orderDiscount × afterItemDisc_i / discountBase)
@@ -116,7 +127,7 @@ Input:
 ```
 Line 1: Latte,       qty 2, unitPrice 28.000 (28000), modifier 5.000 (5000), itemDiscount 0
 Line 2: Nasi Goreng, qty 1, unitPrice 35.000 (35000), modifier 0,            itemDiscount 5.000 (5000)
-Settings: orderDiscountPercent 10%, maxDiscount 15.000 (15000),
+Settings: discountType 'percent', orderDiscountPercent 10%, maxDiscount 15.000 (15000),
           serviceCharge 5%, tax 10%, taxInclusive false, roundingTo 100, roundingMode 'nearest'
 ```
 Expected:
@@ -156,7 +167,7 @@ rounding              =       8  (8)
 
 **TC-04 — Sisa pembulatan alokasi diserap baris terakhir**
 ```
-3 baris @ 10.000 (10000) (total 30.000 / 30000), orderDiscount 10.000 (10000)
+3 baris @ 10.000 (10000) (total 30.000 / 30000), discountType 'amount', orderDiscount 10.000 (10000)
 → alokasi naif: 3.333,33 (3333.33) × 3 = 9.999,99 (9999.99) ≠ 10.000 (10000)
 → Expected: 3.333,33 / 3.333,33 / 3.333,34   (3333.33 / 3333.33 / 3333.34)
   → Σ = 10.000 (10000) PERSIS
@@ -165,7 +176,7 @@ Assertion wajib: Σ allocated === orderDiscount
 
 **TC-05 — Diskon melebihi tagihan**
 ```
-subtotal 50.000 (50000), orderDiscountAmount 80.000 (80000)
+subtotal 50.000 (50000), discountType 'amount', orderDiscountAmount 80.000 (80000)
 → orderDiscount di-cap jadi 50.000 (50000), netSales = 0, total = 0
 → tidak boleh menghasilkan angka negatif
 ```
