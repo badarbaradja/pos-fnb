@@ -59,13 +59,24 @@ Kalau ada instruksi yang bertentangan dengan aturan di bawah, **berhenti dan tan
 ### 3.4 Multi-tenant
 - Setiap tabel bisnis wajib punya kolom `business_id`.
 - Setiap tabel wajib `enable row level security`. Tabel baru tanpa RLS = kebocoran data lintas klien.
-- Primary key pakai UUID v7 yang di-generate di aplikasi, bukan `serial`/`identity` (agar mode offline nanti bisa jalan).
+- Primary key pakai UUID v7. **Aturan siapa yang generate ID:**
+  - Orders, order_items, payments, shifts → di-generate **di client** (syarat mode offline).
+  - CRUD dashboard (produk, bahan, karyawan, dll.) → boleh di server.
+  - `gen_random_uuid()` di Postgres hanya sebagai **fallback**, tidak pernah jadi sumber ID utama.
 
 ### 3.5 Logika bisnis
 - **Semua rumus tinggal di `src/lib/calc/` sebagai fungsi murni** — input objek, output objek, tanpa akses database, tanpa `fetch`, tanpa side effect. Ini supaya bisa dijalankan identik di server dan di client offline.
 - Setiap fungsi di `lib/calc/` wajib punya unit test sebelum dipakai di UI.
 - **Jangan pernah mengarang aturan bisnis.** Urutan kalkulasi struk, rumus HPP, dan definisi laba ada di `docs/03-CALC-SPEC.md`. Kalau spesifikasinya tidak menyebutkan suatu kasus, tanya — jangan menebak.
 - Tarif pajak, service charge, dan pembulatan **selalu dibaca dari setting outlet**, tidak pernah di-hardcode.
+
+### 3.6 Dependency & Lingkungan
+- **DILARANG** memakai flag `--no-package-lock`. `package-lock.json` wajib ikut di-commit.
+- **DILARANG** mengedit versi dependency di `package.json` secara manual. Selalu lewat `npm install <paket>`.
+- Node.js minimal **v22.12**. Kalau `node --version` di bawah itu, berhenti dan laporkan.
+- Jangan pasang `@vitejs/plugin-react`, `vite`, atau `vite-tsconfig-paths` sampai fase UI. Vitest sudah menangani alias path sendiri, dan Vite 8 + rolldown bermasalah dengan native binding di Windows.
+- `testTimeout` diset 30 detik karena antivirus memperlambat import di mesin ini.
+- Kalau `npm install` gagal (EPERM, paket korup, `.bin` kosong), **JANGAN mencoba workaround sendiri**. Laporkan ke saya dan tunggu.
 
 ## 4. Konvensi kode
 

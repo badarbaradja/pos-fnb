@@ -179,6 +179,7 @@ create table outlets (
   tax_percent     numeric(7,4) not null default 10,   -- PB1/PBJT, cek perda
   tax_inclusive   boolean not null default false,     -- harga sudah termasuk pajak?
   service_charge_percent numeric(7,4) not null default 0,
+  service_charge_in_tax_base boolean not null default true,  -- apakah service charge masuk basis pajak?
   rounding_to     integer not null default 100,     -- pembulatan ke 100 rupiah
   is_active       boolean not null default true,
   created_at      timestamptz not null default now(),

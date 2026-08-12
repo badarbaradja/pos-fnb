@@ -1,5 +1,6 @@
 /**
- * T01 — Dummy test: memverifikasi Vitest berjalan dengan benar.
+ * T01 — Verifikasi lingkungan: memastikan semua dependency utama
+ * dapat diimport dan berjalan dengan benar di environment ini.
  * Test ini bisa dihapus setelah T03 selesai.
  */
 import { describe, it, expect } from "vitest";
