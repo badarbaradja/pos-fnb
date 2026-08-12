@@ -1,4 +1,4 @@
-import { Decimal, roundTo } from "../utils/money";
+import { Decimal, roundTo, round2 } from "../utils/money";
 import type { RoundingMode } from "../utils/money";
 
 /**
@@ -57,11 +57,6 @@ export type CalcResult = {
 };
 
 const ZERO = new Decimal(0);
-
-/** round2(x) — CALC-SPEC A.2: pembulatan ke 2 desimal, mode HALF_UP. */
-function round2(x: Decimal): Decimal {
-  return x.toDecimalPlaces(2, Decimal.ROUND_HALF_UP);
-}
 
 type LineCalc = {
   line: CalcLine;
