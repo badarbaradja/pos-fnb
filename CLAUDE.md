@@ -63,6 +63,9 @@ Kalau ada instruksi yang bertentangan dengan aturan di bawah, **berhenti dan tan
   - Orders, order_items, payments, shifts → di-generate **di client** (syarat mode offline).
   - CRUD dashboard (produk, bahan, karyawan, dll.) → boleh di server.
   - `gen_random_uuid()` di Postgres hanya sebagai **fallback**, tidak pernah jadi sumber ID utama.
+- **`getAdminDb()` (`src/lib/db/client.ts`) hanya untuk operasi sistem** (migration, cron, sync, verifikasi PIN kasir, seed) — role `postgres` yang dipakainya punya `BYPASSRLS` eksplisit di Supabase, jadi FORCE ROW LEVEL SECURITY sekalipun tidak menahannya (ditemukan di T07). Setiap pemakaiannya wajib disertai komentar satu baris yang menjelaskan kenapa RLS perlu dilewati.
+- **Query apa pun yang mengambil data atas nama user wajib lewat `getUserDb(accessToken)`.** Tidak ada pengecualian. Jangan pernah pakai `getAdminDb()` untuk melayani request satu user tertentu.
+- **RLS adalah lapisan terakhir, bukan satu-satunya.** Setiap query tetap memfilter `business_id` secara eksplisit, jangan mengandalkan RLS saja untuk kebenaran hasil.
 
 ### 3.5 Logika bisnis
 - **Semua rumus tinggal di `src/lib/calc/` sebagai fungsi murni** — input objek, output objek, tanpa akses database, tanpa `fetch`, tanpa side effect. Ini supaya bisa dijalankan identik di server dan di client offline.
@@ -79,6 +82,7 @@ Kalau ada instruksi yang bertentangan dengan aturan di bawah, **berhenti dan tan
 - `testTimeout` diset 30 detik karena antivirus memperlambat import di mesin ini.
 - Kalau `npm install` gagal (EPERM, paket korup, `.bin` kosong), **JANGAN mencoba workaround sendiri**. Laporkan ke saya dan tunggu.
 - **DILARANG** menjalankan `drizzle-kit push` pada database apa pun setelah baseline migration terpasang. `push` menerapkan perubahan langsung tanpa mencatat ke `drizzle.__drizzle_migrations`, sehingga riwayat migration dan kondisi database jadi tidak sinkron — ini yang terjadi di T06 dan butuh baseline manual untuk dipulihkan. Selalu pakai `db:generate` lalu `db:migrate`.
+  `push` juga terbukti menerapkan RLS policy TANPA kondisi USING/WITH CHECK-nya (ditemukan di T07). Policy terpasang tapi tidak membatasi apa pun. Ini alasan tambahan kenapa `push` dilarang.
 - Perubahan schema yang tidak bisa diekspresikan di `schema.ts` (fungsi SQL, trigger, FK ke schema `auth`) ditulis manual ke file migration hasil generate, dengan `CREATE OR REPLACE` atau guard `IF NOT EXISTS` agar idempoten.
 - Hapus script diagnostik sementara setelah dipakai, jangan di-commit.
 

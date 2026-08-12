@@ -170,6 +170,11 @@ export const employees = pgTable(
     fullName: text("full_name").notNull(),
     role: userRoleEnum("role").notNull().default("cashier"),
     pinHash: text("pin_hash"), // bcrypt PIN 6 digit
+    // Lockout percobaan PIN (T07): ruang PIN 6 digit cuma 1 juta kombinasi,
+    // hash saja tidak cukup. Kebijakan: 5 kali gagal -> kunci 15 menit,
+    // reset failedAttempts setelah berhasil login. Lihat lib/auth/pin.ts.
+    failedAttempts: integer("failed_attempts").notNull().default(0),
+    lockedUntil: timestamp("locked_until", { withTimezone: true }),
     employmentType: text("employment_type").notNull().default("fulltime"), // fulltime|parttime|daily|freelance
     joinDate: date("join_date"),
     resignDate: date("resign_date"),
