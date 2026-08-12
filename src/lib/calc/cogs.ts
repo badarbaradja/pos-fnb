@@ -15,7 +15,7 @@ const MAX_RECIPE_DEPTH = 5;
 export type RecipeLine = {
   ingredientId: string;
   recipeQty: Decimal;
-  wasteRate: Decimal; // pecahan (0.03 = 3%)
+  prepWasteRate: Decimal; // pecahan (0.03 = 3%) — waste persiapan bahan di resep
   yieldRate: Decimal; // pecahan (1 = 100%)
 };
 
@@ -49,7 +49,7 @@ export function calculateRecipeCost(
   outputQty: Decimal,
   catalog: IngredientCatalog
 ): Decimal {
-  return resolveRecipeCost(recipe, overheadCost, outputQty, catalog, []);
+  return resolveRecipeCost(recipe, overheadCost, outputQty, catalog, [], null);
 }
 
 function resolveRecipeCost(
@@ -57,12 +57,21 @@ function resolveRecipeCost(
   overheadCost: Decimal,
   outputQty: Decimal,
   catalog: IngredientCatalog,
-  path: string[] // ingredientId dari akar sampai level saat ini (untuk deteksi circular & kedalaman)
+  path: string[], // ingredientId dari akar sampai level saat ini (untuk deteksi circular & kedalaman)
+  recipeLabel: string | null // null = resep akar, string = nama bahan semi-finished ini
 ): Decimal {
+  if (outputQty.isZero()) {
+    throw new Error(
+      `calculateRecipeCost: outputQty tidak boleh nol pada ${recipeLabel ?? "resep"}`
+    );
+  }
+
   let total = ZERO;
 
   for (const line of recipe) {
-    const effectiveQty = line.recipeQty.times(new Decimal(1).plus(line.wasteRate));
+    const effectiveQty = line.recipeQty.times(
+      new Decimal(1).plus(line.prepWasteRate)
+    );
 
     const ingredient = catalog[line.ingredientId];
     if (!ingredient) {
@@ -87,18 +96,26 @@ function resolveRecipeCost(
       // (batch). Dibagi outputQty dulu supaya jadi biaya PER UNIT, karena
       // recipeQty di baris pemanggil dinyatakan dalam satuan per unit bahan
       // semi-finished ini (sama seperti avgCost bahan mentah yang per unit).
+      // outputQty ingredient.outputQty sudah divalidasi != 0 di awal
+      // panggilan rekursif berikut, jadi pembagian di bawah ini aman.
       const batchCost = resolveRecipeCost(
         ingredient.recipe,
         ingredient.overheadCost,
         ingredient.outputQty,
         catalog,
-        [...path, line.ingredientId]
+        [...path, line.ingredientId],
+        ingredient.name
       );
       baseCost = batchCost.dividedBy(ingredient.outputQty);
     } else {
       baseCost = ingredient.avgCost;
     }
 
+    if (line.yieldRate.isZero()) {
+      throw new Error(
+        `calculateRecipeCost: yieldRate bahan "${ingredient.name}" tidak boleh nol`
+      );
+    }
     const effectiveCost = baseCost.dividedBy(line.yieldRate);
     const lineCost = effectiveQty.times(effectiveCost);
     total = total.plus(lineCost);
@@ -110,6 +127,8 @@ function resolveRecipeCost(
 /**
  * calculateNewAvgCost() — CALC-SPEC B.2 (Weighted Average Cost).
  * qtyLama <= 0 -> newAvgCost = costMasuk (jangan pakai rumus rata-rata, TC-11).
+ * qtyLama > 0 tapi qtyLama + qtyMasuk = 0 (mis. qtyMasuk negatif) -> lempar
+ * error jelas, bukan diam-diam membagi nol.
  */
 export function calculateNewAvgCost(
   qtyLama: Decimal,
@@ -120,10 +139,13 @@ export function calculateNewAvgCost(
   if (qtyLama.lessThanOrEqualTo(0)) {
     return costMasuk;
   }
-  return qtyLama
-    .times(avgCostLama)
-    .plus(qtyMasuk.times(costMasuk))
-    .dividedBy(qtyLama.plus(qtyMasuk));
+  const totalQty = qtyLama.plus(qtyMasuk);
+  if (totalQty.isZero()) {
+    throw new Error(
+      "calculateNewAvgCost: qtyLama + qtyMasuk tidak boleh nol (qtyMasuk kemungkinan terlalu negatif)"
+    );
+  }
+  return qtyLama.times(avgCostLama).plus(qtyMasuk.times(costMasuk)).dividedBy(totalQty);
 }
 
 /**

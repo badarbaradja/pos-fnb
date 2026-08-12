@@ -118,6 +118,8 @@ discountType:
 ```
 
 Catatan: `discountBase = 0` → semua alokasi 0, jangan bagi nol.
+Catatan: `taxInclusive = true` dengan `taxPercent = -1` (pembagi `1 + taxPercent`
+jadi nol) wajib melempar error jelas, bukan membagi nol diam-diam.
 
 ### A.4 Golden test cases
 
@@ -225,14 +227,16 @@ Assertion: rounding >= 0
 > Semua *rate* di `lib/calc/` memakai pecahan (0.03 = 3%, 1.0 = 100%), sama
 > seperti `*Percent` di bagian A. Konversi dari input UI (yang memakai 3
 > atau 100) dilakukan di layer pemanggil, bukan di dalam kalkulator. Field
-> di bawah sengaja dinamai `wasteRate`/`yieldRate` (bukan `...Percent`)
+> di bawah sengaja dinamai `prepWasteRate`/`yieldRate` (bukan `...Percent`)
 > supaya tidak ada yang terkecoh mengira perlu dibagi 100 lagi.
+> (`prepWasteRate` — sebelumnya bernama `wasteRate` — diganti supaya tidak
+> bentrok nama dengan `wasteToCogsRate` di bagian D, konsep yang berbeda.)
 
 ### B.1 HPP per produk dari resep
 
 ```
 Untuk tiap bahan dalam resep:
-  effectiveQty  = recipeQty × (1 + wasteRate)
+  effectiveQty  = recipeQty × (1 + prepWasteRate)
   effectiveCost = avgCost / yieldRate
   lineCost      = effectiveQty × effectiveCost
 
@@ -243,17 +247,23 @@ Kalau bahan berstatus `is_semi_finished`, jalankan resepnya secara rekursif.
 **Batas rekursi maksimal 5 level**, dan wajib deteksi circular reference → lempar error jelas.
 Hasil rekursi (hppProduk bahan semi-finished, dihitung untuk `outputQty` unit)
 dibagi `outputQty` dulu sebelum dipakai sebagai `avgCost` per unit di level induknya.
+`outputQty = 0` (di level manapun) dan `yieldRate = 0` wajib melempar error
+jelas yang menyebut nama bahan/resepnya, bukan error generik pembagian nol.
 
 **TC-08 — HPP Caffe Latte**
 ```
-Biji kopi   18 g   × avgCost 145       (145),    yieldRate 1 (yield 100%), wasteRate 0.03 (waste 3%)  → 2.688,30  (2688.30)
-Susu UHT   200 ml  × avgCost 18,5      (18.5),   yieldRate 1 (yield 100%), wasteRate 0    (waste 0%)  → 3.700,00  (3700.00)
-Gula cair   10 ml  × avgCost 12        (12),      yieldRate 1 (yield 100%), wasteRate 0    (waste 0%)  →   120,00  (120.00)
-Cup + lid    1 pcs × avgCost 1.350     (1350),    yieldRate 1 (yield 100%), wasteRate 0    (waste 0%)  → 1.350,00  (1350.00)
-────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+Biji kopi   18 g   × avgCost 145       (145),    yieldRate 1 (yield 100%), prepWasteRate 0.03 (waste 3%)  → 2.688,30  (2688.30)
+Susu UHT   200 ml  × avgCost 18,5      (18.5),   yieldRate 1 (yield 100%), prepWasteRate 0    (waste 0%)  → 3.700,00  (3700.00)
+Gula cair   10 ml  × avgCost 12        (12),      yieldRate 1 (yield 100%), prepWasteRate 0    (waste 0%)  →   120,00  (120.00)
+Cup + lid    1 pcs × avgCost 1.350     (1350),    yieldRate 1 (yield 100%), prepWasteRate 0    (waste 0%)  → 1.350,00  (1350.00)
+─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
 hpp = 7.858,30  (7858.30)
 ```
-Turunan: harga jual 28.000 (28000) → foodCostPercent = 28,06% (28.06%)
+Turunan (ilustratif, bukan golden test formal): harga jual 28.000 (28000) →
+rasio hpp/harga = 7858,30 / 28.000 = 0,2807 (0.2807) — dikoreksi dari versi
+sebelumnya ("28,06%") yang salah hitung; angka benar dibulatkan 4 desimal
+adalah 0,2807 bukan 0,2806. Lihat bagian D untuk definisi formal `foodCostRate`
+(yang memakai `netSales` teragregasi, bukan harga jual satu produk).
 
 **TC-09 — Yield di bawah 100%**
 ```
@@ -266,6 +276,8 @@ Ayam fillet: recipeQty 150 g, avgCost 45/g (45), yieldRate 0.8 (yield 80%)
 
 ```
 newAvgCost = (qtyLama × avgCostLama + qtyMasuk × costMasuk) / (qtyLama + qtyMasuk)
+// qtyLama > 0 TAPI qtyLama + qtyMasuk = 0 (mis. qtyMasuk negatif) tetap
+// wajib melempar error jelas, bukan membagi nol diam-diam.
 
 costMasuk per base unit =
   (lineTotal − lineDiscount + allocatedShipping) / (qtyPurchaseUnit × purchaseFactor)
@@ -324,6 +336,12 @@ variancePercent   = varianceQty / pemakaianTeoritis × 100
 
 ## C. Laba Rugi (`lib/calc/pnl.ts`)
 
+> Sama seperti bagian A/B: semua field/hasil berakhiran `Rate` di sini
+> adalah PECAHAN (0.6882 = 68,82%), bukan angka 0-100. Konversi ke skala
+> persen untuk tampilan dilakukan di layer UI, bukan di `lib/calc/`.
+> (Sebelumnya bernama `grossMarginPct`/`netMarginPct` dan mengembalikan
+> skala 0-100 — diganti supaya konsisten dengan seluruh `lib/calc/`.)
+
 ```
 grossSales      = Σ order.subtotal            [order status = paid]
 discountTotal   = Σ order.discountTotal
@@ -332,51 +350,64 @@ netSales        = grossSales − discountTotal − refundTotal
 
 cogs            = Σ orderItem.cogsAmount + wasteValue
 grossProfit     = netSales − cogs
-grossMarginPct  = grossProfit / netSales × 100
+grossMarginRate = grossProfit / netSales
 
 opex            = laborCost + occupancy + utility + marketing
                 + commission + mdr + supplies + admin + depreciation
 operatingProfit = grossProfit − opex
 netProfit       = operatingProfit + otherIncome − otherExpense − incomeTax
+netMarginRate   = netProfit / netSales
 ```
 
 Aturan penting:
 - Pajak (PB1) dan service charge **tidak masuk** `netSales`. Keduanya bukan pendapatan usaha.
 - Penjualan marketplace dicatat **gross**; komisi masuk sebagai beban terpisah.
-- `netSales = 0` → semua persentase bernilai `null`, jangan bagi nol.
+- `netSales = 0` → `grossMarginRate` dan `netMarginRate` bernilai `null`, jangan bagi nol.
 
 **TC-13 — P&L satu hari**
 ```
 grossSales 10.000.000 (10000000) ; diskon 500.000 (500000) ; refund 200.000 (200000)
 → netSales        = 9.300.000 (9300000)
 cogs 2.900.000 (2900000)
-→ grossProfit     = 6.400.000 (6400000)  (68,82% / 68.82%)
+→ grossProfit     = 6.400.000 (6400000)  → grossMarginRate 0,6882 (0.6882)
 labor 1.800.000 (1800000) + sewa 500.000 (500000) + utilitas 300.000 (300000)
   + penyusutan 200.000 (200000) = 2.800.000 (2800000)
 → operatingProfit = 3.600.000 (3600000)
 pajak 0
-→ netProfit       = 3.600.000 (3600000)  (38,71% / 38.71%)
+→ netProfit       = 3.600.000 (3600000)  → netMarginRate 0,3871 (0.3871)
 ```
+Catatan skala: nilai di atas sebelumnya ditulis sebagai persentase
+(68,82% dan 38,71%). Nilainya TIDAK BERUBAH, hanya skalanya — dibagi 100
+menjadi pecahan (0.6882 dan 0.3871), dibulatkan 4 desimal HALF_UP (setara
+presisi 2 desimal pada skala persen).
 
 ---
 
 ## D. KPI (`lib/calc/kpi.ts`)
 
+> Sama seperti bagian A/B/C: semua fungsi berakhiran `Rate`/`Ratio` di sini
+> mengembalikan PECAHAN (0.3 = 30%), bukan angka 0-100. Konversi ke skala
+> persen untuk tampilan dilakukan di layer UI. Tidak dibulatkan di sini
+> (beda dari pnl.ts yang punya golden test presisi tertentu).
+
 ```
-foodCostPercent      = cogs / netSales × 100
-laborCostPercent     = laborCost / netSales × 100
-occupancyCostPercent = occupancyCost / netSales × 100
-primeCostPercent     = foodCostPercent + laborCostPercent     // target ≤ 65%
-averageCheck         = netSales / orderCount
-salesPerGuest        = netSales / guestCount
-voidRate             = voidCount / orderCount × 100
-discountRate         = discountTotal / grossSales × 100
-wastePercent         = wasteValue / cogs × 100
+foodCostRate      = cogs / netSales
+laborCostRate     = laborCost / netSales
+occupancyCostRate = occupancyCost / netSales
+primeCostRate     = foodCostRate + laborCostRate     // target ≤ 65%
+averageCheck      = netSales / orderCount
+salesPerGuest     = netSales / guestCount
+voidRate          = voidCount / orderCount
+discountRate      = discountTotal / grossSales
+wasteToCogsRate   = wasteValue / cogs
+// wasteToCogsRate (sebelumnya wastePercent) — dinamai eksplisit "ToCogs"
+// supaya tidak bentrok dengan prepWasteRate di bagian B (konsep berbeda:
+// itu waste persiapan bahan per resep, ini rasio nilai waste terhadap cogs)
 
 contributionMarginRatio = (netSales − variableCost) / netSales
 bepRupiah               = fixedCost / contributionMarginRatio
 bepPorsi                = fixedCost / (avgPrice − avgHpp)     // BEP dalam jumlah porsi
-marginOfSafetyPercent   = (netSales − bepRupiah) / netSales × 100
+marginOfSafetyRate      = (netSales − bepRupiah) / netSales
 ```
 
 Semua pembagi nol → hasil `null`, bukan `NaN` atau `Infinity`. Wajib ada test untuk ini.

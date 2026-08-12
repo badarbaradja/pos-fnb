@@ -1,16 +1,16 @@
 /**
- * T04 — Test untuk src/lib/calc/cogs.ts, CALC-SPEC bagian B.
+ * T04/T06-audit — Test untuk src/lib/calc/cogs.ts, CALC-SPEC bagian B.
  * TC-08 s/d TC-12, TC-18 pakai nilai numerik polos. Nilai ekspektasi TC-08..
  * TC-12 TIDAK BOLEH diubah. Test circular reference, kedalaman maksimal,
- * calculateVariance, dan pembagi nol calculateIncomingCost ditambahkan
- * sendiri (tidak ada golden case di spec untuk kasus-kasus ini).
+ * calculateVariance, dan berbagai pembagi nol ditambahkan sendiri (tidak
+ * ada golden case di spec untuk kasus-kasus ini).
  *
  * Catatan desain penting (bukan tebakan bisnis, murni pembacaan literal rumus):
  *
- * 1. `wasteRate`/`yieldRate` adalah PECAHAN (0.03 = 3%, 1 = 100%), sama
- *    seperti CalcSettings.*Percent di order-calculator.ts. Rumus B.1 di
- *    CALC-SPEC sudah diperbarui (tanpa /100) supaya konvensinya seragam
- *    di seluruh lib/calc/.
+ * 1. `prepWasteRate`/`yieldRate` adalah PECAHAN (0.03 = 3%, 1 = 100%), sama
+ *    seperti CalcSettings.*Percent di order-calculator.ts. Field ini
+ *    sebelumnya bernama `wasteRate`, diganti `prepWasteRate` supaya tidak
+ *    bentrok nama dengan `wasteToCogsRate` di kpi.ts (konsep berbeda).
  * 2. Signature calculateRecipeCost() tidak diberikan eksplisit di CALC-SPEC
  *    (beda dari calculateOrder() yang punya A.1). Didesain menerima resep +
  *    "katalog bahan" (map id -> definisi bahan) supaya rekursi ke bahan
@@ -44,10 +44,10 @@ describe("TC-08 — HPP Caffe Latte", () => {
       "cup-lid": { name: "Cup + lid", isSemiFinished: false, avgCost: D(1350) },
     };
     const recipe: RecipeLine[] = [
-      { ingredientId: "biji-kopi", recipeQty: D(18), wasteRate: D(0.03), yieldRate: D(1) },
-      { ingredientId: "susu-uht", recipeQty: D(200), wasteRate: D(0), yieldRate: D(1) },
-      { ingredientId: "gula-cair", recipeQty: D(10), wasteRate: D(0), yieldRate: D(1) },
-      { ingredientId: "cup-lid", recipeQty: D(1), wasteRate: D(0), yieldRate: D(1) },
+      { ingredientId: "biji-kopi", recipeQty: D(18), prepWasteRate: D(0.03), yieldRate: D(1) },
+      { ingredientId: "susu-uht", recipeQty: D(200), prepWasteRate: D(0), yieldRate: D(1) },
+      { ingredientId: "gula-cair", recipeQty: D(10), prepWasteRate: D(0), yieldRate: D(1) },
+      { ingredientId: "cup-lid", recipeQty: D(1), prepWasteRate: D(0), yieldRate: D(1) },
     ];
 
     const hpp = calculateRecipeCost(recipe, D(0), D(1), catalog);
@@ -65,7 +65,7 @@ describe("TC-09 — yield di bawah 100%", () => {
       {
         ingredientId: "ayam-fillet",
         recipeQty: D(150),
-        wasteRate: D(0),
+        prepWasteRate: D(0),
         yieldRate: D(0.8),
       },
     ];
@@ -85,7 +85,7 @@ describe("calculateRecipeCost — rekursi bahan semi-finished", () => {
         name: "Sirup gula",
         isSemiFinished: true,
         recipe: [
-          { ingredientId: "gula", recipeQty: D(100), wasteRate: D(0), yieldRate: D(1) },
+          { ingredientId: "gula", recipeQty: D(100), prepWasteRate: D(0), yieldRate: D(1) },
         ],
         overheadCost: D(0),
         outputQty: D(100), // hpp per unit output sirup = (100*12)/100 = 12
@@ -95,7 +95,7 @@ describe("calculateRecipeCost — rekursi bahan semi-finished", () => {
       {
         ingredientId: "sirup-gula",
         recipeQty: D(10),
-        wasteRate: D(0),
+        prepWasteRate: D(0),
         yieldRate: D(1),
       },
     ];
@@ -112,7 +112,7 @@ describe("calculateRecipeCost — rekursi bahan semi-finished", () => {
       gula: { name: "Gula pasir", isSemiFinished: false, avgCost: D(12) },
     };
     const recipe: RecipeLine[] = [
-      { ingredientId: "gula", recipeQty: D(10), wasteRate: D(0), yieldRate: D(1) },
+      { ingredientId: "gula", recipeQty: D(10), prepWasteRate: D(0), yieldRate: D(1) },
     ];
 
     // lineCost = 10*12 = 120; overhead 50 / outputQty 5 = 10 -> hpp = 130
@@ -124,7 +124,7 @@ describe("calculateRecipeCost — rekursi bahan semi-finished", () => {
   it("melempar error kalau bahan tidak ditemukan di katalog", () => {
     const catalog: IngredientCatalog = {};
     const recipe: RecipeLine[] = [
-      { ingredientId: "tidak-ada", recipeQty: D(1), wasteRate: D(0), yieldRate: D(1) },
+      { ingredientId: "tidak-ada", recipeQty: D(1), prepWasteRate: D(0), yieldRate: D(1) },
     ];
 
     expect(() => calculateRecipeCost(recipe, D(0), D(1), catalog)).toThrow(
@@ -138,7 +138,7 @@ describe("calculateRecipeCost — rekursi bahan semi-finished", () => {
         name: "Sirup A",
         isSemiFinished: true,
         recipe: [
-          { ingredientId: "sirup-b", recipeQty: D(1), wasteRate: D(0), yieldRate: D(1) },
+          { ingredientId: "sirup-b", recipeQty: D(1), prepWasteRate: D(0), yieldRate: D(1) },
         ],
         overheadCost: D(0),
         outputQty: D(1),
@@ -147,14 +147,14 @@ describe("calculateRecipeCost — rekursi bahan semi-finished", () => {
         name: "Sirup B",
         isSemiFinished: true,
         recipe: [
-          { ingredientId: "sirup-a", recipeQty: D(1), wasteRate: D(0), yieldRate: D(1) },
+          { ingredientId: "sirup-a", recipeQty: D(1), prepWasteRate: D(0), yieldRate: D(1) },
         ],
         overheadCost: D(0),
         outputQty: D(1),
       },
     };
     const recipe: RecipeLine[] = [
-      { ingredientId: "sirup-a", recipeQty: D(1), wasteRate: D(0), yieldRate: D(1) },
+      { ingredientId: "sirup-a", recipeQty: D(1), prepWasteRate: D(0), yieldRate: D(1) },
     ];
 
     expect(() => calculateRecipeCost(recipe, D(0), D(1), catalog)).toThrow(
@@ -173,7 +173,7 @@ describe("calculateRecipeCost — rekursi bahan semi-finished", () => {
       name,
       isSemiFinished: true,
       recipe: [
-        { ingredientId: next, recipeQty: D(1), wasteRate: D(0), yieldRate: D(1) },
+        { ingredientId: next, recipeQty: D(1), prepWasteRate: D(0), yieldRate: D(1) },
       ],
       overheadCost: D(0),
       outputQty: D(1),
@@ -188,7 +188,7 @@ describe("calculateRecipeCost — rekursi bahan semi-finished", () => {
       L1: semi("L1", "L2"),
     };
     const recipe: RecipeLine[] = [
-      { ingredientId: "L1", recipeQty: D(1), wasteRate: D(0), yieldRate: D(1) },
+      { ingredientId: "L1", recipeQty: D(1), prepWasteRate: D(0), yieldRate: D(1) },
     ];
 
     expect(() => calculateRecipeCost(recipe, D(0), D(1), catalog)).toThrow(
@@ -206,7 +206,7 @@ describe("calculateRecipeCost — rekursi bahan semi-finished", () => {
       name,
       isSemiFinished: true,
       recipe: [
-        { ingredientId: next, recipeQty: D(1), wasteRate: D(0), yieldRate: D(1) },
+        { ingredientId: next, recipeQty: D(1), prepWasteRate: D(0), yieldRate: D(1) },
       ],
       overheadCost: D(0),
       outputQty: D(1),
@@ -221,10 +221,63 @@ describe("calculateRecipeCost — rekursi bahan semi-finished", () => {
     };
     // root(1) -> L1(2) -> L2(3) -> L3(4) -> L4(5) -> raw : tepat 5 level
     const recipe: RecipeLine[] = [
-      { ingredientId: "L1", recipeQty: D(1), wasteRate: D(0), yieldRate: D(1) },
+      { ingredientId: "L1", recipeQty: D(1), prepWasteRate: D(0), yieldRate: D(1) },
     ];
 
     expect(() => calculateRecipeCost(recipe, D(0), D(1), catalog)).not.toThrow();
+  });
+
+  it("melempar error jelas kalau outputQty = 0 di level akar (bukan error generik)", () => {
+    const catalog: IngredientCatalog = {
+      gula: { name: "Gula pasir", isSemiFinished: false, avgCost: D(12) },
+    };
+    const recipe: RecipeLine[] = [
+      { ingredientId: "gula", recipeQty: D(10), prepWasteRate: D(0), yieldRate: D(1) },
+    ];
+
+    expect(() => calculateRecipeCost(recipe, D(50), D(0), catalog)).toThrow(
+      /outputQty/i
+    );
+  });
+
+  it("melempar error jelas berisi nama bahan kalau outputQty = 0 di bahan semi-finished", () => {
+    const catalog: IngredientCatalog = {
+      gula: { name: "Gula pasir", isSemiFinished: false, avgCost: D(12) },
+      "sirup-rusak": {
+        name: "Sirup rusak",
+        isSemiFinished: true,
+        recipe: [
+          { ingredientId: "gula", recipeQty: D(100), prepWasteRate: D(0), yieldRate: D(1) },
+        ],
+        overheadCost: D(0),
+        outputQty: D(0), // salah data: batch tidak menghasilkan output apa pun
+      },
+    };
+    const recipe: RecipeLine[] = [
+      { ingredientId: "sirup-rusak", recipeQty: D(1), prepWasteRate: D(0), yieldRate: D(1) },
+    ];
+
+    expect(() => calculateRecipeCost(recipe, D(0), D(1), catalog)).toThrow(
+      /Sirup rusak/
+    );
+  });
+
+  it("melempar error jelas berisi nama bahan kalau yieldRate = 0", () => {
+    const catalog: IngredientCatalog = {
+      "ayam-busuk": { name: "Ayam fillet", isSemiFinished: false, avgCost: D(45) },
+    };
+    const recipe: RecipeLine[] = [
+      {
+        ingredientId: "ayam-busuk",
+        recipeQty: D(150),
+        prepWasteRate: D(0),
+        yieldRate: D(0), // salah data: yield 0% tidak masuk akal, tapi jangan diam-diam bagi nol
+      },
+    ];
+
+    expect(() => calculateRecipeCost(recipe, D(0), D(1), catalog)).toThrow(
+      /Ayam fillet/
+    );
   });
 });
 
@@ -244,6 +297,11 @@ describe("TC-11 — stok nol atau negatif", () => {
   it("qtyLama negatif -> newAvgCost = costMasuk", () => {
     const result = calculateNewAvgCost(D(-10), D(999), D(500), D(75));
     expect(result.toString()).toBe("75");
+  });
+
+  it("qtyLama > 0 tapi qtyLama + qtyMasuk = 0 -> melempar error, bukan bagi nol", () => {
+    // qtyLama lolos guard "<=0", tapi qtyMasuk negatif membuat penyebutnya nol.
+    expect(() => calculateNewAvgCost(D(100), D(50), D(-100), D(75))).toThrow();
   });
 });
 

@@ -47,6 +47,10 @@ export function round2(x: Decimal): Decimal {
  * Format Decimal sebagai string Rupiah untuk tampilan UI, mis. "Rp 150.000".
  * Dibulatkan ke rupiah penuh (HALF_UP) karena IDR tidak punya sen dalam praktik,
  * meski nilai tersimpan di numeric(16,2).
+ *
+ * Ini KEPUTUSAN TAMPILAN, bukan aturan kalkulasi dari CALC-SPEC — jangan
+ * pernah dipakai untuk MENGHITUNG nilai yang disimpan (order, pembayaran,
+ * laporan). Hanya untuk merender Decimal yang sudah final ke string.
  */
 export function formatIDR(value: Decimal): string {
   const rounded = value.toDecimalPlaces(0, Decimal.ROUND_HALF_UP);

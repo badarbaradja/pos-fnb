@@ -216,6 +216,54 @@ describe("TC-06 — item non-taxable dicampur", () => {
   });
 });
 
+describe("calculateOrder — discountBase = 0 (semua baris habis kena itemDiscount)", () => {
+  it("semua alokasi 0, tidak ada NaN, netSales tetap benar", () => {
+    const lines: CalcLine[] = [
+      line({
+        id: "L1",
+        qty: new Decimal(1),
+        unitPrice: new Decimal(10000),
+        itemDiscount: new Decimal(10000), // afterItemDisc L1 = 0
+      }),
+      line({
+        id: "L2",
+        qty: new Decimal(1),
+        unitPrice: new Decimal(5000),
+        itemDiscount: new Decimal(5000), // afterItemDisc L2 = 0
+      }),
+    ];
+    // discountType 'percent' supaya orderDiscount juga dihitung dari
+    // discountBase (0 × persen apa pun tetap 0) — bukan cuma path 'amount'.
+    const settings = baseSettings({
+      discountType: "percent",
+      orderDiscountPercent: new Decimal(0.5),
+    });
+
+    const result = calculateOrder(lines, settings);
+
+    expect(result.orderDiscount.toString()).toBe("0");
+    expect(result.lines[0]!.allocatedOrderDiscount.toString()).toBe("0");
+    expect(result.lines[1]!.allocatedOrderDiscount.toString()).toBe("0");
+    expect(Number.isNaN(result.netSales.toNumber())).toBe(false);
+    expect(result.netSales.toString()).toBe("0");
+    expect(result.total.toString()).toBe("0");
+  });
+});
+
+describe("calculateOrder — taxInclusive dengan taxPercent = -1", () => {
+  it("melempar error jelas, bukan membagi nol diam-diam", () => {
+    const lines: CalcLine[] = [
+      line({ id: "L1", qty: new Decimal(1), unitPrice: new Decimal(10000) }),
+    ];
+    const settings = baseSettings({
+      taxPercent: new Decimal(-1),
+      taxInclusive: true,
+    });
+
+    expect(() => calculateOrder(lines, settings)).toThrow(/taxPercent/i);
+  });
+});
+
 describe("TC-16 — roundingMode 'nearest', rounding negatif", () => {
   it("totalBeforeRounding 99849 -> total 99800, rounding -49 persis", () => {
     const lines: CalcLine[] = [

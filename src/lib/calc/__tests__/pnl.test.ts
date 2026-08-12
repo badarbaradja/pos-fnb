@@ -6,9 +6,11 @@
  * (grossSales, discountTotal, refundTotal, cogs, komponen opex) — bukan
  * array Order[]/Refund[] mentah, karena tipe Order/OrderItem/Refund belum
  * didefinisikan di manapun di codebase ini (T06 belum dikerjakan). `opex`
- * dijumlahkan dari 9 komponen DI DALAM fungsi. `netMarginPct` ditambahkan
- * sebagai field turunan (formula C hanya menamai grossMarginPct eksplisit,
- * tapi TC-13 menunjukkan dua persentase: gross 68,82% dan net 38,71%).
+ * dijumlahkan dari 9 komponen DI DALAM fungsi.
+ *
+ * grossMarginRate/netMarginRate mengembalikan PECAHAN (dulu grossMarginPct/
+ * netMarginPct, skala 0-100) — nilainya TIDAK berubah, cuma dibagi 100:
+ * 68,82% -> 0.6882, 38,71% -> 0.3871, dibulatkan 4 desimal HALF_UP.
  */
 import { describe, it, expect } from "vitest";
 import { Decimal } from "../../utils/money";
@@ -56,18 +58,18 @@ describe("TC-13 — P&L satu hari", () => {
 
     expect(result.netSales.toString()).toBe("9300000");
     expect(result.grossProfit.toString()).toBe("6400000");
-    expect(result.grossMarginPct).not.toBeNull();
-    expect(result.grossMarginPct!.toString()).toBe("68.82");
+    expect(result.grossMarginRate).not.toBeNull();
+    expect(result.grossMarginRate!.toString()).toBe("0.6882");
     expect(result.opex.toString()).toBe("2800000");
     expect(result.operatingProfit.toString()).toBe("3600000");
     expect(result.netProfit.toString()).toBe("3600000");
-    expect(result.netMarginPct).not.toBeNull();
-    expect(result.netMarginPct!.toString()).toBe("38.71");
+    expect(result.netMarginRate).not.toBeNull();
+    expect(result.netMarginRate!.toString()).toBe("0.3871");
   });
 });
 
 describe("calculatePnL — netSales = 0", () => {
-  it("grossMarginPct dan netMarginPct null, bukan NaN/Infinity", () => {
+  it("grossMarginRate dan netMarginRate null, bukan NaN/Infinity", () => {
     const input = baseInput({
       grossSales: D(500000),
       discountTotal: D(300000),
@@ -78,8 +80,8 @@ describe("calculatePnL — netSales = 0", () => {
     const result = calculatePnL(input);
 
     expect(result.netSales.toString()).toBe("0");
-    expect(result.grossMarginPct).toBeNull();
-    expect(result.netMarginPct).toBeNull();
+    expect(result.grossMarginRate).toBeNull();
+    expect(result.netMarginRate).toBeNull();
     // nilai absolut (bukan persentase) tetap terhitung normal
     expect(result.grossProfit.toString()).toBe("0");
     expect(result.operatingProfit.toString()).toBe("0");

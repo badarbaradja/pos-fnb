@@ -1,4 +1,4 @@
-import { Decimal, round2 } from "../utils/money";
+import { Decimal } from "../utils/money";
 
 /**
  * Laba Rugi — CALC-SPEC bagian C. Fungsi murni: tanpa akses database, tanpa
@@ -11,7 +11,18 @@ import { Decimal, round2 } from "../utils/money";
  * `cogs` juga diterima sebagai satu nilai gabungan (Σ orderItem.cogsAmount +
  * wasteValue sudah dijumlahkan pemanggil) — TC-13 memberi contoh persis
  * seperti ini, satu angka "cogs" tanpa dipecah.
+ *
+ * `grossMarginRate`/`netMarginRate` (dulu `grossMarginPct`/`netMarginPct`)
+ * mengembalikan PECAHAN (0.6882 = 68,82%), konsisten dengan seluruh
+ * lib/calc/. Dibulatkan 4 desimal HALF_UP — setara presisi 2 desimal pada
+ * skala persen yang dipakai TC-13 sebelumnya.
  */
+
+const RATE_DECIMAL_PLACES = 4;
+
+function roundRate(x: Decimal): Decimal {
+  return x.toDecimalPlaces(RATE_DECIMAL_PLACES, Decimal.ROUND_HALF_UP);
+}
 
 export type PnLInput = {
   grossSales: Decimal;
@@ -39,16 +50,16 @@ export type PnLResult = {
   netSales: Decimal;
   cogs: Decimal;
   grossProfit: Decimal;
-  grossMarginPct: Decimal | null;
+  grossMarginRate: Decimal | null;
   opex: Decimal;
   operatingProfit: Decimal;
   netProfit: Decimal;
-  netMarginPct: Decimal | null;
+  netMarginRate: Decimal | null;
 };
 
 /**
  * calculatePnL() — CALC-SPEC C.
- * netSales = 0 -> grossMarginPct & netMarginPct null, bukan NaN/Infinity.
+ * netSales = 0 -> grossMarginRate & netMarginRate null, bukan NaN/Infinity.
  * Pajak (PB1) dan service charge TIDAK masuk ke sini — netSales di sini
  * murni dari grossSales/discountTotal/refundTotal, sesuai aturan C.
  */
@@ -76,12 +87,12 @@ export function calculatePnL(input: PnLInput): PnLResult {
     .minus(input.incomeTax);
 
   const netSalesIsZero = netSales.isZero();
-  const grossMarginPct = netSalesIsZero
+  const grossMarginRate = netSalesIsZero
     ? null
-    : round2(grossProfit.dividedBy(netSales).times(100));
-  const netMarginPct = netSalesIsZero
+    : roundRate(grossProfit.dividedBy(netSales));
+  const netMarginRate = netSalesIsZero
     ? null
-    : round2(netProfit.dividedBy(netSales).times(100));
+    : roundRate(netProfit.dividedBy(netSales));
 
   return {
     grossSales: input.grossSales,
@@ -90,10 +101,10 @@ export function calculatePnL(input: PnLInput): PnLResult {
     netSales,
     cogs: input.cogs,
     grossProfit,
-    grossMarginPct,
+    grossMarginRate,
     opex,
     operatingProfit,
     netProfit,
-    netMarginPct,
+    netMarginRate,
   };
 }

@@ -1,67 +1,72 @@
 /**
- * T05 — Test untuk src/lib/calc/kpi.ts, CALC-SPEC bagian D.
+ * T05/T06-audit — Test untuk src/lib/calc/kpi.ts, CALC-SPEC bagian D.
  * Tidak ada golden test case di CALC-SPEC untuk bagian D, jadi seluruh test
  * di bawah ditulis sendiri dari rumus, dengan fokus pada aturan wajib:
  * SETIAP pembagian aman terhadap pembagi nol -> null, bukan NaN/Infinity.
  * Angka dipilih supaya pembagian genap (tidak perlu pembulatan) agar test
  * ini murni menguji kebenaran rumus & null-safety, bukan konvensi pembulatan
  * yang tidak disebutkan spec.
+ *
+ * Semua fungsi *Rate/*Ratio mengembalikan PECAHAN (0.3 = 30%), bukan skala
+ * 0-100 — diperbaiki dari versi sebelumnya supaya konsisten dengan seluruh
+ * lib/calc/. wasteToCogsRate (dulu wastePercent) dan marginOfSafetyRate
+ * (dulu marginOfSafetyPercent) juga di-rename sekaligus.
  */
 import { describe, it, expect } from "vitest";
 import { Decimal } from "../../utils/money";
 import {
-  foodCostPercent,
-  laborCostPercent,
-  occupancyCostPercent,
-  primeCostPercent,
+  foodCostRate,
+  laborCostRate,
+  occupancyCostRate,
+  primeCostRate,
   averageCheck,
   salesPerGuest,
   voidRate,
   discountRate,
-  wastePercent,
+  wasteToCogsRate,
   contributionMarginRatio,
   bepRupiah,
   bepPorsi,
-  marginOfSafetyPercent,
+  marginOfSafetyRate,
 } from "../kpi";
 
 const D = (n: number) => new Decimal(n);
 
-describe("foodCostPercent", () => {
-  it("cogs / netSales * 100", () => {
-    expect(foodCostPercent(D(3000), D(10000))!.toString()).toBe("30");
+describe("foodCostRate", () => {
+  it("cogs / netSales (pecahan)", () => {
+    expect(foodCostRate(D(3000), D(10000))!.toString()).toBe("0.3");
   });
   it("netSales = 0 -> null", () => {
-    expect(foodCostPercent(D(3000), D(0))).toBeNull();
+    expect(foodCostRate(D(3000), D(0))).toBeNull();
   });
 });
 
-describe("laborCostPercent", () => {
-  it("laborCost / netSales * 100", () => {
-    expect(laborCostPercent(D(2000), D(10000))!.toString()).toBe("20");
+describe("laborCostRate", () => {
+  it("laborCost / netSales (pecahan)", () => {
+    expect(laborCostRate(D(2000), D(10000))!.toString()).toBe("0.2");
   });
   it("netSales = 0 -> null", () => {
-    expect(laborCostPercent(D(2000), D(0))).toBeNull();
+    expect(laborCostRate(D(2000), D(0))).toBeNull();
   });
 });
 
-describe("occupancyCostPercent", () => {
-  it("occupancyCost / netSales * 100", () => {
-    expect(occupancyCostPercent(D(500), D(10000))!.toString()).toBe("5");
+describe("occupancyCostRate", () => {
+  it("occupancyCost / netSales (pecahan)", () => {
+    expect(occupancyCostRate(D(500), D(10000))!.toString()).toBe("0.05");
   });
   it("netSales = 0 -> null", () => {
-    expect(occupancyCostPercent(D(500), D(0))).toBeNull();
+    expect(occupancyCostRate(D(500), D(0))).toBeNull();
   });
 });
 
-describe("primeCostPercent", () => {
-  it("foodCostPercent + laborCostPercent", () => {
-    expect(primeCostPercent(D(30), D(20))!.toString()).toBe("50");
+describe("primeCostRate", () => {
+  it("foodCostRate + laborCostRate (pecahan)", () => {
+    expect(primeCostRate(D(0.3), D(0.2))!.toString()).toBe("0.5");
   });
   it("salah satu input null -> null (bukan ikut dijumlahkan sebagai 0)", () => {
-    expect(primeCostPercent(null, D(20))).toBeNull();
-    expect(primeCostPercent(D(30), null)).toBeNull();
-    expect(primeCostPercent(null, null)).toBeNull();
+    expect(primeCostRate(null, D(0.2))).toBeNull();
+    expect(primeCostRate(D(0.3), null)).toBeNull();
+    expect(primeCostRate(null, null)).toBeNull();
   });
 });
 
@@ -84,8 +89,8 @@ describe("salesPerGuest", () => {
 });
 
 describe("voidRate", () => {
-  it("voidCount / orderCount * 100", () => {
-    expect(voidRate(D(2), D(10))!.toString()).toBe("20");
+  it("voidCount / orderCount (pecahan)", () => {
+    expect(voidRate(D(2), D(10))!.toString()).toBe("0.2");
   });
   it("orderCount = 0 -> null", () => {
     expect(voidRate(D(2), D(0))).toBeNull();
@@ -93,20 +98,20 @@ describe("voidRate", () => {
 });
 
 describe("discountRate", () => {
-  it("discountTotal / grossSales * 100", () => {
-    expect(discountRate(D(500), D(10000))!.toString()).toBe("5");
+  it("discountTotal / grossSales (pecahan)", () => {
+    expect(discountRate(D(500), D(10000))!.toString()).toBe("0.05");
   });
   it("grossSales = 0 -> null", () => {
     expect(discountRate(D(500), D(0))).toBeNull();
   });
 });
 
-describe("wastePercent", () => {
-  it("wasteValue / cogs * 100", () => {
-    expect(wastePercent(D(100), D(2000))!.toString()).toBe("5");
+describe("wasteToCogsRate", () => {
+  it("wasteValue / cogs (pecahan)", () => {
+    expect(wasteToCogsRate(D(100), D(2000))!.toString()).toBe("0.05");
   });
   it("cogs = 0 -> null", () => {
-    expect(wastePercent(D(100), D(0))).toBeNull();
+    expect(wasteToCogsRate(D(100), D(0))).toBeNull();
   });
 });
 
@@ -148,14 +153,14 @@ describe("bepPorsi", () => {
   });
 });
 
-describe("marginOfSafetyPercent", () => {
-  it("(netSales - bepRupiah) / netSales * 100", () => {
-    expect(marginOfSafetyPercent(D(10000), D(6000))!.toString()).toBe("40");
+describe("marginOfSafetyRate", () => {
+  it("(netSales - bepRupiah) / netSales (pecahan)", () => {
+    expect(marginOfSafetyRate(D(10000), D(6000))!.toString()).toBe("0.4");
   });
   it("netSales = 0 -> null", () => {
-    expect(marginOfSafetyPercent(D(0), D(6000))).toBeNull();
+    expect(marginOfSafetyRate(D(0), D(6000))).toBeNull();
   });
   it("bepRupiah null -> null (ikut merambat)", () => {
-    expect(marginOfSafetyPercent(D(10000), null)).toBeNull();
+    expect(marginOfSafetyRate(D(10000), null)).toBeNull();
   });
 });

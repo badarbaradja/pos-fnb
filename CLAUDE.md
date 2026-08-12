@@ -69,6 +69,7 @@ Kalau ada instruksi yang bertentangan dengan aturan di bawah, **berhenti dan tan
 - Setiap fungsi di `lib/calc/` wajib punya unit test sebelum dipakai di UI.
 - **Jangan pernah mengarang aturan bisnis.** Urutan kalkulasi struk, rumus HPP, dan definisi laba ada di `docs/03-CALC-SPEC.md`. Kalau spesifikasinya tidak menyebutkan suatu kasus, tanya — jangan menebak.
 - Tarif pajak, service charge, dan pembulatan **selalu dibaca dari setting outlet**, tidak pernah di-hardcode.
+- **Pengecualian:** Helper aritmetika generik (`round2`, `roundTo`) boleh tinggal di `lib/utils/money.ts` karena dipakai lintas modul. Yang wajib di `lib/calc/` adalah rumus BISNIS — kalkulasi yang menghasilkan nilai finansial.
 
 ### 3.6 Dependency & Lingkungan
 - **DILARANG** memakai flag `--no-package-lock`. `package-lock.json` wajib ikut di-commit.
@@ -132,6 +133,5 @@ Sebuah tugas dianggap selesai kalau **semua** ini terpenuhi:
 
 > Update bagian ini setiap ganti fase.
 
-**Fase: 0 — Fondasi**
-**Tugas aktif:** T01 (setup proyek)
-**Belum boleh disentuh:** modul inventori, payroll, laporan keuangan. Fokus dulu ke fondasi + kalkulator.
+**Fase: 1 — MVP POS**
+**Tugas aktif:** T06 (skema database inti)

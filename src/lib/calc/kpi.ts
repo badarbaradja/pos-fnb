@@ -9,42 +9,49 @@ import { Decimal } from "../utils/money";
  * sendiri-sendiri. SETIAP pembagi nol mengembalikan `null`, bukan `NaN`
  * atau `Infinity`. Tidak ada rumus di sini yang dibulatkan (round2) karena
  * tidak ada golden test yang menuntut presisi tertentu — beda dari pnl.ts
- * yang punya TC-13 eksplisit 2 desimal.
+ * yang punya TC-13 eksplisit.
  *
- * `occupancyCostPercent` dan `bepPorsi` tidak ada di draf awal CALC-SPEC
- * bagian D dan ditambahkan atas permintaan eksplisit — occupancyCostPercent
- * mengikuti pola laborCostPercent (cost/netSales×100) yang sudah ada,
- * bepPorsi adalah rumus BEP-unit standar: fixedCost / (avgPrice − avgHpp).
+ * Semua fungsi berakhiran `Rate`/`Ratio` mengembalikan PECAHAN (0.3 = 30%),
+ * konsisten dengan seluruh lib/calc/ (order-calculator.ts, cogs.ts, pnl.ts).
+ * Konversi ke skala persen untuk tampilan dilakukan di layer UI. Sebelumnya
+ * sebagian fungsi di sini (yang berakhiran *Percent, dan voidRate/discountRate
+ * yang sudah dikali 100 walau namanya "Rate") mengembalikan skala 0-100 —
+ * sudah diperbaiki supaya seragam.
+ *
+ * `wasteToCogsRate` (sebelumnya `wastePercent`) sengaja dinamai eksplisit
+ * "ToCogs" supaya tidak bentrok dengan `prepWasteRate` di cogs.ts — dua
+ * konsep berbeda: itu waste persiapan bahan per resep, ini rasio nilai
+ * waste terhadap cogs.
  */
 
-export function foodCostPercent(cogs: Decimal, netSales: Decimal): Decimal | null {
+export function foodCostRate(cogs: Decimal, netSales: Decimal): Decimal | null {
   if (netSales.isZero()) return null;
-  return cogs.dividedBy(netSales).times(100);
+  return cogs.dividedBy(netSales);
 }
 
-export function laborCostPercent(
+export function laborCostRate(
   laborCost: Decimal,
   netSales: Decimal
 ): Decimal | null {
   if (netSales.isZero()) return null;
-  return laborCost.dividedBy(netSales).times(100);
+  return laborCost.dividedBy(netSales);
 }
 
-export function occupancyCostPercent(
+export function occupancyCostRate(
   occupancyCost: Decimal,
   netSales: Decimal
 ): Decimal | null {
   if (netSales.isZero()) return null;
-  return occupancyCost.dividedBy(netSales).times(100);
+  return occupancyCost.dividedBy(netSales);
 }
 
-/** target ≤ 65% (aturan operasional, bukan dicek/ditegakkan di sini) */
-export function primeCostPercent(
-  foodCostPct: Decimal | null,
-  laborCostPct: Decimal | null
+/** target ≤ 0.65 (65%) (aturan operasional, bukan dicek/ditegakkan di sini) */
+export function primeCostRate(
+  foodCostRateValue: Decimal | null,
+  laborCostRateValue: Decimal | null
 ): Decimal | null {
-  if (foodCostPct === null || laborCostPct === null) return null;
-  return foodCostPct.plus(laborCostPct);
+  if (foodCostRateValue === null || laborCostRateValue === null) return null;
+  return foodCostRateValue.plus(laborCostRateValue);
 }
 
 export function averageCheck(
@@ -68,7 +75,7 @@ export function voidRate(
   orderCount: Decimal
 ): Decimal | null {
   if (orderCount.isZero()) return null;
-  return voidCount.dividedBy(orderCount).times(100);
+  return voidCount.dividedBy(orderCount);
 }
 
 export function discountRate(
@@ -76,12 +83,15 @@ export function discountRate(
   grossSales: Decimal
 ): Decimal | null {
   if (grossSales.isZero()) return null;
-  return discountTotal.dividedBy(grossSales).times(100);
+  return discountTotal.dividedBy(grossSales);
 }
 
-export function wastePercent(wasteValue: Decimal, cogs: Decimal): Decimal | null {
+export function wasteToCogsRate(
+  wasteValue: Decimal,
+  cogs: Decimal
+): Decimal | null {
   if (cogs.isZero()) return null;
-  return wasteValue.dividedBy(cogs).times(100);
+  return wasteValue.dividedBy(cogs);
 }
 
 export function contributionMarginRatio(
@@ -113,10 +123,10 @@ export function bepPorsi(
   return fixedCost.dividedBy(marginPerPorsi);
 }
 
-export function marginOfSafetyPercent(
+export function marginOfSafetyRate(
   netSales: Decimal,
   bepRupiah: Decimal | null
 ): Decimal | null {
   if (netSales.isZero() || bepRupiah === null) return null;
-  return netSales.minus(bepRupiah).dividedBy(netSales).times(100);
+  return netSales.minus(bepRupiah).dividedBy(netSales);
 }

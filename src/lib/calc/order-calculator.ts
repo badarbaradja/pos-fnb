@@ -132,7 +132,13 @@ export function calculateOrder(lines: CalcLine[], s: CalcSettings): CalcResult {
   let taxAmount: Decimal;
   let totalBeforeRounding: Decimal;
   if (s.taxInclusive) {
-    taxAmount = round2(taxBase.minus(taxBase.dividedBy(s.taxPercent.plus(1))));
+    const taxDivisor = s.taxPercent.plus(1);
+    if (taxDivisor.isZero()) {
+      throw new Error(
+        "calculateOrder: taxPercent tidak boleh -1 saat taxInclusive true (1 + taxPercent jadi nol)"
+      );
+    }
+    taxAmount = round2(taxBase.minus(taxBase.dividedBy(taxDivisor)));
     totalBeforeRounding = netSales.plus(serviceCharge);
   } else {
     taxAmount = round2(s.taxPercent.times(taxBase));
