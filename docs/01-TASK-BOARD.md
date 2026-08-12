@@ -1,0 +1,101 @@
+# 01 — Task Board
+
+Urutan ini disengaja. Kalimat kuncinya: **kalkulator dulu, database kedua, UI terakhir.**
+Kalau kalkulatornya benar, sisanya cuma CRUD. Kalau UI-nya duluan, kamu akan menulis ulang semuanya.
+
+Status: `[ ]` belum · `[~]` jalan · `[x]` selesai
+
+---
+
+## Fase 0 — Fondasi (target 1 minggu)
+
+**[ ] T01 — Setup tooling**
+Pasang Vitest, Drizzle ORM, decimal.js, zod, date-fns-tz. Buat script `typecheck`, `lint`, `test`, `db:generate`, `db:migrate`. TypeScript strict mode aktif.
+*Selesai kalau:* `npm run test` jalan dengan satu test dummy hijau.
+
+**[ ] T02 — Utilitas dasar**
+`lib/utils/money.ts` (wrapper Decimal, `formatIDR`, `roundTo`), `lib/utils/business-date.ts`, `lib/utils/id.ts` (UUID v7).
+*Selesai kalau:* TC-15 dari CALC-SPEC lolos, termasuk kasus WITA dengan server UTC.
+
+**[ ] T03 — Kalkulator struk** ★ tugas paling penting di seluruh proyek
+Implementasi `lib/calc/order-calculator.ts` sesuai CALC-SPEC bagian A. **Tulis test dulu, baru implementasi.**
+*Selesai kalau:* TC-01 sampai TC-07 semuanya hijau, termasuk property test.
+
+**[ ] T04 — Kalkulator HPP**
+`lib/calc/cogs.ts`: HPP dari resep (rekursif untuk semi-finished), WAC, alokasi ongkir, variance.
+*Selesai kalau:* TC-08 sampai TC-12 hijau, circular reference melempar error jelas.
+
+**[ ] T05 — Kalkulator P&L, KPI, shift**
+`lib/calc/pnl.ts`, `kpi.ts`, `shift.ts` sesuai CALC-SPEC bagian C, D, E.
+*Selesai kalau:* TC-13, TC-14 hijau, dan semua pembagian nol menghasilkan `null`.
+
+**[ ] T06 — Skema database inti**
+Drizzle schema untuk: `businesses`, `outlets`, `profiles`, `memberships`, `employees`, `devices`. Migration + RLS untuk semua tabel.
+*Selesai kalau:* migration jalan di Supabase dev, dan ada test yang memverifikasi tidak ada tabel tanpa RLS.
+
+**[ ] T07 — Auth & sesi**
+Login owner/manajer via Supabase Auth. Login kasir via PIN (bcrypt). Helper `getSession()`, `requirePermission()`.
+*Selesai kalau:* user A tidak bisa membaca data bisnis user B — buktikan dengan test.
+
+---
+
+## Fase 1 — POS yang bisa dijual (target 3–4 minggu)
+
+**[ ] T08 — Skema katalog**
+`categories`, `products`, `product_variants`, `price_tiers`, `product_prices`, `modifier_groups`, `modifiers`.
+
+**[ ] T09 — CRUD produk**
+Halaman dashboard: daftar produk, tambah/edit, kategori, varian, modifier, harga multi-tier.
+
+**[ ] T10 — Seed data demo**
+Script seed satu cafe fiktif: 25 menu, 5 kategori, 3 price tier, 30 bahan, resep lengkap. Dipakai untuk demo ke calon klien.
+
+**[ ] T11 — Skema order & shift**
+`shifts`, `cash_movements`, `orders`, `order_items`, `order_item_modifiers`, `payment_methods`, `payments`, `refunds`.
+
+**[ ] T12 — Layar kasir**
+Grid produk, pencarian, kategori, keranjang, modifier, catatan item. Semua kalkulasi memanggil `lib/calc/order-calculator.ts` — **tidak boleh ada aritmetika uang di komponen**.
+
+**[ ] T13 — Pembayaran**
+Pilih metode, split payment, hitung kembalian, simpan order, generate nomor struk sesuai format `{OUTLET}-{YYMMDD}-{DEVICE}-{COUNTER}`. Idempotency: double tap tidak boleh jadi dua pembayaran.
+
+**[ ] T14 — Struk**
+Template struk 80mm dengan CSS `@page`, tombol cetak, cetak ulang.
+
+**[ ] T15 — Shift**
+Buka shift dengan modal awal, tutup shift dengan rekonsiliasi. `countedCash` write-once, `expectedCash` baru tampil setelah kasir input fisik.
+
+**[ ] T16 — Void & refund**
+Void sebelum/sesudah kirim ke dapur, refund sebagian, wajib alasan, catat audit log.
+
+**[ ] T17 — Laporan penjualan dasar**
+Ringkasan harian, per produk, per kategori, per kasir, per metode bayar, riwayat transaksi dengan filter. Semua filter pakai `business_date`.
+
+**[ ] T18 — Dashboard owner**
+Omzet hari ini, jumlah transaksi, average check, grafik 7 hari, item terlaris.
+
+**[ ] T19 — Deploy**
+Cloudflare Workers via OpenNext + Supabase prod. Uji semua alur di production sebelum kasih ke klien.
+
+**[ ] T20 — Uji lapangan**
+Pasang paralel di cafe pilot selama seminggu, jalan bersama sistem lama mereka. Catat semua keluhan. Ini lebih berharga dari dua minggu coding.
+
+---
+
+## Fase 2 — Inventori & HPP (setelah klien pilot puas)
+
+T21 skema inventori · T22 CRUD bahan & satuan · T23 resep/BOM · T24 pembelian & supplier ·
+T25 pemotongan stok otomatis saat bayar · T26 opname · T27 waste · T28 laporan stok & variance
+
+## Fase 3 — Laba bersih
+
+T29 karyawan & absensi · T30 payroll · T31 beban operasional & aset ·
+T32 laporan Laba Rugi · T33 dashboard KPI
+
+---
+
+## Aturan main
+
+- Jangan lompat fase. Godaan terbesar adalah bikin UI cantik sebelum logikanya benar.
+- Tugas yang terasa butuh lebih dari satu sesi agent, pecah dulu jadi dua.
+- Kalau satu tugas macet lebih dari dua jam, itu tanda spesifikasinya kurang jelas — perbaiki dokumen, jangan paksa agent menebak.
