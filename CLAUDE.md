@@ -141,4 +141,4 @@ Sebuah tugas dianggap selesai kalau **semua** ini terpenuhi:
 > Update bagian ini setiap ganti fase.
 
 **Fase: 1 — MVP POS**
-**Tugas aktif:** T06 (skema database inti)
+**Tugas aktif:** T08 (skema katalog)

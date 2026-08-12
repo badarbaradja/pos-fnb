@@ -9,31 +9,31 @@ Status: `[ ]` belum · `[~]` jalan · `[x]` selesai
 
 ## Fase 0 — Fondasi (target 1 minggu)
 
-**[ ] T01 — Setup tooling**
+**[x] T01 — Setup tooling**
 Pasang Vitest, Drizzle ORM, decimal.js, zod, date-fns-tz. Buat script `typecheck`, `lint`, `test`, `db:generate`, `db:migrate`. TypeScript strict mode aktif.
 *Selesai kalau:* `npm run test` jalan dengan satu test dummy hijau.
 
-**[ ] T02 — Utilitas dasar**
+**[x] T02 — Utilitas dasar**
 `lib/utils/money.ts` (wrapper Decimal, `formatIDR`, `roundTo`), `lib/utils/business-date.ts`, `lib/utils/id.ts` (UUID v7).
 *Selesai kalau:* TC-15 dari CALC-SPEC lolos, termasuk kasus WITA dengan server UTC.
 
-**[ ] T03 — Kalkulator struk** ★ tugas paling penting di seluruh proyek
+**[x] T03 — Kalkulator struk** ★ tugas paling penting di seluruh proyek
 Implementasi `lib/calc/order-calculator.ts` sesuai CALC-SPEC bagian A. **Tulis test dulu, baru implementasi.**
 *Selesai kalau:* TC-01 sampai TC-07 semuanya hijau, termasuk property test.
 
-**[ ] T04 — Kalkulator HPP**
+**[x] T04 — Kalkulator HPP**
 `lib/calc/cogs.ts`: HPP dari resep (rekursif untuk semi-finished), WAC, alokasi ongkir, variance.
 *Selesai kalau:* TC-08 sampai TC-12 hijau, circular reference melempar error jelas.
 
-**[ ] T05 — Kalkulator P&L, KPI, shift**
+**[x] T05 — Kalkulator P&L, KPI, shift**
 `lib/calc/pnl.ts`, `kpi.ts`, `shift.ts` sesuai CALC-SPEC bagian C, D, E.
 *Selesai kalau:* TC-13, TC-14 hijau, dan semua pembagian nol menghasilkan `null`.
 
-**[ ] T06 — Skema database inti**
+**[x] T06 — Skema database inti**
 Drizzle schema untuk: `businesses`, `outlets`, `profiles`, `memberships`, `employees`, `devices`. Migration + RLS untuk semua tabel.
 *Selesai kalau:* migration jalan di Supabase dev, dan ada test yang memverifikasi tidak ada tabel tanpa RLS.
 
-**[ ] T07 — Auth & sesi**
+**[x] T07 — Auth & sesi**
 Login owner/manajer via Supabase Auth. Login kasir via PIN (bcrypt). Helper `getSession()`, `requirePermission()`.
 *Selesai kalau:* user A tidak bisa membaca data bisnis user B — buktikan dengan test.
 
