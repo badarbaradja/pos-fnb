@@ -47,6 +47,11 @@ Login owner/manajer via Supabase Auth. Login kasir via PIN (bcrypt). Helper `get
 **[ ] T09 — CRUD produk**
 Halaman dashboard: daftar produk, tambah/edit, kategori, varian, modifier, harga multi-tier.
 
+**[ ] T09c — Upload gambar produk**
+Supabase Storage bucket 'products', kebijakan akses per business_id,
+komponen upload dengan kompresi client-side (maks 500KB, resize ke 800px),
+preview, dan hapus gambar lama saat diganti.
+
 **[ ] T10 — Seed data demo**
 Script seed satu cafe fiktif: 25 menu, 5 kategori, 3 price tier, 30 bahan, resep lengkap. Dipakai untuk demo ke calon klien.
 

@@ -1,5 +1,6 @@
 "use server";
 
+import { redirect } from "next/navigation";
 import { createServerSupabaseClient } from "./supabase";
 import { listMyOutletsWithClient, type OutletSummary } from "./outlets";
 
@@ -12,4 +13,10 @@ import { listMyOutletsWithClient, type OutletSummary } from "./outlets";
 export async function listMyOutlets(): Promise<OutletSummary[]> {
   const supabase = await createServerSupabaseClient();
   return listMyOutletsWithClient(supabase);
+}
+
+export async function logout(): Promise<void> {
+  const supabase = await createServerSupabaseClient();
+  await supabase.auth.signOut();
+  redirect("/login");
 }

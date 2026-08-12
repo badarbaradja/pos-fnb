@@ -1,6 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { UserRole } from "./session";
 import { getCurrentBusinessFromClient, getSessionFromClient } from "./session";
+import { getUserDb, type UserDbHandle } from "../db/client";
 
 /**
  * Matriks RBAC — BLUEPRINT §7. Konstanta ini SUMBER KEBENARAN untuk default
@@ -163,4 +164,28 @@ export async function requirePermission(
   }
 
   return { userId: session.userId, businessId: business.businessId, role: business.role };
+}
+
+/**
+ * requirePermissionDb() — requirePermission() + getUserDb() digabung,
+ * karena hampir semua Server Action mutasi (CRUD dashboard) butuh keduanya
+ * berurutan: validasi izin, lalu koneksi Drizzle yang RLS-nya benar-benar
+ * berlaku (CLAUDE.md §3.4). Pemanggil WAJIB memanggil closeDb() di akhir
+ * (idealnya try/finally) — lihat catatan UserDbHandle di lib/db/client.ts
+ * soal kenapa koneksi ini tidak di-cache.
+ */
+export async function requirePermissionDb(
+  supabase: SupabaseClient,
+  key: PermissionKey
+): Promise<PermissionContext & { db: UserDbHandle["db"]; closeDb: UserDbHandle["close"] }> {
+  const context = await requirePermission(supabase, key);
+
+  const { data: sessionData } = await supabase.auth.getSession();
+  const accessToken = sessionData.session?.access_token;
+  if (!accessToken) {
+    throw new Error("Unauthorized: access token tidak ditemukan di sesi");
+  }
+
+  const { db, close } = await getUserDb(accessToken);
+  return { ...context, db, closeDb: close };
 }

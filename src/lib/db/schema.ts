@@ -287,6 +287,11 @@ export const categories = pgTable(
       for: "insert",
       withCheck: sql`${t.businessId} = any(auth_business_ids())`,
     }),
+    pgPolicy("categories_update", {
+      for: "update",
+      using: sql`${t.businessId} = any(auth_business_ids())`,
+      withCheck: sql`${t.businessId} = any(auth_business_ids())`,
+    }),
   ]
 ).enableRLS();
 
@@ -328,6 +333,11 @@ export const products = pgTable(
       for: "insert",
       withCheck: sql`${t.businessId} = any(auth_business_ids())`,
     }),
+    pgPolicy("products_update", {
+      for: "update",
+      using: sql`${t.businessId} = any(auth_business_ids())`,
+      withCheck: sql`${t.businessId} = any(auth_business_ids())`,
+    }),
   ]
 ).enableRLS();
 
@@ -363,6 +373,19 @@ export const productVariants = pgTable(
           and p.business_id = any(auth_business_ids())
       )`,
     }),
+    pgPolicy("product_variants_update", {
+      for: "update",
+      using: sql`exists (
+        select 1 from products p
+        where p.id = ${t.productId}
+          and p.business_id = any(auth_business_ids())
+      )`,
+      withCheck: sql`exists (
+        select 1 from products p
+        where p.id = ${t.productId}
+          and p.business_id = any(auth_business_ids())
+      )`,
+    }),
   ]
 ).enableRLS();
 
@@ -392,6 +415,11 @@ export const priceTiers = pgTable(
     }),
     pgPolicy("price_tiers_insert", {
       for: "insert",
+      withCheck: sql`${t.businessId} = any(auth_business_ids())`,
+    }),
+    pgPolicy("price_tiers_update", {
+      for: "update",
+      using: sql`${t.businessId} = any(auth_business_ids())`,
       withCheck: sql`${t.businessId} = any(auth_business_ids())`,
     }),
   ]
@@ -435,6 +463,19 @@ export const productPrices = pgTable(
           and p.business_id = any(auth_business_ids())
       )`,
     }),
+    pgPolicy("product_prices_update", {
+      for: "update",
+      using: sql`exists (
+        select 1 from products p
+        where p.id = ${t.productId}
+          and p.business_id = any(auth_business_ids())
+      )`,
+      withCheck: sql`exists (
+        select 1 from products p
+        where p.id = ${t.productId}
+          and p.business_id = any(auth_business_ids())
+      )`,
+    }),
   ]
 ).enableRLS();
 
@@ -458,6 +499,11 @@ export const modifierGroups = pgTable(
     }),
     pgPolicy("modifier_groups_insert", {
       for: "insert",
+      withCheck: sql`${t.businessId} = any(auth_business_ids())`,
+    }),
+    pgPolicy("modifier_groups_update", {
+      for: "update",
+      using: sql`${t.businessId} = any(auth_business_ids())`,
       withCheck: sql`${t.businessId} = any(auth_business_ids())`,
     }),
   ]
@@ -493,6 +539,19 @@ export const modifiers = pgTable(
           and mg.business_id = any(auth_business_ids())
       )`,
     }),
+    pgPolicy("modifiers_update", {
+      for: "update",
+      using: sql`exists (
+        select 1 from modifier_groups mg
+        where mg.id = ${t.modifierGroupId}
+          and mg.business_id = any(auth_business_ids())
+      )`,
+      withCheck: sql`exists (
+        select 1 from modifier_groups mg
+        where mg.id = ${t.modifierGroupId}
+          and mg.business_id = any(auth_business_ids())
+      )`,
+    }),
   ]
 ).enableRLS();
 
@@ -519,6 +578,19 @@ export const productModifierGroups = pgTable(
     pgPolicy("product_modifier_groups_insert", {
       for: "insert",
       withCheck: sql`exists (
+        select 1 from products p
+        where p.id = ${t.productId}
+          and p.business_id = any(auth_business_ids())
+      )`,
+    }),
+    // DELETE dibutuhkan (bukan cuma select/insert): form produk melepas
+    // modifier group lewat toggle multi-select, artinya baris relasi ini
+    // benar-benar dihapus saat di-uncheck -- beda dari tabel snapshot/log
+    // append-only di CLAUDE.md §3.2, karena baris ini cuma representasi
+    // relasi "aktif sekarang", bukan riwayat transaksi.
+    pgPolicy("product_modifier_groups_delete", {
+      for: "delete",
+      using: sql`exists (
         select 1 from products p
         where p.id = ${t.productId}
           and p.business_id = any(auth_business_ids())
