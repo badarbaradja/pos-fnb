@@ -36,6 +36,20 @@
       "when": 1786543068288,
       "tag": "0004_past_famine",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1786583611834,
+      "tag": "0005_wild_liz_osborn",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1786583995040,
+      "tag": "0006_fluffy_jackpot",
+      "breakpoints": true
     }
   ]
 }

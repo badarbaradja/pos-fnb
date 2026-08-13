@@ -698,7 +698,8 @@ create table payment_methods (
   is_cash_drawer boolean not null default false,
   requires_ref   boolean not null default false,     -- butuh nomor approval
   is_active      boolean not null default true,
-  sort_order     integer not null default 0
+  sort_order     integer not null default 0,
+  unique (business_id, code)
 );
 
 create table payments (

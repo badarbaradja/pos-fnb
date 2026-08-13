@@ -1,0 +1,1 @@
+ALTER TABLE "payment_methods" ADD CONSTRAINT "payment_methods_business_id_code_unique" UNIQUE("business_id","code");

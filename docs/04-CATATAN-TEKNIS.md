@@ -260,10 +260,61 @@ puluhan-ratusan baris, bukan jutaan), ini tidak jadi masalah performa —
 kalau nanti terbukti jadi bottleneck di tabel transaksi volume tinggi,
 evaluasi ulang per tabel, jangan generalisasi keputusan ini ke semuanya.
 
-**Ini akan muncul lagi.** Fase 2 (`order_items`, `recipe_items`,
-`purchase_items`, dan kemungkinan besar tabel *_items lain) polanya sama:
-anak dari satu induk ber-`business_id`, tanpa `business_id` sendiri. Pakai
-pola `EXISTS` join yang sama di atas — pilih induk yang paling langsung
-merepresentasikan "pemilik" barisnya (biasanya FK yang `not null`), beri
-alias pendek satu-dua huruf (`p` untuk `products`, `mg` untuk
-`modifier_groups`, dst.) supaya konsisten dibaca lintas tabel.
+**Sudah muncul lagi, seperti diduga.** T11 (`docs/01-TASK-BOARD.md`) nambah
+delapan tabel order & shift dengan pola yang sama: `order_items` (anak
+`orders`), `cash_movements` (anak `shifts`), `payments`/`refunds` (anak
+`orders`). Pilih induk yang paling langsung merepresentasikan "pemilik"
+barisnya (biasanya FK yang `not null`), beri alias pendek satu-dua huruf
+(`p` untuk `products`, `mg` untuk `modifier_groups`, `o` untuk `orders`,
+`s` untuk `shifts`, dst.) supaya konsisten dibaca lintas tabel.
+
+### 7.1 Varian: `EXISTS` DUA level, kalau induk langsung juga tidak punya `business_id`
+
+Kadang tabel anak-nya sendiri adalah anak dari tabel anak lain (dua level
+turun dari tabel yang punya `business_id`). Ditemui di T11 pada dua tabel:
+
+| Tabel | Induk langsung | Induk langsung itu anak dari |
+|---|---|---|
+| `order_item_modifiers` | `order_items` (lewat `order_item_id`) | `orders` (lewat `order_id`) |
+| `refund_items` | `refunds` (lewat `refund_id`) | `orders` (lewat `order_id`) |
+
+Solusinya bukan dua `EXISTS` bersarang, cukup **satu** `EXISTS` yang
+join dua tabel sekaligus sampai ketemu kolom `business_id`:
+
+```sql
+-- order_item_modifiers: dua level ke business_id lewat order_items -> orders
+using: exists (
+  select 1 from order_items oi
+  join orders o on o.id = oi.order_id
+  where oi.id = order_item_modifiers.order_item_id
+    and o.business_id = any(auth_business_ids())
+)
+```
+
+Alias huruf pertama tabel perantara (`oi` untuk `order_items`) beda dari
+alias tabel yang punya `business_id`-nya (`o` untuk `orders`) — penting
+supaya query-nya jelas dibaca mana yang jadi jembatan dan mana yang jadi
+sumber `business_id` sebenarnya, terutama kalau nanti ada join tiga level.
+
+**Kapan pola dua level ini dipakai, bukan satu level:** kalau tabel
+induknya SENDIRI tidak punya `business_id` (dia juga anak, bukan tabel
+utama ber-tenant). Kalau induk langsungnya sudah punya `business_id`
+(kasus §7 di atas), satu level `EXISTS` saja cukup — jangan tambah join
+yang tidak perlu.
+
+**Ini akan muncul lagi.** Fase 2 kemungkinan besar butuh varian dua level
+ini lagi: `purchase_items` (anak `purchases`, yang anak `suppliers` atau
+langsung ber-`business_id` -- cek dulu skemanya saat sampai di T24),
+`opname_items` (anak `stock_opnames`), dan `recipe_items` kalau resep
+punya tabel header terpisah dari baris bahannya. Pola pemilihannya sama:
+telusuri FK `not null` sampai ketemu tabel pertama yang punya
+`business_id`, join semua tabel perantara dalam SATU `EXISTS`.
+
+---
+
+## 8. Select (Base UI): wajib prop `items`, kalau tidak akan menampilkan value mentah
+
+`<Select.Root>` WAJIB diberi prop `items` berisi peta value→label. Tanpa
+itu, `<Select.Value>` menampilkan raw value (UUID atau enum mentah)
+alih-alih label sampai dropdown pernah dibuka. Ditemukan di T09,
+mempengaruhi setiap Select baru.
