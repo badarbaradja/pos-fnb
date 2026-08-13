@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useEffect, useState } from "react";
+import { useActionState, useEffect, useState, type ReactNode } from "react";
 import { toast } from "sonner";
 import { saveProduct, type ProductFormState } from "./actions";
 import { Button } from "@/components/ui/button";
@@ -57,6 +57,15 @@ const productTypeOptions: { value: string; labelKey: keyof typeof strings.produc
   { value: "open_price", labelKey: "productTypeOpenPrice" },
 ];
 
+// base-ui Select.Value cuma menampilkan label kalau Select.Root diberi
+// `items` (peta value -> label) -- tanpa ini, Select.Value jatuh ke value
+// mentah (UUID kategori, "recipe", dst) sampai popup pernah dibuka sekali
+// dan Select.Item-nya sempat mount. Lihat internals/resolveValueLabel.js
+// di @base-ui/react.
+const productTypeItems: Record<string, ReactNode> = Object.fromEntries(
+  productTypeOptions.map((opt) => [opt.value, strings.products[opt.labelKey]])
+);
+
 const initialState: ProductFormState = {};
 
 function newVariantRow(): VariantValue {
@@ -92,6 +101,9 @@ export function ProductForm({
     initialState
   );
   const [variants, setVariants] = useState<VariantValue[]>(initialVariants);
+  const categoryItems: Record<string, ReactNode> = Object.fromEntries(
+    categories.map((category) => [category.id, category.name])
+  );
 
   useEffect(() => {
     if (state.error) {
@@ -114,7 +126,11 @@ export function ProductForm({
         </div>
         <div className="flex flex-col gap-2">
           <Label htmlFor="categoryId">{strings.products.category}</Label>
-          <Select name="categoryId" defaultValue={product?.categoryId ?? undefined}>
+          <Select
+            name="categoryId"
+            defaultValue={product?.categoryId ?? undefined}
+            items={categoryItems}
+          >
             <SelectTrigger id="categoryId" className="w-full">
               <SelectValue placeholder={strings.products.categoryNone} />
             </SelectTrigger>
@@ -132,6 +148,7 @@ export function ProductForm({
           <Select
             name="productType"
             defaultValue={product?.productType ?? "recipe"}
+            items={productTypeItems}
           >
             <SelectTrigger id="productType" className="w-full">
               <SelectValue />

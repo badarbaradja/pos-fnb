@@ -52,8 +52,12 @@ Supabase Storage bucket 'products', kebijakan akses per business_id,
 komponen upload dengan kompresi client-side (maks 500KB, resize ke 800px),
 preview, dan hapus gambar lama saat diganti.
 
-**[ ] T10 — Seed data demo**
-Script seed satu cafe fiktif: 25 menu, 5 kategori, 3 price tier, 30 bahan, resep lengkap. Dipakai untuk demo ke calon klien.
+**[x] T10 — Seed data demo (katalog)**
+Script seed satu cafe fiktif: 5 kategori, 4 tingkat harga
+(DINEIN default, TAKEAWAY, GOFOOD markup 25%, MEMBER), 3 grup modifier
+(Level Gula, Suhu, Topping) dengan modifier-nya, dan 25 menu dengan
+varian + harga di semua tier. Idempoten, pakai getAdminDb().
+Bagian bahan dan resep pindah ke T24b setelah skema inventori ada.
 
 **[ ] T11 — Skema order & shift**
 `shifts`, `cash_movements`, `orders`, `order_items`, `order_item_modifiers`, `payment_methods`, `payments`, `refunds`.
@@ -91,6 +95,10 @@ Pasang paralel di cafe pilot selama seminggu, jalan bersama sistem lama mereka. 
 
 T21 skema inventori · T22 CRUD bahan & satuan · T23 resep/BOM · T24 pembelian & supplier ·
 T25 pemotongan stok otomatis saat bayar · T26 opname · T27 waste · T28 laporan stok & variance
+
+**[ ] T24b — Seed data demo (bahan & resep)**
+30 bahan dengan satuan dan konversi, resep untuk 25 menu dari T10,
+termasuk satu sub-resep semi-finished untuk menguji rekursi.
 
 ## Fase 3 — Laba bersih
 

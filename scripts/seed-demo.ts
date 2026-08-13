@@ -7,6 +7,7 @@ import { getAdminDb } from "../src/lib/db/client";
 import { createSupabaseAdminClient } from "../src/lib/auth/supabase";
 import { businesses, outlets, memberships, profiles } from "../src/lib/db/schema";
 import { generateId } from "../src/lib/utils/id";
+import { DEMO_BUSINESS_NAME } from "./seed-shared";
 
 /**
  * scripts/seed-demo.ts — sekali-jalan: buat satu business demo, satu outlet
@@ -23,7 +24,6 @@ import { generateId } from "../src/lib/utils/id";
  * ganti lewat halaman lupa password kalau perlu.
  */
 
-const DEMO_BUSINESS_NAME = "Demo Cafe";
 const DEMO_OUTLET_CODE = "DEMO1";
 const DEMO_OUTLET_NAME = "Outlet Demo";
 
