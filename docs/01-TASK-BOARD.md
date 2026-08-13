@@ -80,8 +80,16 @@ ringkas, tanpa filter/paginasi. Ada tombol dari layar kasir ke halaman ini.
 **[x] T15 — Shift**
 Buka shift: kode karyawan + PIN (`verifyCashierPin`) + modal awal, `businessDate` dari cutoff outlet. Kas masuk/keluar selama shift berjalan. Tutup shift dua langkah: `countedCash` write-once (ditegakkan di server lewat guard `status='open' AND counted_cash IS NULL`, bukan cuma UI) dulu baru `expectedCash`/selisih dihitung & ditampilkan; selisih di atas toleransi outlet (setting `cash_variance_tolerance`, default Rp 20.000) wajib alasan sebelum shift benar-benar closed. Layar kasir (`/pos`) redirect ke `/pos/shift/open` kalau belum ada shift, atau `/pos/shift/close` kalau sedang menunggu alasan. `payOrderWithDb` mengisi `shiftId`/`cashierId` dari shift aktif device, menolak bayar kalau tidak ada.
 
-**[ ] T16 — Void & refund**
-Void sebelum/sesudah kirim ke dapur, refund sebagian, wajib alasan, catat audit log.
+**[x] T16 — Void & refund**
+Void order paid (wajib alasan, `pos.void_after_send`), refund sebagian
+per item (nominal proporsional dari `order_items.net_amount`, tidak
+dihitung ulang dari katalog, `pos.refund`). Keduanya ditolak di server
+kalau shift order itu sudah ditutup. Refund pilih metode pengembalian
+sendiri (tidak diasumsikan tunai — outlet cashless tidak bisa refund
+tunai), total refund per order (termasuk akumulasi) tidak boleh melebihi
+total dibayar. Tabel `audit_logs` (append-only) mencatat setiap void dan
+refund. Order void tetap tampil di "Transaksi Hari Ini", ditandai badge,
+otomatis keluar dari agregasi karena filter `status='paid'`.
 
 **[ ] T17 — Laporan penjualan dasar**
 Ringkasan harian, per produk, per kategori, per kasir, per metode bayar, riwayat transaksi dengan filter. Semua filter pakai `business_date`.
