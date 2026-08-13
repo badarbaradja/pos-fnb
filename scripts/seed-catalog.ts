@@ -41,9 +41,13 @@ const CATEGORY_DATA = [
   { name: "Dessert", color: "#db2777", sortOrder: 4 },
 ] as const;
 
+// channel di sini WAJIB salah satu nilai enum order_channel (schema.ts)
+// kalau mau order-nya kecatat channel yang benar -- lib/pos/pay-order.ts
+// menurunkan orders.channel dari price_tiers.channel, default 'dine_in'
+// kalau kosong/tidak dikenali (mis. MEMBER, sengaja tanpa channel).
 const PRICE_TIER_DATA = [
-  { code: "DINEIN", name: "Dine-in", channel: null, markupPercent: "0", isDefault: true },
-  { code: "TAKEAWAY", name: "Takeaway", channel: null, markupPercent: "0", isDefault: false },
+  { code: "DINEIN", name: "Dine-in", channel: "dine_in", markupPercent: "0", isDefault: true },
+  { code: "TAKEAWAY", name: "Takeaway", channel: "takeaway", markupPercent: "0", isDefault: false },
   { code: "GOFOOD", name: "GoFood", channel: "gofood", markupPercent: "25", isDefault: false },
   { code: "MEMBER", name: "Member", channel: null, markupPercent: "-5", isDefault: false },
 ] as const;

@@ -62,11 +62,15 @@ Bagian bahan dan resep pindah ke T24b setelah skema inventori ada.
 **[ ] T11 — Skema order & shift**
 `shifts`, `cash_movements`, `orders`, `order_items`, `order_item_modifiers`, `payment_methods`, `payments`, `refunds`.
 
-**[ ] T12 — Layar kasir**
+**[x] T12 — Layar kasir**
 Grid produk, pencarian, kategori, keranjang, modifier, catatan item. Semua kalkulasi memanggil `lib/calc/order-calculator.ts` — **tidak boleh ada aritmetika uang di komponen**.
 
-**[ ] T13 — Pembayaran**
+**[x] T13 — Pembayaran**
 Pilih metode, split payment, hitung kembalian, simpan order, generate nomor struk sesuai format `{OUTLET}-{YYMMDD}-{DEVICE}-{COUNTER}`. Idempotency: double tap tidak boleh jadi dua pembayaran.
+
+⚠️ Order saat ini tersimpan tanpa `shiftId` dan `cashierId`. Sebelum
+dipakai klien sungguhan, T15 (shift) wajib selesai — tanpa shift tidak
+ada rekonsiliasi kas, dan itu justru alasan utama cafe memasang POS.
 
 **[ ] T14 — Struk**
 Template struk 80mm dengan CSS `@page`, tombol cetak, cetak ulang.

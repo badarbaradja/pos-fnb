@@ -223,6 +223,14 @@ export const devices = pgTable(
       for: "insert",
       withCheck: sql`${t.businessId} = any(auth_business_ids())`,
     }),
+    // Gap dari T06 (sebelum kelalaian yang sama ditemukan di T08 dan
+    // diperbaiki untuk tabel katalog) -- devices.last_seq (counter nomor
+    // struk) wajib bisa di-UPDATE saat T13 generate nomor struk.
+    pgPolicy("devices_update", {
+      for: "update",
+      using: sql`${t.businessId} = any(auth_business_ids())`,
+      withCheck: sql`${t.businessId} = any(auth_business_ids())`,
+    }),
   ]
 ).enableRLS();
 

@@ -5,7 +5,14 @@ import { randomBytes } from "node:crypto";
 import { and, eq } from "drizzle-orm";
 import { getAdminDb } from "../src/lib/db/client";
 import { createSupabaseAdminClient } from "../src/lib/auth/supabase";
-import { businesses, outlets, memberships, profiles } from "../src/lib/db/schema";
+import {
+  businesses,
+  outlets,
+  memberships,
+  profiles,
+  paymentMethods,
+  devices,
+} from "../src/lib/db/schema";
 import { generateId } from "../src/lib/utils/id";
 import { DEMO_BUSINESS_NAME } from "./seed-shared";
 
@@ -26,6 +33,15 @@ import { DEMO_BUSINESS_NAME } from "./seed-shared";
 
 const DEMO_OUTLET_CODE = "DEMO1";
 const DEMO_OUTLET_NAME = "Outlet Demo";
+const DEMO_DEVICE_SERIAL = "KASIR1";
+const DEMO_DEVICE_NAME = "Kasir 1";
+// QRIS requiresRef=true -- sistem ini TIDAK terintegrasi payment gateway,
+// QRIS di sini murni metode pencatatan. Nomor referensi diisi manual oleh
+// kasir dari notifikasi bank (lihat docs/04-CATATAN-TEKNIS.md).
+const DEMO_PAYMENT_METHODS = [
+  { code: "CASH", name: "Tunai", type: "cash", isCashDrawer: true, requiresRef: false },
+  { code: "QRIS", name: "QRIS", type: "qris", isCashDrawer: false, requiresRef: true },
+] as const;
 
 function generatePassword(): string {
   return randomBytes(18).toString("base64url");
@@ -103,22 +119,81 @@ async function main() {
     throw new Error("Gagal membuat/menemukan business demo");
   }
 
-  const [existingOutlet] = await db
+  let [outlet] = await db
     .select()
     .from(outlets)
     .where(
       and(eq(outlets.businessId, business.id), eq(outlets.code, DEMO_OUTLET_CODE))
     );
-  if (!existingOutlet) {
+  if (!outlet) {
+    const outletId = generateId();
     await db.insert(outlets).values({
-      id: generateId(),
+      id: outletId,
       businessId: business.id,
       code: DEMO_OUTLET_CODE,
       name: DEMO_OUTLET_NAME,
     });
+    [outlet] = await db.select().from(outlets).where(eq(outlets.id, outletId));
     console.log(`[outlets] dibuat: ${DEMO_OUTLET_NAME} (${DEMO_OUTLET_CODE})`);
   } else {
     console.log(`[outlets] sudah ada: ${DEMO_OUTLET_NAME} (${DEMO_OUTLET_CODE})`);
+  }
+  if (!outlet) {
+    throw new Error("Gagal membuat/menemukan outlet demo");
+  }
+
+  const [existingDevice] = await db
+    .select()
+    .from(devices)
+    .where(
+      and(eq(devices.businessId, business.id), eq(devices.serialNumber, DEMO_DEVICE_SERIAL))
+    );
+  if (!existingDevice) {
+    await db.insert(devices).values({
+      id: generateId(),
+      businessId: business.id,
+      outletId: outlet.id,
+      serialNumber: DEMO_DEVICE_SERIAL,
+      name: DEMO_DEVICE_NAME,
+      deviceType: "pos",
+    });
+    console.log(`[devices] dibuat: ${DEMO_DEVICE_NAME} (${DEMO_DEVICE_SERIAL})`);
+  } else {
+    console.log(`[devices] sudah ada: ${DEMO_DEVICE_NAME} (${DEMO_DEVICE_SERIAL})`);
+  }
+
+  for (const [index, pm] of DEMO_PAYMENT_METHODS.entries()) {
+    const [existingMethod] = await db
+      .select()
+      .from(paymentMethods)
+      .where(and(eq(paymentMethods.businessId, business.id), eq(paymentMethods.code, pm.code)));
+    if (!existingMethod) {
+      await db.insert(paymentMethods).values({
+        id: generateId(),
+        businessId: business.id,
+        code: pm.code,
+        name: pm.name,
+        type: pm.type,
+        isCashDrawer: pm.isCashDrawer,
+        requiresRef: pm.requiresRef,
+        sortOrder: index,
+      });
+      console.log(`[payment_methods] dibuat: ${pm.name} (${pm.code})`);
+    } else {
+      // Update field yang bisa berubah lewat definisi di atas (mis.
+      // requiresRef) -- supaya re-run seed ini juga menerapkan koreksi ke
+      // baris yang sudah ada, bukan cuma insert-kalau-belum-ada.
+      await db
+        .update(paymentMethods)
+        .set({
+          name: pm.name,
+          type: pm.type,
+          isCashDrawer: pm.isCashDrawer,
+          requiresRef: pm.requiresRef,
+        })
+        .where(eq(paymentMethods.id, existingMethod.id));
+      console.log(`[payment_methods] sudah ada, diperbarui: ${pm.name} (${pm.code})`);
+    }
   }
 
   const [existingMembership] = await db

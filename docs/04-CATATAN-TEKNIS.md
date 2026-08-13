@@ -318,3 +318,38 @@ telusuri FK `not null` sampai ketemu tabel pertama yang punya
 itu, `<Select.Value>` menampilkan raw value (UUID atau enum mentah)
 alih-alih label sampai dropdown pernah dibuka. Ditemukan di T09,
 mempengaruhi setiap Select baru.
+
+---
+
+## 9. Harga di keranjang kasir: LIVE, bukan snapshot — snapshot cuma sekali, di T13
+
+Harga di keranjang bersifat LIVE — di-resolve saat kalkulasi dari
+katalog + tier terpilih, tidak disimpan di `CartLine`. Ini supaya ganti
+tingkat harga langsung berlaku ke seluruh keranjang.
+
+Snapshot terjadi tepat SEKALI, saat order disimpan di T13: `unit_price`,
+`product_name`, `variant_name`, `category_name`, dan `unit_cogs`
+dibekukan ke `order_items` dan tidak pernah berubah lagi. Jangan
+tertukar — keranjang live, order beku.
+
+---
+
+## 10. QRIS = metode pencatatan manual, BUKAN integrasi payment gateway
+
+Sengaja ditulis eksplisit supaya tidak ada yang mengira ini bug yang
+belum selesai: sistem ini **tidak** terintegrasi ke payment gateway
+mana pun (Midtrans, Xendit, QRIS resmi dari bank/PJSP, dll). Tidak ada
+callback, tidak ada verifikasi status pembayaran otomatis, tidak ada API
+eksternal yang dipanggil saat kasir memilih QRIS di dialog pembayaran.
+
+Yang sebenarnya terjadi: kasir menerima pembayaran QRIS lewat alat
+scan-nya sendiri (EDC/HP bank), lalu **mencatat manual** di sistem ini
+kalau sudah dibayar, dengan nomor referensi dari notifikasi bank
+(SMS/app) sebagai bukti. Karena itu `payment_methods.requires_ref` untuk
+QRIS diset `true` (`scripts/seed-demo.ts`) — field "Nomor Referensi"
+muncul di dialog pembayaran (`components/pos/payment-dialog.tsx`) khusus
+untuk metode yang `requires_ref = true`, disimpan ke `payments.reference`.
+
+Kalau nanti (Fase lanjut) benar-benar mau integrasi payment gateway
+sungguhan, itu perubahan arsitektur baru — bukan sekadar "melengkapi"
+yang sudah ada di sini.

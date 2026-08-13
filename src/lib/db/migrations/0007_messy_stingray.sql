@@ -1,0 +1,1 @@
+CREATE POLICY "devices_update" ON "devices" AS PERMISSIVE FOR UPDATE TO public USING ("devices"."business_id" = any(auth_business_ids())) WITH CHECK ("devices"."business_id" = any(auth_business_ids()));
