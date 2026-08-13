@@ -1,0 +1,93 @@
+"use client";
+
+import { useState } from "react";
+import { useRouter } from "next/navigation";
+import { toast } from "sonner";
+import { openShift } from "@/app/(pos)/pos/shift/actions";
+import { generateId } from "@/lib/utils/id";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { id as strings } from "@/lib/i18n/id";
+
+export function OpenShiftForm({
+  outletId,
+  deviceId,
+}: {
+  outletId: string;
+  deviceId: string;
+}) {
+  const router = useRouter();
+  const [employeeCode, setEmployeeCode] = useState("");
+  const [pin, setPin] = useState("");
+  const [openingCash, setOpeningCash] = useState("0");
+  const [isPending, setIsPending] = useState(false);
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    setIsPending(true);
+    try {
+      const result = await openShift({
+        id: generateId(),
+        outletId,
+        deviceId,
+        employeeCode,
+        pin,
+        openingCash,
+      });
+      if (result.error) {
+        toast.error(result.error);
+        return;
+      }
+      if (result.success) {
+        toast.success(`${strings.shift.openTitle} — ${result.success.employeeName}`);
+        router.push("/pos");
+        router.refresh();
+      }
+    } finally {
+      setIsPending(false);
+    }
+  }
+
+  return (
+    <form onSubmit={handleSubmit} className="flex w-full max-w-sm flex-col gap-4">
+      <div className="flex flex-col gap-2">
+        <Label htmlFor="employeeCode">{strings.shift.employeeCodeLabel}</Label>
+        <Input
+          id="employeeCode"
+          value={employeeCode}
+          onChange={(e) => setEmployeeCode(e.target.value)}
+          autoComplete="off"
+          required
+        />
+      </div>
+      <div className="flex flex-col gap-2">
+        <Label htmlFor="pin">{strings.shift.pinLabel}</Label>
+        <Input
+          id="pin"
+          type="password"
+          inputMode="numeric"
+          value={pin}
+          onChange={(e) => setPin(e.target.value)}
+          autoComplete="off"
+          required
+        />
+      </div>
+      <div className="flex flex-col gap-2">
+        <Label htmlFor="openingCash">{strings.shift.openingCashLabel}</Label>
+        <Input
+          id="openingCash"
+          type="number"
+          min={0}
+          step="0.01"
+          value={openingCash}
+          onChange={(e) => setOpeningCash(e.target.value)}
+          required
+        />
+      </div>
+      <Button type="submit" disabled={isPending}>
+        {isPending ? strings.shift.opening : strings.shift.openButton}
+      </Button>
+    </form>
+  );
+}

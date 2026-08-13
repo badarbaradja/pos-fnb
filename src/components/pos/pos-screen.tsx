@@ -18,6 +18,7 @@ import { ProductGrid } from "./product-grid";
 import { CartPanel } from "./cart-panel";
 import { AddToCartDialog } from "./add-to-cart-dialog";
 import { PriceTierSelector } from "./price-tier-selector";
+import { CashMovementDialog } from "./shift/cash-movement-dialog";
 import { Button } from "@/components/ui/button";
 import { id as strings } from "@/lib/i18n/id";
 
@@ -29,6 +30,7 @@ export function PosScreen({
   defaultPriceTierId,
   categories,
   products,
+  shift,
 }: {
   outlet: PosOutlet;
   device: PosDevice;
@@ -37,6 +39,7 @@ export function PosScreen({
   defaultPriceTierId: string;
   categories: PosCategory[];
   products: PosProduct[];
+  shift: { id: string; employeeName: string };
 }) {
   const [priceTierId, setPriceTierId] = useState(defaultPriceTierId);
   const [selectedProduct, setSelectedProduct] = useState<PosProduct | null>(null);
@@ -85,12 +88,24 @@ export function PosScreen({
         value={priceTierId}
         onChange={setPriceTierId}
         trailing={
-          <Button
-            variant="outline"
-            size="sm"
-            nativeButton={false}
-            render={<Link href="/pos/receipt">{strings.pos.todaysTransactionsButton}</Link>}
-          />
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-muted-foreground">
+              {strings.shift.activeShiftLabel}: {shift.employeeName}
+            </span>
+            <CashMovementDialog shiftId={shift.id} />
+            <Button
+              variant="outline"
+              size="sm"
+              nativeButton={false}
+              render={<Link href="/pos/shift/close">{strings.shift.closeShiftButton}</Link>}
+            />
+            <Button
+              variant="outline"
+              size="sm"
+              nativeButton={false}
+              render={<Link href="/pos/receipt">{strings.pos.todaysTransactionsButton}</Link>}
+            />
+          </div>
         }
       />
       <div className="grid grid-cols-1 md:min-h-0 md:flex-1 md:grid-cols-[1fr_360px]">

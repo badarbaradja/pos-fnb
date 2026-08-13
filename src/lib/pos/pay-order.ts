@@ -22,6 +22,7 @@ import {
 import { calculateOrder, type CalcLine, type CalcSettings } from "@/lib/calc/order-calculator";
 import { businessDate } from "@/lib/utils/business-date";
 import { generateId } from "@/lib/utils/id";
+import { getOpenShiftForDevice, isShiftSellable } from "@/lib/pos/shift";
 import { id as strings } from "@/lib/i18n/id";
 
 /**
@@ -141,6 +142,18 @@ export async function payOrderWithDb(
       .where(and(eq(priceTiers.id, data.priceTierId), eq(priceTiers.businessId, businessId)));
     if (!business || !outlet || !device || !priceTier) {
       return { error: strings.common.unexpectedError };
+    }
+
+    // T15 gap fix: order harus terikat shift_id/cashier_id yang aktif.
+    // Diturunkan dari deviceId yang sudah divalidasi di atas (bukan dari
+    // input klien -- "tidak percaya angka dari klien", sama prinsipnya
+    // dengan field lain di fungsi ini). Kalau device sedang tidak punya
+    // shift yang bisa dipakai jualan (belum ada shift, atau shift sudah
+    // masuk proses tutup / counted_cash terkunci), pembayaran ditolak --
+    // pertahanan berlapis, bukan cuma andalkan gate UI di pos/page.tsx.
+    const activeShift = await getOpenShiftForDevice(db, businessId, data.deviceId);
+    if (!isShiftSellable(activeShift)) {
+      return { error: strings.pos.noActiveShiftError };
     }
 
     // --- Fetch ulang produk/varian/modifier/harga dari DB (bukan dari klien) ---
@@ -309,6 +322,8 @@ export async function payOrderWithDb(
         businessId,
         outletId: data.outletId,
         deviceId: data.deviceId,
+        shiftId: activeShift.id,
+        cashierId: activeShift.employeeId,
         number: orderNumber,
         status: "paid",
         channel: resolveOrderChannel(priceTier.channel),

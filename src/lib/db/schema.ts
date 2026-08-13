@@ -100,6 +100,14 @@ export const outlets = pgTable(
       .notNull()
       .default(true),
     roundingTo: integer("rounding_to").notNull().default(100),
+    // Batas selisih kas tutup shift (CALC-SPEC bagian E) sebelum alasan
+    // wajib diisi -- setting per outlet, BUKAN hardcode (T15).
+    cashVarianceTolerance: numeric("cash_variance_tolerance", {
+      precision: 16,
+      scale: 2,
+    })
+      .notNull()
+      .default("20000"),
     isActive: boolean("is_active").notNull().default(true),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()

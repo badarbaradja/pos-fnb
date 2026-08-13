@@ -1,0 +1,1 @@
+ALTER TABLE "outlets" ADD COLUMN "cash_variance_tolerance" numeric(16, 2) DEFAULT '20000' NOT NULL;

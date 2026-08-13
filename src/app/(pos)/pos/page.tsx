@@ -1,7 +1,9 @@
+import { redirect } from "next/navigation";
 import { createServerSupabaseClient } from "@/lib/auth/supabase";
 import { requirePermissionDb } from "@/lib/auth/permissions";
 import { PosScreen } from "@/components/pos/pos-screen";
 import { getPosCatalog } from "./get-pos-catalog";
+import { getOpenShiftForDevice, isShiftSellable } from "@/lib/pos/shift";
 
 export default async function PosPage() {
   const supabase = await createServerSupabaseClient();
@@ -16,19 +18,32 @@ export default async function PosPage() {
     // klien (tap produk, filter kategori, cari, ganti tingkat harga) murni
     // di memori, tidak memicu query baru (kesepakatan T12).
     catalog = await getPosCatalog(db, businessId);
+
+    // Gate T15: layar kasir tidak boleh dipakai kalau belum ada shift
+    // terbuka untuk device ini -- tanpa shift tidak ada rekonsiliasi kas.
+    const shift = await getOpenShiftForDevice(db, businessId, catalog.device.id);
+    if (!shift) {
+      redirect("/pos/shift/open");
+    }
+    if (!isShiftSellable(shift)) {
+      // counted_cash sudah terkunci (sedang proses tutup) -- tidak boleh
+      // jualan lagi sampai proses tutup itu selesai.
+      redirect("/pos/shift/close");
+    }
+
+    return (
+      <PosScreen
+        outlet={catalog.outlet}
+        device={catalog.device}
+        paymentMethods={catalog.paymentMethods}
+        priceTiers={catalog.priceTiers}
+        defaultPriceTierId={catalog.defaultPriceTierId}
+        categories={catalog.categories}
+        products={catalog.products}
+        shift={{ id: shift.id, employeeName: shift.employeeName }}
+      />
+    );
   } finally {
     await closeDb();
   }
-
-  return (
-    <PosScreen
-      outlet={catalog.outlet}
-      device={catalog.device}
-      paymentMethods={catalog.paymentMethods}
-      priceTiers={catalog.priceTiers}
-      defaultPriceTierId={catalog.defaultPriceTierId}
-      categories={catalog.categories}
-      products={catalog.products}
-    />
-  );
 }

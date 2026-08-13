@@ -66,11 +66,7 @@ Bagian bahan dan resep pindah ke T24b setelah skema inventori ada.
 Grid produk, pencarian, kategori, keranjang, modifier, catatan item. Semua kalkulasi memanggil `lib/calc/order-calculator.ts` — **tidak boleh ada aritmetika uang di komponen**.
 
 **[x] T13 — Pembayaran**
-Pilih metode, split payment, hitung kembalian, simpan order, generate nomor struk sesuai format `{OUTLET}-{YYMMDD}-{DEVICE}-{COUNTER}`. Idempotency: double tap tidak boleh jadi dua pembayaran.
-
-⚠️ Order saat ini tersimpan tanpa `shiftId` dan `cashierId`. Sebelum
-dipakai klien sungguhan, T15 (shift) wajib selesai — tanpa shift tidak
-ada rekonsiliasi kas, dan itu justru alasan utama cafe memasang POS.
+Pilih metode, split payment, hitung kembalian, simpan order, generate nomor struk sesuai format `{OUTLET}-{YYMMDD}-{DEVICE}-{COUNTER}`. Idempotency: double tap tidak boleh jadi dua pembayaran. `shiftId`/`cashierId` diisi dari shift aktif sejak T15.
 
 **[x] T14 — Struk**
 Template struk 80mm dengan CSS `@page`, tombol cetak. Cetak ulang lewat
@@ -81,8 +77,8 @@ pencarian nomor struk opsional untuk transaksi lama (lintas tanggal).
 Ini alat kerja kasir, bukan laporan penjualan (itu T17) — sengaja tetap
 ringkas, tanpa filter/paginasi. Ada tombol dari layar kasir ke halaman ini.
 
-**[ ] T15 — Shift**
-Buka shift dengan modal awal, tutup shift dengan rekonsiliasi. `countedCash` write-once, `expectedCash` baru tampil setelah kasir input fisik.
+**[x] T15 — Shift**
+Buka shift: kode karyawan + PIN (`verifyCashierPin`) + modal awal, `businessDate` dari cutoff outlet. Kas masuk/keluar selama shift berjalan. Tutup shift dua langkah: `countedCash` write-once (ditegakkan di server lewat guard `status='open' AND counted_cash IS NULL`, bukan cuma UI) dulu baru `expectedCash`/selisih dihitung & ditampilkan; selisih di atas toleransi outlet (setting `cash_variance_tolerance`, default Rp 20.000) wajib alasan sebelum shift benar-benar closed. Layar kasir (`/pos`) redirect ke `/pos/shift/open` kalau belum ada shift, atau `/pos/shift/close` kalau sedang menunggu alasan. `payOrderWithDb` mengisi `shiftId`/`cashierId` dari shift aktif device, menolak bayar kalau tidak ada.
 
 **[ ] T16 — Void & refund**
 Void sebelum/sesudah kirim ke dapur, refund sebagian, wajib alasan, catat audit log.
