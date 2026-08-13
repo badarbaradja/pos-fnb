@@ -108,6 +108,11 @@ export const outlets = pgTable(
     })
       .notNull()
       .default("20000"),
+    // Outlet cashless penuh: matikan seluruh bagian kas dari alur shift
+    // (modal awal, kas masuk/keluar, hitung fisik/selisih) -- shift tetap
+    // ada (masih perlu tahu siapa kasir yang bertugas), tapi tutup shift
+    // lewat jalur ringkas tanpa rekonsiliasi (T15 lanjutan).
+    cashEnabled: boolean("cash_enabled").notNull().default(true),
     isActive: boolean("is_active").notNull().default(true),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()

@@ -53,6 +53,7 @@ export type PosOutlet = {
   serviceChargePercent: string;
   serviceChargeInTaxBase: boolean;
   roundingTo: number;
+  cashEnabled: boolean;
 };
 export type PosPriceTier = {
   id: string;
@@ -108,13 +109,18 @@ export async function getPosCatalog(
     throw new Error("Belum ada device aktif untuk outlet ini.");
   }
 
-  const paymentMethodRows = await db
+  let paymentMethodRows = await db
     .select()
     .from(paymentMethods)
     .where(and(eq(paymentMethods.businessId, businessId), eq(paymentMethods.isActive, true)))
     .orderBy(asc(paymentMethods.sortOrder));
   if (paymentMethodRows.length === 0) {
     throw new Error("Belum ada metode pembayaran untuk bisnis ini.");
+  }
+  // Outlet cashless: metode pembayaran yang menyentuh laci kas fisik
+  // disembunyikan dari dialog pembayaran sama sekali (T15 lanjutan).
+  if (!outlet.cashEnabled) {
+    paymentMethodRows = paymentMethodRows.filter((pm) => !pm.isCashDrawer);
   }
 
   const priceTierRows = await db
@@ -265,6 +271,7 @@ export async function getPosCatalog(
       serviceChargePercent: outlet.serviceChargePercent,
       serviceChargeInTaxBase: outlet.serviceChargeInTaxBase,
       roundingTo: outlet.roundingTo,
+      cashEnabled: outlet.cashEnabled,
     },
     device: { id: device.id, name: device.name },
     paymentMethods: paymentMethodRows.map((pm) => ({

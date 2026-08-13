@@ -92,7 +92,7 @@ export function PosScreen({
             <span className="text-xs text-muted-foreground">
               {strings.shift.activeShiftLabel}: {shift.employeeName}
             </span>
-            <CashMovementDialog shiftId={shift.id} />
+            {outlet.cashEnabled ? <CashMovementDialog shiftId={shift.id} /> : null}
             <Button
               variant="outline"
               size="sm"

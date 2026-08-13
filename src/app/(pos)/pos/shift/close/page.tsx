@@ -3,8 +3,9 @@ import { and, asc, eq } from "drizzle-orm";
 import { createServerSupabaseClient } from "@/lib/auth/supabase";
 import { requirePermissionDb } from "@/lib/auth/permissions";
 import { devices, outlets } from "@/lib/db/schema";
-import { getOpenShiftForDevice } from "@/lib/pos/shift";
+import { getOpenShiftForDevice, getShiftSalesSummary } from "@/lib/pos/shift";
 import { CloseShiftForm } from "@/components/pos/shift/close-shift-form";
+import { CloseCashlessShiftForm } from "@/components/pos/shift/close-cashless-shift-form";
 import { id as strings } from "@/lib/i18n/id";
 
 export default async function CloseShiftPage() {
@@ -36,6 +37,23 @@ export default async function CloseShiftPage() {
     const shift = await getOpenShiftForDevice(db, businessId, device.id);
     if (!shift) {
       redirect("/pos");
+    }
+
+    if (!outlet.cashEnabled) {
+      const summary = await getShiftSalesSummary(db, shift.id);
+      return (
+        <div className="flex min-h-dvh flex-col items-center justify-center gap-4 p-4">
+          <div className="flex w-full max-w-sm flex-col gap-1">
+            <h1 className="text-lg font-semibold">{strings.shift.closeTitle}</h1>
+          </div>
+          <CloseCashlessShiftForm
+            shiftId={shift.id}
+            employeeName={shift.employeeName}
+            openedAt={shift.openedAt.toISOString()}
+            summary={summary}
+          />
+        </div>
+      );
     }
 
     return (

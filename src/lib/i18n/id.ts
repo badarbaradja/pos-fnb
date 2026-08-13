@@ -205,6 +205,7 @@ export const id = {
     openButton: "Buka Shift",
     opening: "Membuka...",
     alreadyOpenError: "Sudah ada shift terbuka untuk perangkat ini.",
+    noOpeningCashNote: "Outlet ini tidak memakai kas fisik -- modal awal otomatis Rp 0.",
 
     closeTitle: "Tutup Shift",
     countedCashHint:
@@ -218,6 +219,8 @@ export const id = {
     alreadyClosedError: "Shift ini sudah ditutup.",
     notOpenForMovementError:
       "Shift ini tidak bisa menerima kas masuk/keluar lagi (sudah dihitung atau sudah ditutup).",
+    cashDisabledError: "Outlet ini tidak memakai kas fisik -- fitur ini tidak berlaku.",
+    cashEnabledError: "Outlet ini memakai kas fisik -- pakai alur tutup shift biasa.",
 
     expectedCashLabel: "Uang Seharusnya (Sistem)",
     cashVarianceLabel: "Selisih",
@@ -228,8 +231,12 @@ export const id = {
     reasonRequiredLabel: "Alasan Selisih (wajib)",
     reasonPlaceholder: "mis. ada uang kembalian salah hitung, dsb.",
     confirmCloseButton: "Konfirmasi Tutup Shift",
+    confirmCloseCashlessButton: "Tutup Shift",
     confirmingClose: "Menutup...",
     closedSuccess: "Shift berhasil ditutup.",
+
+    salesSummaryOrderCount: "Jumlah Transaksi",
+    salesSummaryByMethod: "Total per Metode",
 
     cashMovementButton: "Kas Masuk/Keluar",
     cashMovementTitle: "Catat Kas Masuk/Keluar",

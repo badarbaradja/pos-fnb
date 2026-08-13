@@ -13,9 +13,11 @@ import { id as strings } from "@/lib/i18n/id";
 export function OpenShiftForm({
   outletId,
   deviceId,
+  cashEnabled,
 }: {
   outletId: string;
   deviceId: string;
+  cashEnabled: boolean;
 }) {
   const router = useRouter();
   const [employeeCode, setEmployeeCode] = useState("");
@@ -33,7 +35,9 @@ export function OpenShiftForm({
         deviceId,
         employeeCode,
         pin,
-        openingCash,
+        // Server tetap memaksa "0" untuk outlet cashless walau field ini
+        // dikirim -- lihat komentar di openShiftWithDb (lib/pos/shift.ts).
+        openingCash: cashEnabled ? openingCash : "0",
       });
       if (result.error) {
         toast.error(result.error);
@@ -73,18 +77,22 @@ export function OpenShiftForm({
           required
         />
       </div>
-      <div className="flex flex-col gap-2">
-        <Label htmlFor="openingCash">{strings.shift.openingCashLabel}</Label>
-        <Input
-          id="openingCash"
-          type="number"
-          min={0}
-          step="0.01"
-          value={openingCash}
-          onChange={(e) => setOpeningCash(e.target.value)}
-          required
-        />
-      </div>
+      {cashEnabled ? (
+        <div className="flex flex-col gap-2">
+          <Label htmlFor="openingCash">{strings.shift.openingCashLabel}</Label>
+          <Input
+            id="openingCash"
+            type="number"
+            min={0}
+            step="0.01"
+            value={openingCash}
+            onChange={(e) => setOpeningCash(e.target.value)}
+            required
+          />
+        </div>
+      ) : (
+        <p className="text-xs text-muted-foreground">{strings.shift.noOpeningCashNote}</p>
+      )}
       <Button type="submit" disabled={isPending}>
         {isPending ? strings.shift.opening : strings.shift.openButton}
       </Button>

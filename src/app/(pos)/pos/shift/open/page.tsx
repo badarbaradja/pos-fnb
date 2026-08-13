@@ -47,7 +47,7 @@ export default async function OpenShiftPage() {
           <h1 className="text-lg font-semibold">{strings.shift.openTitle}</h1>
           <p className="text-sm text-muted-foreground">{strings.shift.openHint}</p>
         </div>
-        <OpenShiftForm outletId={outlet.id} deviceId={device.id} />
+        <OpenShiftForm outletId={outlet.id} deviceId={device.id} cashEnabled={outlet.cashEnabled} />
       </div>
     );
   } finally {

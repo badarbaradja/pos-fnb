@@ -144,7 +144,7 @@ export async function openShiftWithDb(
       .from(businesses)
       .where(eq(businesses.id, businessId));
     const [outlet] = await db
-      .select({ dayCutoffTime: outlets.dayCutoffTime })
+      .select({ dayCutoffTime: outlets.dayCutoffTime, cashEnabled: outlets.cashEnabled })
       .from(outlets)
       .where(and(eq(outlets.id, data.outletId), eq(outlets.businessId, businessId)));
     if (!business || !outlet) {
@@ -174,6 +174,9 @@ export async function openShiftWithDb(
 
     const now = new Date();
     const bDate = businessDate(now, business.timezone, outlet.dayCutoffTime);
+    // Outlet cashless: opening_cash dipaksa "0" di server, tidak percaya
+    // input klien -- sama prinsipnya dengan field lain di lib/pos/*.
+    const openingCash = outlet.cashEnabled ? data.openingCash : "0";
 
     await db.insert(shifts).values({
       id: data.id,
@@ -184,7 +187,7 @@ export async function openShiftWithDb(
       status: "open",
       openedAt: now,
       businessDate: bDate,
-      openingCash: data.openingCash,
+      openingCash,
     });
 
     return {
@@ -223,7 +226,11 @@ export async function addCashMovementWithDb(
 
   try {
     const [shift] = await db
-      .select({ status: shifts.status, countedCash: shifts.countedCash })
+      .select({
+        status: shifts.status,
+        countedCash: shifts.countedCash,
+        outletId: shifts.outletId,
+      })
       .from(shifts)
       .where(and(eq(shifts.id, data.shiftId), eq(shifts.businessId, businessId)));
     if (!shift) {
@@ -234,6 +241,16 @@ export async function addCashMovementWithDb(
     // cocok dengan data sebenarnya (sama alasannya dengan isShiftSellable()).
     if (shift.status !== "open" || shift.countedCash !== null) {
       return { error: strings.shift.notOpenForMovementError };
+    }
+
+    const [outlet] = await db
+      .select({ cashEnabled: outlets.cashEnabled })
+      .from(outlets)
+      .where(eq(outlets.id, shift.outletId));
+    // Outlet cashless: kas masuk/keluar tidak berlaku sama sekali, bukan
+    // cuma disembunyikan tombolnya di UI -- pertahanan berlapis.
+    if (!outlet || !outlet.cashEnabled) {
+      return { error: strings.shift.cashDisabledError };
     }
 
     const [existing] = await db
@@ -371,11 +388,19 @@ export async function submitCountedCashWithDb(
     }
 
     const [outlet] = await db
-      .select({ cashVarianceTolerance: outlets.cashVarianceTolerance })
+      .select({
+        cashVarianceTolerance: outlets.cashVarianceTolerance,
+        cashEnabled: outlets.cashEnabled,
+      })
       .from(outlets)
       .where(eq(outlets.id, shift.outletId));
     if (!outlet) {
       return { error: strings.common.unexpectedError };
+    }
+    // Outlet cashless: jalur ini cuma untuk outlet yang cash-nya aktif --
+    // pakai closeCashlessShiftWithDb() untuk outlet cashless.
+    if (!outlet.cashEnabled) {
+      return { error: strings.shift.cashDisabledError };
     }
 
     const [cashPayments, changeGiven, cashIn, cashOut, cashRefunds] = await Promise.all([
@@ -489,6 +514,109 @@ export async function confirmShiftCloseWithDb(
     return { success: { closedAt: now.toISOString() } };
   } catch (err) {
     console.error("confirmShiftCloseWithDb gagal:", err);
+    return { error: strings.common.unexpectedError };
+  }
+}
+
+// ---------------------------------------------------------------------
+// Tutup shift -- outlet cashless (cash_enabled = false)
+// ---------------------------------------------------------------------
+
+export type ShiftSalesSummary = {
+  orderCount: number;
+  totalsByMethod: { methodName: string; total: string }[];
+};
+
+/**
+ * Ringkasan penjualan shift TANPA menyentuh apa pun soal kas -- dipakai
+ * layar tutup shift outlet cashless (jumlah transaksi, total per metode
+ * bayar), dan bisa juga dipakai kapan saja shift masih berjalan (live
+ * preview), bukan cuma setelah closed.
+ */
+export async function getShiftSalesSummary(db: Db, shiftId: string): Promise<ShiftSalesSummary> {
+  const rows = await db
+    .select({ orderId: orders.id, methodName: payments.methodName, amount: payments.amount })
+    .from(payments)
+    .innerJoin(orders, eq(payments.orderId, orders.id))
+    .where(and(eq(orders.shiftId, shiftId), eq(orders.status, "paid")));
+
+  const orderIds = new Set<string>();
+  const totalByMethod = new Map<string, Decimal>();
+  for (const r of rows) {
+    orderIds.add(r.orderId);
+    const sum = totalByMethod.get(r.methodName) ?? new Decimal(0);
+    totalByMethod.set(r.methodName, sum.plus(r.amount));
+  }
+
+  return {
+    orderCount: orderIds.size,
+    totalsByMethod: [...totalByMethod.entries()].map(([methodName, total]) => ({
+      methodName,
+      total: total.toFixed(2),
+    })),
+  };
+}
+
+export const closeCashlessShiftSchema = z.object({
+  shiftId: z.string().uuid(),
+});
+
+export type CloseCashlessShiftResult = { error?: string; success?: { closedAt: string } };
+
+/**
+ * Tutup shift untuk outlet cashless -- TIDAK PERNAH menyentuh
+ * counted_cash/expected_cash/cash_variance (tetap null selamanya untuk
+ * shift ini). Satu langkah, tidak seperti submitCountedCashWithDb() +
+ * confirmShiftCloseWithDb() yang dua langkah -- tidak ada apa pun untuk
+ * direkonsiliasi di sini.
+ */
+export async function closeCashlessShiftWithDb(
+  db: Db,
+  businessId: string,
+  rawInput: unknown
+): Promise<CloseCashlessShiftResult> {
+  const parsed = closeCashlessShiftSchema.safeParse(rawInput);
+  if (!parsed.success) {
+    return { error: strings.common.unexpectedError };
+  }
+  const data = parsed.data;
+
+  try {
+    const [shift] = await db
+      .select({ status: shifts.status, outletId: shifts.outletId })
+      .from(shifts)
+      .where(and(eq(shifts.id, data.shiftId), eq(shifts.businessId, businessId)));
+    if (!shift) {
+      return { error: strings.common.unexpectedError };
+    }
+    if (shift.status !== "open") {
+      return { error: strings.shift.alreadyClosedError };
+    }
+
+    const [outlet] = await db
+      .select({ cashEnabled: outlets.cashEnabled })
+      .from(outlets)
+      .where(eq(outlets.id, shift.outletId));
+    // Jalur ini cuma untuk outlet cashless -- outlet dengan cash aktif
+    // wajib lewat submitCountedCashWithDb()/confirmShiftCloseWithDb().
+    if (!outlet || outlet.cashEnabled) {
+      return { error: strings.shift.cashEnabledError };
+    }
+
+    const now = new Date();
+    const updated = await db
+      .update(shifts)
+      .set({ status: "closed", closedAt: now })
+      .where(and(eq(shifts.id, data.shiftId), eq(shifts.status, "open")))
+      .returning({ id: shifts.id });
+
+    if (updated.length === 0) {
+      return { error: strings.shift.alreadyClosedError };
+    }
+
+    return { success: { closedAt: now.toISOString() } };
+  } catch (err) {
+    console.error("closeCashlessShiftWithDb gagal:", err);
     return { error: strings.common.unexpectedError };
   }
 }

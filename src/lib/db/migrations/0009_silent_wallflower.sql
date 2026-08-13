@@ -1,0 +1,1 @@
+ALTER TABLE "outlets" ADD COLUMN "cash_enabled" boolean DEFAULT true NOT NULL;
