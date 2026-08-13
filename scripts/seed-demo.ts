@@ -12,8 +12,10 @@ import {
   profiles,
   paymentMethods,
   devices,
+  employees,
 } from "../src/lib/db/schema";
 import { generateId } from "../src/lib/utils/id";
+import { hashPin } from "../src/lib/auth/pin";
 import { DEMO_BUSINESS_NAME } from "./seed-shared";
 
 /**
@@ -42,6 +44,13 @@ const DEMO_PAYMENT_METHODS = [
   { code: "CASH", name: "Tunai", type: "cash", isCashDrawer: true, requiresRef: false },
   { code: "QRIS", name: "QRIS", type: "qris", isCashDrawer: false, requiresRef: true },
 ] as const;
+// Karyawan demo untuk login PIN di layar kasir (T15 -- buka shift butuh
+// employees dengan pin_hash, seed sebelumnya cuma bikin user Supabase Auth
+// untuk owner, bukan employees).
+const DEMO_EMPLOYEES = [
+  { code: "KSR01", fullName: "Budi Kasir", role: "cashier" as const },
+  { code: "MGR01", fullName: "Sari Manajer", role: "manager" as const },
+];
 
 function generatePassword(): string {
   return randomBytes(18).toString("base64url");
@@ -196,6 +205,55 @@ async function main() {
     }
   }
 
+  // PIN dari env kalau ada -- SEED_EMPLOYEE_PIN cuma dibaca di sini, tidak
+  // pernah disimpan mentah, cuma di-hash lewat hashPin() (bcrypt, sama
+  // seperti verifyCashierPin() memverifikasinya di lib/auth/pin.ts).
+  const seedPin = process.env["SEED_EMPLOYEE_PIN"];
+  if (!seedPin) {
+    console.warn(
+      "[employees] SEED_EMPLOYEE_PIN tidak diset -- pakai PIN default '123456'. " +
+        "HANYA untuk data demo lokal, JANGAN pernah dipakai di lingkungan produksi."
+    );
+  }
+  const employeePin = seedPin || "123456";
+  const employeePinHash = await hashPin(employeePin);
+
+  for (const emp of DEMO_EMPLOYEES) {
+    const [existingEmployee] = await db
+      .select()
+      .from(employees)
+      .where(and(eq(employees.businessId, business.id), eq(employees.code, emp.code)));
+    if (!existingEmployee) {
+      await db.insert(employees).values({
+        id: generateId(),
+        businessId: business.id,
+        outletId: outlet.id,
+        code: emp.code,
+        fullName: emp.fullName,
+        role: emp.role,
+        pinHash: employeePinHash,
+      });
+      console.log(`[employees] dibuat: ${emp.fullName} (${emp.code}, ${emp.role})`);
+    } else {
+      // Update juga PIN + data lain saat re-run -- termasuk reset lockout
+      // supaya seed ini selalu menghasilkan karyawan yang bisa langsung
+      // login, walau sebelumnya sempat terkunci dari percobaan PIN salah.
+      await db
+        .update(employees)
+        .set({
+          outletId: outlet.id,
+          fullName: emp.fullName,
+          role: emp.role,
+          pinHash: employeePinHash,
+          failedAttempts: 0,
+          lockedUntil: null,
+          isActive: true,
+        })
+        .where(eq(employees.id, existingEmployee.id));
+      console.log(`[employees] sudah ada, diperbarui: ${emp.fullName} (${emp.code}, ${emp.role})`);
+    }
+  }
+
   const [existingMembership] = await db
     .select()
     .from(memberships)
@@ -219,7 +277,12 @@ async function main() {
     );
   }
 
-  console.log("Selesai.");
+  console.log("\nLogin kasir (buka shift di /pos/shift/open):");
+  for (const emp of DEMO_EMPLOYEES) {
+    console.log(`  ${emp.fullName} (${emp.role}) -- kode: ${emp.code}, PIN: ${employeePin}`);
+  }
+
+  console.log("\nSelesai.");
 }
 
 main()
