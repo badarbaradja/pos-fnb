@@ -86,6 +86,7 @@ export type PayOrderInput = z.infer<typeof payOrderSchema>;
 export type PayOrderResult = {
   error?: string;
   success?: {
+    orderId: string;
     orderNumber: string;
     total: string;
     change: string;
@@ -392,6 +393,7 @@ export async function payOrderWithDb(
 
     return {
       success: {
+        orderId: data.orderId,
         orderNumber,
         total: result.total.toFixed(2),
         change: change.toFixed(2),

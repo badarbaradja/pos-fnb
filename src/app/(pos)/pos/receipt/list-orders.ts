@@ -1,0 +1,138 @@
+import { and, asc, desc, eq, ilike, inArray } from "drizzle-orm";
+import type { UserDbHandle } from "@/lib/db/client";
+import { businesses, orders, outlets, payments } from "@/lib/db/schema";
+import { businessDate } from "@/lib/utils/business-date";
+
+type Db = UserDbHandle["db"];
+
+/**
+ * Resolusi outlet sama seperti get-pos-catalog.ts: outlet aktif pertama
+ * milik bisnis (asumsi single-outlet untuk MVP). Diulang di sini (bukan
+ * di-share) supaya modul ini tetap bisa dipanggil berdiri sendiri tanpa
+ * bergantung pada catalog fetch layar kasir.
+ */
+async function resolveOutlet(
+  db: Db,
+  businessId: string
+): Promise<{ id: string; dayCutoffTime: string; timezone: string } | null> {
+  const [business] = await db
+    .select({ timezone: businesses.timezone })
+    .from(businesses)
+    .where(eq(businesses.id, businessId));
+  if (!business) return null;
+
+  const [outlet] = await db
+    .select({ id: outlets.id, dayCutoffTime: outlets.dayCutoffTime })
+    .from(outlets)
+    .where(and(eq(outlets.businessId, businessId), eq(outlets.isActive, true)))
+    .orderBy(asc(outlets.createdAt));
+  if (!outlet) return null;
+
+  return { id: outlet.id, dayCutoffTime: outlet.dayCutoffTime, timezone: business.timezone };
+}
+
+export type OrderListRow = {
+  id: string;
+  number: string;
+  paidAt: Date | null;
+  total: string;
+  channel: string;
+  paymentMethodNames: string[]; // bisa lebih dari satu kalau split payment
+};
+
+async function attachPaymentMethods(
+  db: Db,
+  orderRows: (typeof orders.$inferSelect)[]
+): Promise<OrderListRow[]> {
+  const orderIds = orderRows.map((o) => o.id);
+  const paymentRows = orderIds.length
+    ? await db
+        .select({ orderId: payments.orderId, methodName: payments.methodName })
+        .from(payments)
+        .where(inArray(payments.orderId, orderIds))
+    : [];
+  const methodsByOrder = new Map<string, string[]>();
+  for (const p of paymentRows) {
+    const list = methodsByOrder.get(p.orderId) ?? [];
+    list.push(p.methodName);
+    methodsByOrder.set(p.orderId, list);
+  }
+
+  return orderRows.map((o) => ({
+    id: o.id,
+    number: o.number,
+    paidAt: o.paidAt,
+    total: o.total,
+    channel: o.channel,
+    paymentMethodNames: methodsByOrder.get(o.id) ?? [],
+  }));
+}
+
+export async function getBusinessTimezone(db: Db, businessId: string): Promise<string> {
+  const [business] = await db
+    .select({ timezone: businesses.timezone })
+    .from(businesses)
+    .where(eq(businesses.id, businessId));
+  return business?.timezone ?? "Asia/Jakarta";
+}
+
+/**
+ * Alat kerja kasir untuk cetak ulang (T14) -- BUKAN laporan penjualan
+ * (itu T17). Sengaja dibatasi transaksi hari operasional berjalan
+ * (business_date, bukan tanggal kalender server -- CLAUDE.md §3.3), supaya
+ * daftarnya tetap pendek dan relevan buat kasir yang sedang kerja, bukan
+ * daftar semua transaksi sepanjang masa.
+ */
+export async function listTodaysOrders(
+  db: Db,
+  businessId: string
+): Promise<OrderListRow[]> {
+  const outlet = await resolveOutlet(db, businessId);
+  if (!outlet) {
+    return [];
+  }
+
+  const today = businessDate(new Date(), outlet.timezone, outlet.dayCutoffTime);
+
+  const orderRows = await db
+    .select()
+    .from(orders)
+    .where(
+      and(
+        eq(orders.businessId, businessId),
+        eq(orders.outletId, outlet.id),
+        eq(orders.businessDate, today),
+        eq(orders.status, "paid")
+      )
+    )
+    .orderBy(desc(orders.paidAt));
+
+  return attachPaymentMethods(db, orderRows);
+}
+
+/**
+ * Pencarian nomor struk -- opsional, dipakai buat cari transaksi LAMA (di
+ * luar hari ini). Cocok sebagian (ILIKE), tidak dibatasi business_date.
+ * Dibatasi 50 hasil supaya tetap ringkas -- ini bukan tabel laporan
+ * dengan paginasi (T17), cukup untuk kasir cari satu struk tertentu.
+ */
+export async function searchOrdersByNumber(
+  db: Db,
+  businessId: string,
+  query: string
+): Promise<OrderListRow[]> {
+  const orderRows = await db
+    .select()
+    .from(orders)
+    .where(
+      and(
+        eq(orders.businessId, businessId),
+        eq(orders.status, "paid"),
+        ilike(orders.number, `%${query}%`)
+      )
+    )
+    .orderBy(desc(orders.paidAt))
+    .limit(50);
+
+  return attachPaymentMethods(db, orderRows);
+}

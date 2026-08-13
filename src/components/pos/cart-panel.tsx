@@ -2,6 +2,7 @@
 
 import { useState, useSyncExternalStore } from "react";
 import { createPortal } from "react-dom";
+import { useRouter } from "next/navigation";
 import { Decimal } from "decimal.js";
 import { toast } from "sonner";
 import { useCartStore, type CartLine, type DiscountType } from "@/lib/store/cart-store";
@@ -54,6 +55,7 @@ export function CartPanel({
   const [paymentDialogOpen, setPaymentDialogOpen] = useState(false);
   const [paymentDialogKey, setPaymentDialogKey] = useState(0);
   const isClient = useIsClient();
+  const router = useRouter();
   const lines = useCartStore((s) => s.lines);
   const removeLine = useCartStore((s) => s.removeLine);
   const setQty = useCartStore((s) => s.setQty);
@@ -224,6 +226,9 @@ export function CartPanel({
             `${strings.pos.paymentSuccess} — ${strings.pos.orderNumberLabel}: ${result.orderNumber}`
           );
           useCartStore.getState().clear();
+          // ?fresh=1 -- menandai kunjungan pertama (bukan cetak ulang) ke
+          // halaman struk, lihat komentar di receipt/[orderId]/page.tsx.
+          router.push(`/pos/receipt/${result.orderId}?fresh=1`);
         }}
       />
     </div>

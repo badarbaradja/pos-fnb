@@ -72,8 +72,14 @@ Pilih metode, split payment, hitung kembalian, simpan order, generate nomor stru
 dipakai klien sungguhan, T15 (shift) wajib selesai — tanpa shift tidak
 ada rekonsiliasi kas, dan itu justru alasan utama cafe memasang POS.
 
-**[ ] T14 — Struk**
-Template struk 80mm dengan CSS `@page`, tombol cetak, cetak ulang.
+**[x] T14 — Struk**
+Template struk 80mm dengan CSS `@page`, tombol cetak. Cetak ulang lewat
+halaman "Transaksi Hari Ini" (`/pos/receipt`) — tabel transaksi
+`business_date` berjalan (nomor struk, jam, total, metode bayar, saluran),
+urut terbaru di atas, tombol "Cetak" per baris ke halaman struk. Kolom
+pencarian nomor struk opsional untuk transaksi lama (lintas tanggal).
+Ini alat kerja kasir, bukan laporan penjualan (itu T17) — sengaja tetap
+ringkas, tanpa filter/paginasi. Ada tombol dari layar kasir ke halaman ini.
 
 **[ ] T15 — Shift**
 Buka shift dengan modal awal, tutup shift dengan rekonsiliasi. `countedCash` write-once, `expectedCash` baru tampil setelah kasir input fisik.

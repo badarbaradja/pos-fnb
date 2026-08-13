@@ -47,7 +47,7 @@ export function PaymentDialog({
   outletId: string;
   deviceId: string;
   priceTierId: string;
-  onSuccess: (result: { orderNumber: string; change: string }) => void;
+  onSuccess: (result: { orderId: string; orderNumber: string; change: string }) => void;
 }) {
   const lines = useCartStore((s) => s.lines);
   const discountType = useCartStore((s) => s.discountType);

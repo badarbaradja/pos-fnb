@@ -9,10 +9,12 @@ export function PriceTierSelector({
   priceTiers,
   value,
   onChange,
+  trailing,
 }: {
   priceTiers: PosPriceTier[];
   value: string;
   onChange: (priceTierId: string) => void;
+  trailing?: React.ReactNode;
 }) {
   return (
     <div className="flex items-center gap-3 border-b p-3">
@@ -32,6 +34,7 @@ export function PriceTierSelector({
           </Button>
         ))}
       </div>
+      {trailing ? <div className="ml-auto flex items-center">{trailing}</div> : null}
     </div>
   );
 }

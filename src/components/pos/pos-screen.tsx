@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { Decimal } from "decimal.js";
 import { toast } from "sonner";
 import type {
@@ -17,6 +18,7 @@ import { ProductGrid } from "./product-grid";
 import { CartPanel } from "./cart-panel";
 import { AddToCartDialog } from "./add-to-cart-dialog";
 import { PriceTierSelector } from "./price-tier-selector";
+import { Button } from "@/components/ui/button";
 import { id as strings } from "@/lib/i18n/id";
 
 export function PosScreen({
@@ -82,6 +84,14 @@ export function PosScreen({
         priceTiers={priceTiers}
         value={priceTierId}
         onChange={setPriceTierId}
+        trailing={
+          <Button
+            variant="outline"
+            size="sm"
+            nativeButton={false}
+            render={<Link href="/pos/receipt">{strings.pos.todaysTransactionsButton}</Link>}
+          />
+        }
       />
       <div className="grid grid-cols-1 md:min-h-0 md:flex-1 md:grid-cols-[1fr_360px]">
         <ProductGrid
