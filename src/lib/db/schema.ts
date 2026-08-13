@@ -5,6 +5,7 @@ import {
   date,
   index,
   integer,
+  jsonb,
   numeric,
   pgEnum,
   pgPolicy,
@@ -1219,6 +1220,12 @@ export const refunds = pgTable(
     reason: text("reason").notNull(),
     approvedBy: uuid("approved_by").references(() => employees.id),
     businessDate: date("business_date").notNull(),
+    // T16: metode pengembalian dana dipilih kasir, TIDAK di-hardcode
+    // tunai -- penting terutama untuk outlet cashless (T15 lanjutan).
+    paymentMethodId: uuid("payment_method_id")
+      .notNull()
+      .references(() => paymentMethods.id),
+    reference: text("reference"), // nomor referensi non-tunai, pola sama seperti payments.reference (T13)
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
@@ -1304,6 +1311,54 @@ export const refundItems = pgTable(
         where r.id = ${t.refundId}
           and o.business_id = any(auth_business_ids())
       )`,
+    }),
+  ]
+).enableRLS();
+
+/**
+ * Audit log generik (T16) -- append-only, dipakai pertama kali untuk
+ * void/refund, tapi disengaja generik (action/ref_type teks bebas, bukan
+ * enum) supaya modul-modul berikutnya bisa catat ke sini juga tanpa
+ * migration baru tiap kali ada jenis aksi baru.
+ *
+ * employeeId nullable: void/refund dilakukan dari sesi Supabase Auth
+ * (owner/manajer di /pos/receipt), bukan sesi PIN kasir seperti shift --
+ * tidak ada jaminan user itu punya baris employees. Diisi best-effort
+ * lewat employees.user_id kalau ketemu, kalau tidak tetap null (lihat
+ * lib/pos/void-refund.ts#resolveEmployeeIdForUser).
+ *
+ * TIDAK ADA policy UPDATE/DELETE di bawah -- itu yang membuatnya
+ * append-only (tanpa policy, operasi itu ditolak untuk role
+ * authenticated). FORCE ROW LEVEL SECURITY ditambahkan manual ke
+ * migration hasil generate (Drizzle tidak punya builder untuk itu, lihat
+ * pola yang sama di migration 0001/0003/0005).
+ */
+export const auditLogs = pgTable(
+  "audit_logs",
+  {
+    id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+    businessId: uuid("business_id")
+      .notNull()
+      .references(() => businesses.id, { onDelete: "cascade" }),
+    outletId: uuid("outlet_id").references(() => outlets.id),
+    employeeId: uuid("employee_id").references(() => employees.id),
+    action: text("action").notNull(), // 'void' | 'refund' | ... (teks bebas, lihat komentar di atas)
+    refType: text("ref_type").notNull(), // 'order' | 'refund' | ...
+    refId: uuid("ref_id").notNull(),
+    reason: text("reason"),
+    metadata: jsonb("metadata"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    pgPolicy("audit_logs_select", {
+      for: "select",
+      using: sql`${t.businessId} = any(auth_business_ids())`,
+    }),
+    pgPolicy("audit_logs_insert", {
+      for: "insert",
+      withCheck: sql`${t.businessId} = any(auth_business_ids())`,
     }),
   ]
 ).enableRLS();

@@ -118,3 +118,18 @@ T32 laporan Laba Rugi · T33 dashboard KPI
 - Jangan lompat fase. Godaan terbesar adalah bikin UI cantik sebelum logikanya benar.
 - Tugas yang terasa butuh lebih dari satu sesi agent, pecah dulu jadi dua.
 - Kalau satu tugas macet lebih dari dua jam, itu tanda spesifikasinya kurang jelas — perbaiki dokumen, jangan paksa agent menebak.
+
+---
+
+## Fase 6 — Order Mandiri Pelanggan (belum dijadwalkan)
+
+**[ ] T50 — Kiosk / QR Order**
+Layar untuk pelanggan memesan sendiri, terpisah dari layar kasir.
+- Mode tanpa login, sesi per meja atau per nomor antrean
+- Katalog, modifier, dan kalkulator dipakai ulang dari Fase 1
+- Status order baru 'pending_confirmation' sebelum masuk 'open'
+- Kasir punya layar antrean untuk konfirmasi dan tarik order ke pembayaran
+- Nomor antrean dicetak untuk pelanggan, order menunggu di kasir
+
+Catatan: ini produk terpisah dari layar kasir. Layar kasir (`/pos`) tetap
+untuk staf. Jangan digabung.

@@ -2,18 +2,23 @@ import Link from "next/link";
 import { toZonedTime } from "date-fns-tz";
 import { format } from "date-fns";
 import { Decimal } from "decimal.js";
+import { and, asc, eq } from "drizzle-orm";
 import { createServerSupabaseClient } from "@/lib/auth/supabase";
-import { requirePermissionDb } from "@/lib/auth/permissions";
+import { hasPermission, requirePermissionDb } from "@/lib/auth/permissions";
+import { outlets } from "@/lib/db/schema";
 import {
   getBusinessTimezone,
   listTodaysOrders,
   searchOrdersByNumber,
   type OrderListRow,
 } from "./list-orders";
+import { getRefundPaymentMethods, type RefundPaymentMethod } from "@/lib/pos/void-refund";
 import { formatIDR } from "@/lib/utils/money";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Badge } from "@/components/ui/badge";
+import { OrderRowActions } from "@/components/pos/receipt/order-row-actions";
 import { getChannelLabel } from "@/lib/pos/channel-labels";
 import { id as strings } from "@/lib/i18n/id";
 
@@ -22,7 +27,15 @@ function formatTime(date: Date | null, timezone: string): string {
   return format(toZonedTime(date, timezone), "HH:mm");
 }
 
-function OrdersTable({ rows, timezone }: { rows: OrderListRow[]; timezone: string }) {
+function OrdersTable({
+  rows,
+  timezone,
+  paymentMethods,
+}: {
+  rows: OrderListRow[];
+  timezone: string;
+  paymentMethods: RefundPaymentMethod[];
+}) {
   if (rows.length === 0) {
     return <p className="text-sm text-muted-foreground">{strings.receipt.listEmpty}</p>;
   }
@@ -43,22 +56,32 @@ function OrdersTable({ rows, timezone }: { rows: OrderListRow[]; timezone: strin
         <tbody>
           {rows.map((row) => (
             <tr key={row.id} className="border-t">
-              <td className="p-2 font-mono text-xs">{row.number}</td>
+              <td className="p-2 font-mono text-xs">
+                {row.number}
+                {row.status === "void" ? (
+                  <Badge variant="destructive" className="ml-2">
+                    {strings.voidRefund.voidBadge}
+                  </Badge>
+                ) : null}
+              </td>
               <td className="p-2">{formatTime(row.paidAt, timezone)}</td>
               <td className="p-2 text-right">{formatIDR(new Decimal(row.total))}</td>
               <td className="p-2">{row.paymentMethodNames.join(", ") || "-"}</td>
               <td className="p-2">{getChannelLabel(row.channel)}</td>
               <td className="p-2">
-                <Button
-                  size="sm"
-                  variant="outline"
-                  nativeButton={false}
-                  render={
-                    <Link href={`/pos/receipt/${row.id}`}>
-                      {strings.receipt.listPrintAction}
-                    </Link>
-                  }
-                />
+                <div className="flex flex-wrap items-center gap-1">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    nativeButton={false}
+                    render={
+                      <Link href={`/pos/receipt/${row.id}`}>
+                        {strings.receipt.listPrintAction}
+                      </Link>
+                    }
+                  />
+                  <OrderRowActions row={row} paymentMethods={paymentMethods} />
+                </div>
               </td>
             </tr>
           ))}
@@ -77,18 +100,37 @@ export default async function ReceiptListPage({
   const query = q?.trim() ?? "";
 
   const supabase = await createServerSupabaseClient();
-  const { db, closeDb, businessId } = await requirePermissionDb(
+  const { db, closeDb, businessId, role } = await requirePermissionDb(
     supabase,
     "pos.reprint_receipt"
   );
 
   let rows: OrderListRow[];
   let timezone: string;
+  let paymentMethods: RefundPaymentMethod[] = [];
   try {
     rows = query
       ? await searchOrdersByNumber(db, businessId, query)
       : await listTodaysOrders(db, businessId);
     timezone = await getBusinessTimezone(db, businessId);
+
+    // Halaman ini dijaga pos.reprint_receipt, tapi dialog refund butuh
+    // pos.refund -- role yang tidak punya izin itu (mis. kasir default)
+    // TIDAK boleh membuat requirePermission melempar Error di sini (akan
+    // meng-crash seluruh halaman). Cek dulu, baru fetch kalau diizinkan;
+    // OrderRowActions tetap merender tombol Refund walau daftar metode
+    // kosong -- server (refundOrderWithDb) tetap yang menegakkan izin
+    // sesungguhnya lewat requirePermissionDb di actions.ts.
+    if (hasPermission(role, "pos.refund")) {
+      const [outlet] = await db
+        .select({ id: outlets.id })
+        .from(outlets)
+        .where(and(eq(outlets.businessId, businessId), eq(outlets.isActive, true)))
+        .orderBy(asc(outlets.createdAt));
+      if (outlet) {
+        paymentMethods = await getRefundPaymentMethods(db, businessId, outlet.id);
+      }
+    }
   } finally {
     await closeDb();
   }
@@ -134,7 +176,7 @@ export default async function ReceiptListPage({
       {query && rows.length === 0 ? (
         <p className="text-sm text-muted-foreground">{strings.receipt.listSearchEmpty}</p>
       ) : (
-        <OrdersTable rows={rows} timezone={timezone} />
+        <OrdersTable rows={rows} timezone={timezone} paymentMethods={paymentMethods} />
       )}
     </div>
   );

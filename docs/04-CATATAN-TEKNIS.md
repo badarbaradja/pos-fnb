@@ -353,3 +353,22 @@ untuk metode yang `requires_ref = true`, disimpan ke `payments.reference`.
 Kalau nanti (Fase lanjut) benar-benar mau integrasi payment gateway
 sungguhan, itu perubahan arsitektur baru — bukan sekadar "melengkapi"
 yang sudah ada di sini.
+
+---
+
+## 11. `/pos` adalah antarmuka staf, bukan antarmuka pelanggan — jangan digabung
+
+Dicatat di sini sebelum Fase 6 (T50 — Kiosk/QR Order, lihat
+`docs/01-TASK-BOARD.md`) mulai dikerjakan, supaya batasnya jelas sejak
+awal. `/pos` (route group `(pos)`) selalu mengasumsikan dua hal yang
+TIDAK berlaku untuk pelanggan yang memesan sendiri: shift aktif (T15 —
+tanpa shift, `pos/page.tsx` redirect ke `/pos/shift/open`, dan
+`payOrderWithDb` menolak bayar) dan identitas kasir yang sudah
+diverifikasi PIN (`shift.employeeId`, dipakai sebagai `orders.cashier_id`).
+Antarmuka pemesanan mandiri pelanggan nanti TIDAK punya keduanya — tidak
+ada shift, tidak ada kasir yang login — jadi harus jadi route group
+terpisah dari `(pos)`, dengan alur order yang berhenti di status baru
+(`pending_confirmation`) sebelum disentuh kasir, bukan langsung lewat
+`payOrderWithDb`. Katalog dan `lib/calc/order-calculator.ts` boleh dipakai
+ulang (keduanya sudah tidak bergantung pada sesi kasir), tapi halaman dan
+Server Action-nya harus baru, bukan menumpangi punya `/pos`.

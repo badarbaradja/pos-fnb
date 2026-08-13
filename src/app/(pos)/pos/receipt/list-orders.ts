@@ -37,6 +37,7 @@ export type OrderListRow = {
   paidAt: Date | null;
   total: string;
   channel: string;
+  status: "paid" | "void";
   paymentMethodNames: string[]; // bisa lebih dari satu kalau split payment
 };
 
@@ -64,6 +65,9 @@ async function attachPaymentMethods(
     paidAt: o.paidAt,
     total: o.total,
     channel: o.channel,
+    // Query pemanggil selalu filter status ke ("paid","void") -- lihat
+    // listTodaysOrders/searchOrdersByNumber.
+    status: o.status as "paid" | "void",
     paymentMethodNames: methodsByOrder.get(o.id) ?? [],
   }));
 }
@@ -102,7 +106,10 @@ export async function listTodaysOrders(
         eq(orders.businessId, businessId),
         eq(orders.outletId, outlet.id),
         eq(orders.businessDate, today),
-        eq(orders.status, "paid")
+        // Order void tetap DITAMPILKAN (ditandai jelas di UI, T16) --
+        // cuma tidak lagi ikut ke agregasi manapun, karena setiap
+        // agregasi (lib/pos/shift.ts, dst.) filter status='paid' saja.
+        inArray(orders.status, ["paid", "void"])
       )
     )
     .orderBy(desc(orders.paidAt));
@@ -127,7 +134,7 @@ export async function searchOrdersByNumber(
     .where(
       and(
         eq(orders.businessId, businessId),
-        eq(orders.status, "paid"),
+        inArray(orders.status, ["paid", "void"]),
         ilike(orders.number, `%${query}%`)
       )
     )

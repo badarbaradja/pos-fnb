@@ -535,7 +535,12 @@ export type ShiftSalesSummary = {
  */
 export async function getShiftSalesSummary(db: Db, shiftId: string): Promise<ShiftSalesSummary> {
   const rows = await db
-    .select({ orderId: orders.id, methodName: payments.methodName, amount: payments.amount })
+    .select({
+      orderId: orders.id,
+      methodName: payments.methodName,
+      amount: payments.amount,
+      changeAmount: payments.changeAmount,
+    })
     .from(payments)
     .innerJoin(orders, eq(payments.orderId, orders.id))
     .where(and(eq(orders.shiftId, shiftId), eq(orders.status, "paid")));
@@ -545,7 +550,13 @@ export async function getShiftSalesSummary(db: Db, shiftId: string): Promise<Shi
   for (const r of rows) {
     orderIds.add(r.orderId);
     const sum = totalByMethod.get(r.methodName) ?? new Decimal(0);
-    totalByMethod.set(r.methodName, sum.plus(r.amount));
+    // amount - changeAmount, bukan amount mentah -- amount adalah yang
+    // DITENDANG (bisa lebih dari total kalau ada kembalian), penjualan
+    // sesungguhnya per metode adalah net-nya (sama logika dengan
+    // getCashPaymentsTotal/getChangeGivenTotal di atas untuk rekonsiliasi
+    // kas, cuma di sini per-metode bukan cuma tunai).
+    const net = new Decimal(r.amount).minus(r.changeAmount);
+    totalByMethod.set(r.methodName, sum.plus(net));
   }
 
   return {
