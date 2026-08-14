@@ -42,6 +42,7 @@ export const id = {
     categories: "Kategori",
     priceTiers: "Tingkat Harga",
     modifierGroups: "Grup Modifier",
+    reports: "Laporan Penjualan",
   },
   categories: {
     title: "Kategori",
@@ -358,5 +359,64 @@ export const id = {
     cashMethodDisabledError: "Outlet ini tidak memakai kas fisik -- pilih metode lain.",
     qtyExceedsRemainingError: "Qty yang direfund melebihi sisa yang bisa direfund.",
     refundExceedsTotalError: "Total refund melebihi total yang dibayar untuk order ini.",
+  },
+  reports: {
+    title: "Laporan Penjualan",
+    subtitle: "Ringkasan penjualan berdasarkan rentang tanggal dan outlet",
+
+    filterFrom: "Dari Tanggal",
+    filterTo: "Sampai Tanggal",
+    filterOutlet: "Outlet",
+    filterAllOutlets: "Semua Outlet",
+    filterSearch: "Cari nomor struk",
+    filterSearchPlaceholder: "mis. DEMO1-260813-KASIR1-0001",
+    filterSubmit: "Terapkan Filter",
+
+    summaryTitle: "Ringkasan",
+    summaryGrossSales: "Gross Sales",
+    summaryDiscount: "Diskon",
+    summaryRefund: "Refund",
+    summaryNetSales: "Net Sales",
+    summaryTax: "Pajak",
+    summaryServiceCharge: "Service Charge",
+    summaryOrderCount: "Jumlah Transaksi",
+    summaryAverageCheck: "Average Check",
+
+    byProductTitle: "Penjualan per Produk",
+    colProduct: "Produk",
+    colQty: "Qty Terjual",
+    colValue: "Nilai",
+
+    byCategoryTitle: "Penjualan per Kategori",
+    colCategory: "Kategori",
+    uncategorized: "Tanpa Kategori",
+
+    byCashierTitle: "Penjualan per Kasir",
+    colCashier: "Kasir",
+    unknownCashier: "Tidak Diketahui",
+    colOrderCount: "Jumlah Transaksi",
+
+    byPaymentMethodTitle: "Penjualan per Metode Pembayaran",
+    colPaymentMethod: "Metode Pembayaran",
+    colAmount: "Nominal",
+
+    byChannelTitle: "Penjualan per Saluran",
+    colChannel: "Saluran",
+
+    byHourTitle: "Penjualan per Jam",
+    colHour: "Jam",
+
+    transactionHistoryTitle: "Riwayat Transaksi",
+    colNumber: "Nomor Struk",
+    colTime: "Jam",
+    colTotal: "Total",
+    colStatus: "Status",
+    colAction: "Aksi",
+    viewReceiptAction: "Lihat Struk",
+    paginationPrev: "Sebelumnya",
+    paginationNext: "Berikutnya",
+    paginationPageInfo: "Halaman {page} dari {totalPages}",
+
+    empty: "Tidak ada data untuk rentang tanggal ini.",
   },
 } as const;
