@@ -136,6 +136,15 @@ export const id = {
     pricesSection: "Harga per Tingkat",
     pricesHint: "Kosongkan tingkat harga yang tidak berlaku untuk produk ini.",
     pricesEmpty: "Belum ada tingkat harga. Buat dulu di halaman Tingkat Harga.",
+
+    imageSection: "Gambar Produk",
+    imageChooseButton: "Pilih Gambar",
+    imageChangeButton: "Ganti Gambar",
+    imageRemoveButton: "Hapus Gambar",
+    imageCompressing: "Mengompres...",
+    imageTypeError: "Tipe file tidak didukung. Pakai JPG, PNG, atau WebP.",
+    imageSizeError: "Ukuran gambar melebihi batas 500KB.",
+    imageHint: "Otomatis dikompres, maks 800px sisi terpanjang, 500KB.",
   },
   pos: {
     priceTierLabel: "Tingkat Harga",

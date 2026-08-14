@@ -33,7 +33,8 @@ export default async function EditProductPage({
     modifierGroupRows,
     variantRows,
     priceRows,
-    assignmentRows;
+    assignmentRows,
+    currentImageUrl: string | null;
   try {
     [product] = await db
       .select()
@@ -41,6 +42,16 @@ export default async function EditProductPage({
       .where(and(eq(products.id, productId), eq(products.businessId, businessId)));
     if (!product) {
       return notFound();
+    }
+
+    // Bucket privat -- selalu resolve ke signed URL server-side, tidak
+    // pernah simpan/pakai URL publik permanen (T09c).
+    currentImageUrl = null;
+    if (product.imagePath) {
+      const { data } = await supabase.storage
+        .from("products")
+        .createSignedUrl(product.imagePath, 3600);
+      currentImageUrl = data?.signedUrl ?? null;
     }
 
     [
@@ -121,6 +132,7 @@ export default async function EditProductPage({
       <h1 className="text-xl font-semibold">{strings.products.editTitle}</h1>
       <ProductForm
         product={product}
+        currentImageUrl={currentImageUrl}
         initialVariants={initialVariants}
         initialPrices={initialPrices}
         assignedModifierGroupIds={assignmentRows.map((a) => a.modifierGroupId)}

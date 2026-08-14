@@ -358,6 +358,7 @@ yang sudah ada di sini.
 
 ## 11. `/pos` adalah antarmuka staf, bukan antarmuka pelanggan — jangan digabung
 
+
 Dicatat di sini sebelum Fase 6 (T50 — Kiosk/QR Order, lihat
 `docs/01-TASK-BOARD.md`) mulai dikerjakan, supaya batasnya jelas sejak
 awal. `/pos` (route group `(pos)`) selalu mengasumsikan dua hal yang
@@ -372,3 +373,53 @@ terpisah dari `(pos)`, dengan alur order yang berhenti di status baru
 `payOrderWithDb`. Katalog dan `lib/calc/order-calculator.ts` boleh dipakai
 ulang (keduanya sudah tidak bergantung pada sesi kasir), tapi halaman dan
 Server Action-nya harus baru, bukan menumpangi punya `/pos`.
+
+---
+
+## 12. Gambar produk (T09c): bucket privat + RLS path-prefix + signed URL, bukan Next.js `<Image>`
+
+Bucket Storage `products` (migration 0012) **privat** (`public = false`),
+bukan bucket publik dengan path UUID yang "susah ditebak" — susah ditebak
+bukan akses terkontrol. RLS di `storage.objects` dipasang manual di SQL
+migration (Drizzle tidak punya builder untuk `storage.*`, sama alasannya
+dengan `FORCE ROW LEVEL SECURITY` di bagian 3), pola yang PERSIS sama
+dengan RLS tabel Postgres biasa, cuma predikatnya beda:
+
+```sql
+using (bucket_id = 'products' and (storage.foldername(name))[1]::uuid = any(public.auth_business_ids()))
+```
+
+`(storage.foldername(name))[1]` = segmen path pertama objek. Konvensi
+path yang dipilih supaya predikat ini bisa dipakai: **path objek
+DETERMINISTIK**, `{business_id}/{product_id}.jpg`
+(`lib/products/image.ts#getProductImagePath`) — business_id selalu jadi
+folder pertama, dan karena deterministik, upload ulang (ganti gambar)
+tinggal `upsert:true` ke path yang SAMA. Ini menghilangkan seluruh
+masalah "file lama yang tertinggal saat diganti" tanpa perlu kode
+pelacakan path lama/hapus terpisah — tidak ada window di mana dua file
+sempat ada sekaligus.
+
+Karena bucket privat, gambar tidak pernah diakses lewat URL permanen —
+selalu di-resolve ke **signed URL** (`createSignedUrl`/`createSignedUrls`,
+1 jam) di server, tepat sebelum dikirim ke klien: satu per produk di
+halaman edit dashboard, dan **satu panggilan batch** untuk semua produk
+sekaligus di `getPosCatalog()` (bukan N panggilan per produk — dengan
+25+ produk bergambar, N panggilan terpisah akan terasa di waktu muat
+layar kasir).
+
+**Sengaja TIDAK pakai `next/image`** untuk merender gambar ini, walau itu
+pilihan default Next.js untuk gambar eksternal: (1) perlu menambah
+`images.remotePatterns` untuk domain Storage Supabase, permukaan config
+baru untuk sesuatu yang bisa diselesaikan dengan `<img>` biasa; (2)
+signed URL BERUBAH tiap kali di-generate ulang (token di query string) —
+ini melemahkan optimasi cache bawaan `next/image` yang mengandalkan URL
+stabil. Sebagai gantinya: `<img loading="lazy" decoding="async">` biasa +
+ukuran tetap (`aspect-square`, supaya tidak ada layout shift) — cukup
+untuk grid kasir tetap responsif dengan 25+ produk bergambar, karena
+gambar offscreen tidak pernah di-decode sampai discroll ke layar.
+
+Diverifikasi dengan test isolasi tenant yang setara
+`lib/auth/__tests__/tenant-isolation.test.ts` tapi untuk Storage:
+`src/lib/db/__tests__/storage-tenant-isolation.test.ts` — business A
+benar-benar ditolak (bukan diasumsikan tertolak) saat mencoba
+`download()`/`list()` objek business B.

@@ -1,4 +1,5 @@
 import { and, asc, eq, inArray, isNull } from "drizzle-orm";
+import type { SupabaseClient } from "@supabase/supabase-js";
 import type { UserDbHandle } from "@/lib/db/client";
 import {
   categories,
@@ -36,6 +37,7 @@ export type PosProduct = {
   categoryName: string | null;
   isTaxable: boolean;
   pricesByTier: Record<string, string>; // priceTierId -> harga; tier tanpa harga tidak ada key-nya
+  imageUrl: string | null; // signed URL (T09c), bukan path -- siap-pakai di <img>
   variants: PosVariant[];
   modifierGroups: PosModifierGroup[];
 };
@@ -81,7 +83,8 @@ export type PosDevice = {
  */
 export async function getPosCatalog(
   db: UserDbHandle["db"],
-  businessId: string
+  businessId: string,
+  supabase: SupabaseClient
 ): Promise<{
   outlet: PosOutlet;
   device: PosDevice;
@@ -147,6 +150,7 @@ export async function getPosCatalog(
       categoryId: products.categoryId,
       categoryName: categories.name,
       isTaxable: products.isTaxable,
+      imagePath: products.imagePath,
     })
     .from(products)
     .leftJoin(categories, eq(products.categoryId, categories.id))
@@ -251,6 +255,25 @@ export async function getPosCatalog(
     groupsByProduct.set(a.productId, list);
   }
 
+  // Signed URL di-generate BATCH (satu panggilan untuk semua produk
+  // bergambar), bukan satu per produk -- penting untuk performa dengan
+  // 25+ produk (T09c). Bucket privat, jadi tidak ada jalan lain selain
+  // signed URL untuk setiap gambar yang mau ditampilkan.
+  const imagePaths = productRows
+    .map((p) => p.imagePath)
+    .filter((path): path is string => path !== null);
+  const signedUrlByPath = new Map<string, string>();
+  if (imagePaths.length > 0) {
+    const { data: signedUrls } = await supabase.storage
+      .from("products")
+      .createSignedUrls(imagePaths, 3600);
+    for (const entry of signedUrls ?? []) {
+      if (entry.signedUrl && !entry.error) {
+        signedUrlByPath.set(entry.path ?? "", entry.signedUrl);
+      }
+    }
+  }
+
   const posProducts: PosProduct[] = productRows.map((p) => ({
     id: p.id,
     name: p.name,
@@ -258,6 +281,7 @@ export async function getPosCatalog(
     categoryName: p.categoryName,
     isTaxable: p.isTaxable,
     pricesByTier: pricesByProduct.get(p.id) ?? {},
+    imageUrl: p.imagePath ? (signedUrlByPath.get(p.imagePath) ?? null) : null,
     variants: variantsByProduct.get(p.id) ?? [],
     modifierGroups: groupsByProduct.get(p.id) ?? [],
   }));

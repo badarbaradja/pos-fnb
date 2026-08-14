@@ -330,7 +330,10 @@ export const products = pgTable(
     barcode: text("barcode"),
     name: text("name").notNull(),
     description: text("description"),
-    imageUrl: text("image_url"),
+    // Path relatif di bucket Storage 'products' ({business_id}/{id}.jpg),
+    // BUKAN URL siap-pakai -- bucket privat, selalu di-resolve ke signed
+    // URL saat dibaca (T09c). Lihat lib/products/image.ts#getProductImagePath.
+    imagePath: text("image_path"),
     productType: productTypeEnum("product_type").notNull().default("recipe"),
     // 'simple'  : dijual utuh, stok dikurangi langsung (botol Aqua, snack)
     // 'recipe'  : dibuat dari bahan, stok bahan yang dikurangi (latte, nasi goreng)

@@ -15,6 +15,7 @@ import {
   priceTiers,
 } from "@/lib/db/schema";
 import { generateId } from "@/lib/utils/id";
+import { getProductImagePath, validateProductImage } from "@/lib/products/image";
 import { id as strings } from "@/lib/i18n/id";
 
 const productTypeValues = [
@@ -104,7 +105,8 @@ export async function saveProduct(
     "product.manage"
   );
 
-  let productId = parsed.data.id;
+  const isNewProduct = !parsed.data.id;
+  const productId = parsed.data.id ?? generateId();
 
   try {
     // Grup modifier & tingkat harga milik bisnis lain tidak boleh ter-assign
@@ -135,8 +137,44 @@ export async function saveProduct(
           typeof entry.price === "string" && entry.price.trim() !== ""
       );
 
+    // --- Gambar produk (T09c) --- productId sudah pasti ada di titik ini
+    // (baru digenerate di atas kalau produk baru), jadi path deterministik
+    // {businessId}/{productId}.jpg sudah bisa dipakai SEBELUM transaction
+    // DB. Validasi di sini adalah penegakan SUNGGUHAN (bukan cuma di
+    // client) -- kompresi/resize client cuma kenyamanan.
+    const imageFile = formData.get("imageFile");
+    const imageRemoved = formData.get("imageRemoved") === "1";
+    // undefined = kolom imagePath tidak disentuh sama sekali (tidak ada
+    // file baru & tidak dihapus) -- beda dari null (dihapus).
+    let imagePathUpdate: string | null | undefined;
+
+    if (imageFile instanceof File && imageFile.size > 0) {
+      const validationError = validateProductImage(imageFile);
+      if (validationError) {
+        return { error: validationError };
+      }
+      const path = getProductImagePath(businessId, productId);
+      // upsert:true ke path DETERMINISTIK -- mengganti gambar = menimpa
+      // langsung, tidak pernah ada file lama tertinggal (lihat komentar
+      // getProductImagePath). Pakai `supabase` (sesi user), bukan admin
+      // client, supaya RLS Storage yang baru dibuat benar-benar dilewati
+      // jalur produksi (CLAUDE.md §3.4).
+      const { error: uploadError } = await supabase.storage
+        .from("products")
+        .upload(path, imageFile, { upsert: true, contentType: "image/jpeg" });
+      if (uploadError) {
+        console.error("Upload gambar produk gagal:", uploadError);
+        return { error: strings.common.unexpectedError };
+      }
+      imagePathUpdate = path;
+    } else if (imageRemoved) {
+      const path = getProductImagePath(businessId, productId);
+      await supabase.storage.from("products").remove([path]);
+      imagePathUpdate = null;
+    }
+
     await db.transaction(async (tx) => {
-      if (productId) {
+      if (!isNewProduct) {
         await tx
           .update(products)
           .set({
@@ -153,10 +191,10 @@ export async function saveProduct(
             prepMinutes: parsed.data.prepMinutes ?? null,
             sortOrder: parsed.data.sortOrder,
             isActive: parsed.data.isActive,
+            ...(imagePathUpdate !== undefined ? { imagePath: imagePathUpdate } : {}),
           })
           .where(and(eq(products.id, productId), eq(products.businessId, businessId)));
       } else {
-        productId = generateId();
         await tx.insert(products).values({
           id: productId,
           businessId,
@@ -165,6 +203,7 @@ export async function saveProduct(
           barcode: parsed.data.barcode ?? null,
           name: parsed.data.name,
           description: parsed.data.description ?? null,
+          imagePath: imagePathUpdate ?? null,
           productType: parsed.data.productType,
           trackStock: parsed.data.trackStock,
           isFavorite: parsed.data.isFavorite,
@@ -190,13 +229,13 @@ export async function saveProduct(
             .where(
               and(
                 eq(productVariants.id, variant.id),
-                eq(productVariants.productId, productId!)
+                eq(productVariants.productId, productId)
               )
             );
         } else {
           await tx.insert(productVariants).values({
             id: generateId(),
-            productId: productId!,
+            productId: productId,
             name: variant.name,
             sku: variant.sku ?? null,
             priceDelta: String(variant.priceDelta),
@@ -211,7 +250,7 @@ export async function saveProduct(
           .insert(productPrices)
           .values({
             id: generateId(),
-            productId: productId!,
+            productId: productId,
             variantId: null,
             priceTierId: entry.tierId,
             outletId: null,
@@ -234,7 +273,7 @@ export async function saveProduct(
       const existingAssignments = await tx
         .select({ modifierGroupId: productModifierGroups.modifierGroupId })
         .from(productModifierGroups)
-        .where(eq(productModifierGroups.productId, productId!));
+        .where(eq(productModifierGroups.productId, productId));
       const existingIds = new Set(existingAssignments.map((a) => a.modifierGroupId));
       const selectedIds = new Set(selectedModifierGroupIds);
 
@@ -244,7 +283,7 @@ export async function saveProduct(
       if (toInsert.length > 0) {
         await tx.insert(productModifierGroups).values(
           toInsert.map((modifierGroupId) => ({
-            productId: productId!,
+            productId: productId,
             modifierGroupId,
           }))
         );
@@ -254,7 +293,7 @@ export async function saveProduct(
           .delete(productModifierGroups)
           .where(
             and(
-              eq(productModifierGroups.productId, productId!),
+              eq(productModifierGroups.productId, productId),
               inArray(productModifierGroups.modifierGroupId, toDelete)
             )
           );

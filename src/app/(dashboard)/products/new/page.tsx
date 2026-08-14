@@ -49,6 +49,7 @@ export default async function NewProductPage() {
       </div>
       <h1 className="text-xl font-semibold">{strings.products.addTitle}</h1>
       <ProductForm
+        currentImageUrl={null}
         initialVariants={[]}
         initialPrices={{}}
         assignedModifierGroupIds={[]}

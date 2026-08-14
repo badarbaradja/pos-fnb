@@ -9,6 +9,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Separator } from "@/components/ui/separator";
+import { ProductImageField } from "@/components/dashboard/products/product-image-field";
 import {
   Select,
   SelectContent,
@@ -39,6 +40,7 @@ export type ProductFormValue = {
   barcode: string | null;
   name: string;
   description: string | null;
+  imagePath: string | null;
   productType: string;
   trackStock: boolean;
   isFavorite: boolean;
@@ -81,6 +83,7 @@ function newVariantRow(): VariantValue {
 
 export function ProductForm({
   product,
+  currentImageUrl,
   initialVariants,
   initialPrices,
   assignedModifierGroupIds,
@@ -89,6 +92,7 @@ export function ProductForm({
   modifierGroups,
 }: {
   product?: ProductFormValue;
+  currentImageUrl: string | null;
   initialVariants: VariantValue[];
   initialPrices: Record<string, string>;
   assignedModifierGroupIds: string[];
@@ -120,6 +124,7 @@ export function ProductForm({
         <h2 className="text-sm font-semibold text-muted-foreground">
           {strings.products.coreSection}
         </h2>
+        <ProductImageField currentImageUrl={currentImageUrl} productName={product?.name ?? ""} />
         <div className="flex flex-col gap-2">
           <Label htmlFor="name">{strings.products.name}</Label>
           <Input id="name" name="name" defaultValue={product?.name} required />

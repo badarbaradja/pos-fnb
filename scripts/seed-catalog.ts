@@ -4,6 +4,7 @@ loadEnv({ path: [".env.local", ".env"], quiet: true });
 import { and, eq } from "drizzle-orm";
 import { Decimal } from "decimal.js";
 import { getAdminDb } from "../src/lib/db/client";
+import { createSupabaseAdminClient } from "../src/lib/auth/supabase";
 import {
   categories,
   priceTiers,
@@ -16,6 +17,8 @@ import {
 } from "../src/lib/db/schema";
 import { generateId } from "../src/lib/utils/id";
 import { roundTo } from "../src/lib/utils/money";
+import { getProductImagePath } from "../src/lib/products/image";
+import { makeSolidColorPng } from "./seed-placeholder-image";
 import { getDemoBusinessId } from "./seed-shared";
 
 /**
@@ -152,6 +155,47 @@ const PRODUCT_DATA: {
     ],
   },
 ];
+
+// T09c: 2-3 produk demo dapat gambar contoh (kotak warna solid, jelas
+// placeholder, bukan foto berhak cipta) supaya demo tidak kosong.
+const DEMO_PRODUCT_IMAGES: Record<string, [number, number, number]> = {
+  Espresso: [109, 76, 65], // coklat kopi
+  "Nasi Goreng Spesial": [217, 119, 6], // oranye hangat
+  Croissant: [217, 180, 138], // krem pastri
+};
+
+async function seedProductImage(
+  db: Db,
+  businessId: string,
+  productId: string,
+  productName: string
+): Promise<void> {
+  const color = DEMO_PRODUCT_IMAGES[productName];
+  if (!color) return;
+
+  const [existing] = await db
+    .select({ imagePath: products.imagePath })
+    .from(products)
+    .where(eq(products.id, productId));
+  if (existing?.imagePath) {
+    return; // idempoten -- sudah pernah di-seed
+  }
+
+  const png = makeSolidColorPng(400, color);
+  const path = getProductImagePath(businessId, productId);
+  // createSupabaseAdminClient() -- operasi sistem (seed), sama alasannya
+  // dengan getAdminDb() di atas (CLAUDE.md §3.4).
+  const admin = createSupabaseAdminClient();
+  const { error: uploadError } = await admin.storage
+    .from("products")
+    .upload(path, png, { upsert: true, contentType: "image/png" });
+  if (uploadError) {
+    throw new Error(`Gagal upload gambar placeholder untuk ${productName}: ${uploadError.message}`);
+  }
+
+  await db.update(products).set({ imagePath: path }).where(eq(products.id, productId));
+  console.log(`[products] gambar placeholder di-set untuk ${productName}`);
+}
 
 async function upsertCategory(
   db: Db,
@@ -373,6 +417,7 @@ async function main() {
         sortOrder: sortOrder++,
       });
       productCount++;
+      await seedProductImage(db, businessId, productId, item.name);
 
       if (group.isDrink) {
         await upsertVariant(db, productId, {

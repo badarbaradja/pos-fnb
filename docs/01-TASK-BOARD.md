@@ -47,10 +47,16 @@ Login owner/manajer via Supabase Auth. Login kasir via PIN (bcrypt). Helper `get
 **[ ] T09 — CRUD produk**
 Halaman dashboard: daftar produk, tambah/edit, kategori, varian, modifier, harga multi-tier.
 
-**[ ] T09c — Upload gambar produk**
-Supabase Storage bucket 'products', kebijakan akses per business_id,
-komponen upload dengan kompresi client-side (maks 500KB, resize ke 800px),
-preview, dan hapus gambar lama saat diganti.
+**[x] T09c — Upload gambar produk**
+Bucket Storage `products` privat + RLS path-prefix per `business_id`
+(`{business_id}/{product_id}.jpg`, deterministik — ganti gambar = upsert
+ke path yang sama, tidak pernah ada file lama tertinggal). Kompresi
+client-side (canvas, maks 800px sisi terpanjang, iteratif turun kualitas
+sampai ≤500KB), validasi tipe+ukuran diulang di server (`saveProduct`)
+sebagai penegakan sungguhan. Tampil di grid kasir (`getPosCatalog` batch
+signed URL, bukan N per produk) dengan fallback inisial+warna
+deterministik kalau kosong. 2-3 produk demo dapat gambar placeholder
+(kotak warna solid, digenerate tanpa dependency baru).
 
 **[x] T10 — Seed data demo (katalog)**
 Script seed satu cafe fiktif: 5 kategori, 4 tingkat harga

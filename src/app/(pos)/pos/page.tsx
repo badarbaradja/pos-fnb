@@ -17,7 +17,7 @@ export default async function PosPage() {
     // Katalog di-fetch SEKALI di sini saat halaman dibuka -- interaksi di
     // klien (tap produk, filter kategori, cari, ganti tingkat harga) murni
     // di memori, tidak memicu query baru (kesepakatan T12).
-    catalog = await getPosCatalog(db, businessId);
+    catalog = await getPosCatalog(db, businessId, supabase);
 
     // Gate T15: layar kasir tidak boleh dipakai kalau belum ada shift
     // terbuka untuk device ini -- tanpa shift tidak ada rekonsiliasi kas.
