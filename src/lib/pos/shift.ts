@@ -104,6 +104,42 @@ export function isShiftSellable(shift: OpenShiftRow | null): shift is OpenShiftR
   return shift !== null && shift.countedCash === null;
 }
 
+export type OpenShiftSummaryRow = {
+  id: string;
+  outletId: string;
+  outletName: string;
+  employeeId: string;
+  employeeName: string;
+  openedAt: Date;
+};
+
+/**
+ * SEMUA shift status='open' di bisnis ini (bukan per-device seperti
+ * getOpenShiftForDevice) -- dipakai dashboard owner (T18) untuk "siapa yang
+ * sedang bertugas". Sengaja tipe terpisah dari OpenShiftRow: tidak ikut
+ * countedCash/expectedCash/cashVariance, dashboard cuma perlu identitas +
+ * jam buka, bukan data rekonsiliasi kas.
+ */
+export async function getOpenShiftsForBusiness(
+  db: Db,
+  businessId: string
+): Promise<OpenShiftSummaryRow[]> {
+  return db
+    .select({
+      id: shifts.id,
+      outletId: shifts.outletId,
+      outletName: outlets.name,
+      employeeId: shifts.employeeId,
+      employeeName: employees.fullName,
+      openedAt: shifts.openedAt,
+    })
+    .from(shifts)
+    .innerJoin(employees, eq(shifts.employeeId, employees.id))
+    .innerJoin(outlets, eq(shifts.outletId, outlets.id))
+    .where(and(eq(shifts.businessId, businessId), eq(shifts.status, "open")))
+    .orderBy(shifts.openedAt);
+}
+
 // ---------------------------------------------------------------------
 // Buka shift
 // ---------------------------------------------------------------------

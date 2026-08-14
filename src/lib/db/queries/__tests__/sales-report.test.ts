@@ -17,6 +17,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { config as loadEnv } from "dotenv";
 import { eq } from "drizzle-orm";
 import { Decimal } from "decimal.js";
+import { format, parseISO, subDays } from "date-fns";
 loadEnv({ path: [".env.local", ".env"], quiet: true });
 
 import { getAdminDb } from "@/lib/db/client";
@@ -40,7 +41,9 @@ import { openShiftWithDb } from "@/lib/pos/shift";
 import { payOrderWithDb } from "@/lib/pos/pay-order";
 import { refundOrderWithDb, voidOrderWithDb } from "@/lib/pos/void-refund";
 import {
+  getSalesByDay,
   getSalesByHour,
+  getSalesByOutlet,
   getSalesByPaymentMethod,
   getSalesByProduct,
   getSalesSummary,
@@ -317,6 +320,79 @@ describe.skipIf(!hasEnv)("T17 — laporan penjualan", () => {
     });
     expect(summaryOutside.grossSales).toBe("99000.00");
     expect(summaryOutside.orderCount).toBe(1);
+  });
+
+  it("getSalesByDay mengelompokkan per business_date, urut kronologis (T18)", async () => {
+    const yesterday = format(subDays(parseISO(today), 1), "yyyy-MM-dd");
+
+    await db.insert(orders).values({
+      id: generateId(),
+      businessId,
+      outletId,
+      number: `${PREFIX}-DAY-YDAY`,
+      status: "paid",
+      businessDate: yesterday,
+      paidAt: new Date(),
+      subtotal: "30000",
+      discountTotal: "0",
+      netSales: "30000",
+      taxAmount: "0",
+      serviceCharge: "0",
+      total: "30000",
+    });
+
+    const rows = await getSalesByDay(db, {
+      businessId,
+      outletId,
+      startDate: yesterday,
+      endDate: today,
+    });
+
+    // Urut kronologis (ASC) -- beda dari breakdown lain yang ORDER BY nilai DESC.
+    expect(rows.map((r) => r.businessDate)).toEqual([yesterday, today]);
+    const yesterdayRow = rows.find((r) => r.businessDate === yesterday);
+    expect(new Decimal(yesterdayRow?.netSales ?? "0").toString()).toBe("30000");
+  });
+
+  it("getSalesByOutlet memisahkan angka per outlet dengan benar (T18)", async () => {
+    const [secondOutlet] = await db
+      .insert(outlets)
+      .values({ businessId, code: "SR2", name: `${PREFIX}_outlet2` })
+      .returning({ id: outlets.id });
+    const secondOutletId = secondOutlet!.id;
+    // Tidak perlu cleanup manual -- outlet ini ikut kehapus oleh cascade
+    // saat afterAll menghapus businessId (outlets.business_id ON DELETE CASCADE),
+    // order barunya ikut kehapus oleh afterAll (delete orders WHERE business_id).
+
+    await db.insert(orders).values({
+      id: generateId(),
+      businessId,
+      outletId: secondOutletId,
+      number: `${PREFIX}-OUTLET2-0001`,
+      status: "paid",
+      businessDate: today,
+      paidAt: new Date(),
+      subtotal: "45000",
+      discountTotal: "0",
+      netSales: "45000",
+      taxAmount: "0",
+      serviceCharge: "0",
+      total: "45000",
+    });
+
+    const rows = await getSalesByOutlet(db, {
+      businessId,
+      outletId: null,
+      startDate: today,
+      endDate: today,
+    });
+
+    const outlet1Row = rows.find((r) => r.outletId === outletId);
+    const outlet2Row = rows.find((r) => r.outletId === secondOutletId);
+    expect(outlet2Row?.outletName).toBe(`${PREFIX}_outlet2`);
+    expect(new Decimal(outlet2Row?.netSales ?? "0").toString()).toBe("45000");
+    expect(outlet1Row).toBeDefined();
+    expect(new Decimal(outlet1Row?.netSales ?? "0").greaterThan(0)).toBe(true);
   });
 
   it("getSalesByHour pakai timezone BISNIS (WITA), bukan UTC/timezone server", async () => {

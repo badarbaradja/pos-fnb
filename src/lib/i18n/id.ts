@@ -38,6 +38,7 @@ export const id = {
   },
   nav: {
     appName: "Dashboard",
+    dashboard: "Ringkasan",
     products: "Produk",
     categories: "Kategori",
     priceTiers: "Tingkat Harga",
@@ -418,5 +419,32 @@ export const id = {
     paginationPageInfo: "Halaman {page} dari {totalPages}",
 
     empty: "Tidak ada data untuk rentang tanggal ini.",
+  },
+  dashboardHome: {
+    title: "Ringkasan Hari Ini",
+    subtitle: "Sekilas performa bisnis Anda hari ini",
+
+    kpiOmzet: "Omzet Hari Ini",
+    kpiOmzetVsLastWeek: "vs hari yang sama minggu lalu",
+    kpiOrderCount: "Jumlah Transaksi",
+    kpiAverageCheck: "Average Check",
+    kpiNoComparison: "Belum ada data pembanding",
+
+    trendTitle: "Tren Penjualan 7 Hari Terakhir",
+
+    topProductsTitle: "5 Item Terlaris Hari Ini",
+    topProductsEmpty: "Belum ada penjualan hari ini.",
+
+    shiftStatusTitle: "Status Shift",
+    shiftStatusEmpty: "Tidak ada shift yang sedang berjalan.",
+    shiftSince: "sejak {time}",
+
+    outletComparisonTitle: "Perbandingan Antar Outlet",
+
+    profitTitle: "Laba Kotor & Laba Bersih",
+    profitPlaceholder:
+      "Menyusul — laba kotor butuh data HPP (Fase 2) dan laba bersih butuh biaya operasional (Fase 3).",
+
+    loading: "Memuat...",
   },
 } as const;

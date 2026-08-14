@@ -54,6 +54,15 @@ export function primeCostRate(
   return foodCostRateValue.plus(laborCostRateValue);
 }
 
+/** (current - previous) / previous. previous nol -> null (bukan Infinity/NaN). */
+export function percentChange(
+  current: Decimal,
+  previous: Decimal
+): Decimal | null {
+  if (previous.isZero()) return null;
+  return current.minus(previous).dividedBy(previous);
+}
+
 export function averageCheck(
   netSales: Decimal,
   orderCount: Decimal

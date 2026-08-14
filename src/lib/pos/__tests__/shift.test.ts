@@ -36,6 +36,7 @@ import {
   addCashMovementWithDb,
   confirmShiftCloseWithDb,
   getOpenShiftForDevice,
+  getOpenShiftsForBusiness,
   isShiftSellable,
   openShiftWithDb,
   submitCountedCashWithDb,
@@ -374,5 +375,53 @@ describe.skipIf(!hasEnv)("T15 — siklus shift", () => {
       reason: "harusnya ditolak",
     });
     expect(afterLock.error).toBeTruthy();
+  });
+
+  it("getOpenShiftsForBusiness mengembalikan SEMUA shift terbuka bisnis ini; shift closed tidak ikut (T18)", async () => {
+    const secondPin = "135791";
+    const secondEmployeeCode = "SHIFTKASIR2";
+    const secondPinHash = await hashPin(secondPin);
+    const [secondEmployee] = await db
+      .insert(employees)
+      .values({
+        businessId,
+        outletId,
+        code: secondEmployeeCode,
+        fullName: `${PREFIX}_employee2`,
+        role: "cashier",
+        pinHash: secondPinHash,
+      })
+      .returning({ id: employees.id });
+    const secondEmployeeId = secondEmployee!.id;
+
+    const [secondDevice] = await db
+      .insert(devices)
+      .values({ businessId, outletId, serialNumber: "SHIFTDEV2", name: "Kasir Uji 2" })
+      .returning({ id: devices.id });
+    const secondDeviceId = secondDevice!.id;
+
+    const opened = await openShiftWithDb(db, businessId, {
+      id: generateId(),
+      outletId,
+      deviceId: secondDeviceId,
+      employeeCode: secondEmployeeCode,
+      pin: secondPin,
+      openingCash: "0",
+    });
+    expect(opened.error).toBeUndefined();
+    const secondShiftId = opened.success!.shiftId;
+
+    const openList = await getOpenShiftsForBusiness(db, businessId);
+    const ourShift = openList.find((s) => s.id === secondShiftId);
+    expect(ourShift).toBeDefined();
+    expect(ourShift?.employeeId).toBe(secondEmployeeId);
+    expect(ourShift?.outletName).toBeTruthy();
+
+    // Tutup langsung lewat admin db (alur submitCountedCash/confirmShiftClose
+    // bukan yang diuji di sini) lalu pastikan TIDAK ikut lagi.
+    await db.update(shifts).set({ status: "closed" }).where(eq(shifts.id, secondShiftId));
+
+    const afterClose = await getOpenShiftsForBusiness(db, businessId);
+    expect(afterClose.find((s) => s.id === secondShiftId)).toBeUndefined();
   });
 });

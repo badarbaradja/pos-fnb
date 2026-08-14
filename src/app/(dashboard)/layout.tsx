@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { id } from "@/lib/i18n/id";
 
 const navItems = [
+  { href: "/", label: id.nav.dashboard },
   { href: "/products", label: id.nav.products },
   { href: "/categories", label: id.nav.categories },
   { href: "/price-tiers", label: id.nav.priceTiers },

@@ -1,7 +1,15 @@
 import { and, desc, eq, gte, ilike, inArray, lte, sql } from "drizzle-orm";
 import { Decimal } from "decimal.js";
 import type { UserDbHandle } from "@/lib/db/client";
-import { businesses, employees, orderItems, orders, payments, refunds } from "@/lib/db/schema";
+import {
+  businesses,
+  employees,
+  orderItems,
+  orders,
+  outlets,
+  payments,
+  refunds,
+} from "@/lib/db/schema";
 import { averageCheck } from "@/lib/calc/kpi";
 
 /**
@@ -372,4 +380,67 @@ export async function getTransactionHistory(
     })),
     totalCount: Number(countRow?.count ?? "0"),
   };
+}
+
+// ---------------------------------------------------------------------
+// 9. Per hari (tren, T18) -- beda dari breakdown lain: ORDER BY tanggal
+//    ASC (kronologis untuk grafik), bukan ORDER BY nilai DESC.
+// ---------------------------------------------------------------------
+
+export type SalesByDayRow = {
+  businessDate: string;
+  orderCount: number;
+  netSales: string;
+};
+
+/**
+ * Refund TIDAK ditetokan per hari, sama seperti breakdown produk/kategori/
+ * dst di atas -- ikut keputusan scoping T17 (refund cuma dikurangkan di
+ * getSalesSummary), bukan pengecualian baru.
+ */
+export async function getSalesByDay(db: Db, filter: SalesReportFilter): Promise<SalesByDayRow[]> {
+  const rows = await db
+    .select({
+      businessDate: orders.businessDate,
+      orderCount: sql<string>`count(*)`,
+      netSales: sql<string>`coalesce(sum(${orders.netSales}), '0')`,
+    })
+    .from(orders)
+    .where(buildOrderFilter(filter))
+    .groupBy(orders.businessDate)
+    .orderBy(orders.businessDate);
+
+  return rows.map((r) => ({ ...r, orderCount: Number(r.orderCount) }));
+}
+
+// ---------------------------------------------------------------------
+// 10. Per outlet (perbandingan multi-outlet, T18)
+// ---------------------------------------------------------------------
+
+export type SalesByOutletRow = {
+  outletId: string;
+  outletName: string;
+  orderCount: number;
+  netSales: string;
+};
+
+/** Dipanggil dengan filter.outletId selalu null -- tujuannya justru melihat semua outlet sekaligus. */
+export async function getSalesByOutlet(
+  db: Db,
+  filter: SalesReportFilter
+): Promise<SalesByOutletRow[]> {
+  const rows = await db
+    .select({
+      outletId: outlets.id,
+      outletName: outlets.name,
+      orderCount: sql<string>`count(*)`,
+      netSales: sql<string>`coalesce(sum(${orders.netSales}), '0')`,
+    })
+    .from(orders)
+    .innerJoin(outlets, eq(orders.outletId, outlets.id))
+    .where(buildOrderFilter(filter))
+    .groupBy(outlets.id, outlets.name)
+    .orderBy(desc(sql`sum(${orders.netSales})`));
+
+  return rows.map((r) => ({ ...r, orderCount: Number(r.orderCount) }));
 }

@@ -20,6 +20,7 @@ import {
   occupancyCostRate,
   primeCostRate,
   averageCheck,
+  percentChange,
   salesPerGuest,
   voidRate,
   discountRate,
@@ -76,6 +77,21 @@ describe("averageCheck", () => {
   });
   it("orderCount = 0 -> null", () => {
     expect(averageCheck(D(10000), D(0))).toBeNull();
+  });
+});
+
+describe("percentChange", () => {
+  it("naik: (current - previous) / previous (pecahan)", () => {
+    expect(percentChange(D(1200), D(1000))!.toString()).toBe("0.2");
+  });
+  it("turun: hasil negatif", () => {
+    expect(percentChange(D(800), D(1000))!.toString()).toBe("-0.2");
+  });
+  it("previous = 0 -> null", () => {
+    expect(percentChange(D(500), D(0))).toBeNull();
+  });
+  it("previous = 0 dan current = 0 -> tetap null", () => {
+    expect(percentChange(D(0), D(0))).toBeNull();
   });
 });
 
