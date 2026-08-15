@@ -7,7 +7,7 @@ import { type NextRequest, NextResponse } from "next/server";
  * tengah sesi browser tanpa pernah diperbarui — Server Component/Action
  * baru sadar sesi habis setelah user sudah gagal login diam-diam.
  */
-export async function middleware(request: NextRequest) {
+export async function proxy(request: NextRequest) {
   let response = NextResponse.next({ request });
 
   const supabaseUrl = process.env["NEXT_PUBLIC_SUPABASE_URL"];

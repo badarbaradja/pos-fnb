@@ -53,7 +53,7 @@ export async function createServerSupabaseClient() {
           } catch {
             // Dipanggil dari Server Component (bukan Server Action/Route
             // Handler) -> tidak boleh set cookie. Aman diabaikan selama ada
-            // middleware yang me-refresh sesi di request berikutnya.
+            // proxy yang me-refresh sesi di request berikutnya.
           }
         },
       },
