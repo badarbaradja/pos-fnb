@@ -33,16 +33,20 @@ export function ProductGrid({
   }, [products, search, categoryId]);
 
   return (
-    <div className="flex h-full flex-col gap-3 p-4">
+    <div className="flex flex-col gap-3 p-4 md:h-full">
       <Input
         value={search}
         onChange={(e) => setSearch(e.target.value)}
         placeholder={strings.pos.searchPlaceholder}
       />
-      <div className="flex flex-wrap gap-2">
+      {/* flex-nowrap + overflow-x-auto -- TIDAK PERNAH menumpuk ke banyak
+          baris, di semua breakpoint (T18b). 15 kategori Indokopi dulu
+          makan 3 baris dengan flex-wrap, menyita ruang grid produk. */}
+      <div className="flex flex-nowrap gap-2 overflow-x-auto">
         <Button
           type="button"
           size="sm"
+          className="h-11"
           variant={categoryId === null ? "default" : "outline"}
           onClick={() => setCategoryId(null)}
         >
@@ -53,6 +57,7 @@ export function ProductGrid({
             key={c.id}
             type="button"
             size="sm"
+            className="h-11"
             variant={categoryId === c.id ? "default" : "outline"}
             onClick={() => setCategoryId(c.id)}
           >
@@ -63,12 +68,13 @@ export function ProductGrid({
       {filtered.length === 0 ? (
         <p className="text-sm text-muted-foreground">{strings.pos.emptyProducts}</p>
       ) : (
-        // min-h-0 sama alasannya dengan cart-panel.tsx: tanpa ini,
-        // flex-1 + overflow-y-auto tidak benar-benar membatasi tinggi
-        // grid produk, jadi tidak pernah scroll -- mendorong konten
-        // di bawahnya (tidak ada di sini, tapi mencegah masalah yang
-        // sama muncul kalau nanti ada elemen setelah grid ini).
-        <div className="grid min-h-0 flex-1 grid-cols-2 gap-3 overflow-y-auto pb-4 sm:grid-cols-3 lg:grid-cols-4">
+        // Mobile: scroll halaman biasa, tanpa batas tinggi sendiri --
+        // pb-20 kasih jarak ke MobileCartBar (56px) yang melayang di
+        // bawah (T18b). md ke atas: scroll internal kolom ini sendiri,
+        // min-h-0 wajib supaya flex-1+overflow-y-auto benar-benar
+        // membatasi tinggi (tanpa ini tidak pernah discroll, mendorong
+        // konten di bawahnya).
+        <div className="grid grid-cols-2 gap-3 pb-20 sm:grid-cols-3 md:min-h-0 md:flex-1 md:overflow-y-auto md:pb-4 lg:grid-cols-4">
           {filtered.map((p) => (
             <ProductCard
               key={p.id}

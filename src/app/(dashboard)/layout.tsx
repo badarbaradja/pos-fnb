@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { getCurrentBusiness, getSession } from "@/lib/auth/session";
 import { logout } from "@/lib/auth/actions";
 import { Button } from "@/components/ui/button";
+import { MobileNavDrawer } from "@/components/dashboard/mobile-nav-drawer";
 import { id } from "@/lib/i18n/id";
 
 const navItems = [
@@ -29,8 +30,21 @@ export default async function DashboardLayout({
   const business = await getCurrentBusiness();
 
   return (
-    <div className="flex flex-1">
-      <aside className="flex w-56 shrink-0 flex-col gap-4 border-r p-4">
+    <div className="flex flex-1 flex-col lg:flex-row">
+      {/* Topbar mobile/tablet (<1024px) -- cuma hamburger, sidebar penuh
+          disembunyikan (T18b). Dari lg: ke atas topbar ini hilang total,
+          sidebar tetap seperti sebelumnya. */}
+      <div className="flex items-center gap-2 border-b p-3 lg:hidden">
+        <MobileNavDrawer
+          navItems={navItems}
+          appName={id.nav.appName}
+          roleLabel={business?.role ?? null}
+          logoutAction={logout}
+          logoutLabel={id.auth.logout}
+        />
+        <span className="font-semibold">{id.nav.appName}</span>
+      </div>
+      <aside className="hidden w-56 shrink-0 flex-col gap-4 border-r p-4 lg:flex">
         <div>
           <div className="font-semibold">{id.nav.appName}</div>
           {business ? (
