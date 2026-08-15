@@ -441,6 +441,12 @@ export const priceTiers = pgTable(
       "0"
     ),
     isDefault: boolean("is_default").notNull().default(false),
+    // Master data tidak pernah dihapus, cuma dinonaktifkan (CLAUDE.md §3.2)
+    // -- tier nonaktif tetap tersimpan (bisa diaktifkan lagi kalau nanti
+    // dipakai lagi, mis. mulai jualan GoFood) tapi tidak muncul di selector
+    // kasir. Default true supaya tier lama (sebelum kolom ini ada) tidak
+    // diam-diam hilang dari POS setelah migration.
+    isActive: boolean("is_active").notNull().default(true),
   },
   (t) => [
     unique().on(t.businessId, t.code),

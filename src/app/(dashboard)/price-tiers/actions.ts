@@ -87,3 +87,44 @@ export async function savePriceTier(
   revalidatePath("/price-tiers");
   return {};
 }
+
+export type SetPriceTierActiveResult = { error?: string };
+
+/**
+ * Tombol nonaktifkan/aktifkan terpisah dari form edit -- tier TIDAK PERNAH
+ * dihapus (master data, CLAUDE.md §3.2), cuma disembunyikan dari selector
+ * kasir (get-pos-catalog.ts) supaya bisa diaktifkan lagi kalau nanti
+ * dipakai lagi (mis. mulai jualan GoFood).
+ */
+export async function setPriceTierActive(
+  id: string,
+  isActive: boolean
+): Promise<SetPriceTierActiveResult> {
+  const parsed = z.object({ id: z.string().uuid(), isActive: z.boolean() }).safeParse({
+    id,
+    isActive,
+  });
+  if (!parsed.success) {
+    return { error: parsed.error.issues[0]?.message ?? strings.common.unexpectedError };
+  }
+
+  const supabase = await createServerSupabaseClient();
+  const { db, closeDb, businessId } = await requirePermissionDb(
+    supabase,
+    "price.manage"
+  );
+
+  try {
+    await db
+      .update(priceTiers)
+      .set({ isActive: parsed.data.isActive })
+      .where(
+        and(eq(priceTiers.id, parsed.data.id), eq(priceTiers.businessId, businessId))
+      );
+  } finally {
+    await closeDb();
+  }
+
+  revalidatePath("/price-tiers");
+  return {};
+}

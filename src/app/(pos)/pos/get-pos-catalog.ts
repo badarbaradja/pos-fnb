@@ -129,10 +129,10 @@ export async function getPosCatalog(
   const priceTierRows = await db
     .select()
     .from(priceTiers)
-    .where(eq(priceTiers.businessId, businessId))
+    .where(and(eq(priceTiers.businessId, businessId), eq(priceTiers.isActive, true)))
     .orderBy(asc(priceTiers.code));
   if (priceTierRows.length === 0) {
-    throw new Error("Belum ada tingkat harga untuk bisnis ini.");
+    throw new Error("Belum ada tingkat harga AKTIF untuk bisnis ini.");
   }
   const defaultPriceTierId =
     priceTierRows.find((t) => t.isDefault)?.id ?? priceTierRows[0]!.id;

@@ -46,6 +46,8 @@ export const id = {
     employees: "Karyawan",
     devices: "Perangkat",
     reports: "Laporan Penjualan",
+    openMenu: "Buka menu",
+    closeMenu: "Tutup menu",
   },
   employees: {
     title: "Karyawan",
@@ -140,6 +142,11 @@ export const id = {
     isDefault: "Jadikan default",
     empty: "Belum ada tingkat harga. Tambah tingkat harga pertama.",
     duplicateCode: "Kode sudah dipakai tingkat harga lain",
+    colStatus: "Status",
+    deactivateButton: "Nonaktifkan",
+    activateButton: "Aktifkan",
+    deactivateSuccess: "Tingkat harga dinonaktifkan, tidak lagi muncul di layar kasir",
+    activateSuccess: "Tingkat harga diaktifkan lagi",
   },
   modifierGroups: {
     title: "Grup Modifier",
@@ -236,6 +243,8 @@ export const id = {
 
     cartTitle: "Keranjang",
     cartEmpty: "Keranjang masih kosong. Tap produk untuk menambah.",
+    viewCartButton: "Lihat Keranjang",
+    closeCart: "Tutup keranjang",
     qty: "Qty",
     removeLine: "Hapus",
     noteLabel: "Catatan item",

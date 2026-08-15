@@ -14,6 +14,7 @@ import {
 } from "@/components/ui/table";
 import { id as strings } from "@/lib/i18n/id";
 import { PriceTierFormDialog } from "./price-tier-form-dialog";
+import { PriceTierToggleActiveButton } from "./price-tier-row-actions";
 
 export default async function PriceTiersPage() {
   const supabase = await createServerSupabaseClient();
@@ -59,6 +60,7 @@ export default async function PriceTiersPage() {
               <TableHead>{strings.priceTiers.name}</TableHead>
               <TableHead>{strings.priceTiers.channel}</TableHead>
               <TableHead>{strings.priceTiers.markupPercent}</TableHead>
+              <TableHead>{strings.priceTiers.colStatus}</TableHead>
               <TableHead className="text-right">
                 {strings.common.actions}
               </TableHead>
@@ -76,15 +78,26 @@ export default async function PriceTiersPage() {
                 <TableCell>{row.name}</TableCell>
                 <TableCell>{row.channel ?? "-"}</TableCell>
                 <TableCell>{row.markupPercent ?? "0"}%</TableCell>
+                <TableCell>
+                  <Badge variant={row.isActive ? "default" : "secondary"}>
+                    {row.isActive ? strings.common.active : strings.common.inactive}
+                  </Badge>
+                </TableCell>
                 <TableCell className="text-right">
-                  <PriceTierFormDialog
-                    priceTier={row}
-                    trigger={
-                      <Button variant="ghost" size="sm">
-                        {strings.common.edit}
-                      </Button>
-                    }
-                  />
+                  <div className="flex items-center justify-end gap-1">
+                    <PriceTierFormDialog
+                      priceTier={row}
+                      trigger={
+                        <Button variant="ghost" size="sm">
+                          {strings.common.edit}
+                        </Button>
+                      }
+                    />
+                    <PriceTierToggleActiveButton
+                      priceTierId={row.id}
+                      isActive={row.isActive}
+                    />
+                  </div>
                 </TableCell>
               </TableRow>
             ))}
