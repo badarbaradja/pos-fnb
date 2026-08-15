@@ -11,6 +11,7 @@ const navItems = [
   { href: "/products", label: id.nav.products },
   { href: "/categories", label: id.nav.categories },
   { href: "/price-tiers", label: id.nav.priceTiers },
+  { href: "/payment-methods", label: id.nav.paymentMethods },
   { href: "/modifier-groups", label: id.nav.modifierGroups },
   { href: "/employees", label: id.nav.employees },
   { href: "/devices", label: id.nav.devices },
