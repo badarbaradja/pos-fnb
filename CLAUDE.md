@@ -120,6 +120,9 @@ Sebuah tugas dianggap selesai kalau **semua** ini terpenuhi:
 
 - [ ] `npm run typecheck` lolos tanpa error
 - [ ] `npm run lint` lolos
+- [ ] `npm run build` lolos tanpa error (typecheck+lint tidak menangkap
+      semua kesalahan — mis. rantai import server-only yang bocor ke
+      Client Component cuma ketahuan saat build, ditemukan T15b)
 - [ ] `npm run test` lolos, termasuk test baru untuk kode yang ditambahkan
 - [ ] Tidak ada `any` tanpa komentar alasan
 - [ ] Tidak ada `console.log` yang tertinggal

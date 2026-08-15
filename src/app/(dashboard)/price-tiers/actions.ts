@@ -6,6 +6,7 @@ import { and, eq } from "drizzle-orm";
 import { createServerSupabaseClient } from "@/lib/auth/supabase";
 import { requirePermissionDb } from "@/lib/auth/permissions";
 import { priceTiers } from "@/lib/db/schema";
+import { isUniqueViolation } from "@/lib/db/errors";
 import { generateId } from "@/lib/utils/id";
 import { id as strings } from "@/lib/i18n/id";
 
@@ -75,7 +76,7 @@ export async function savePriceTier(
       });
     }
   } catch (err) {
-    if (err && typeof err === "object" && "code" in err && err.code === "23505") {
+    if (isUniqueViolation(err)) {
       return { error: strings.priceTiers.duplicateCode };
     }
     throw err;

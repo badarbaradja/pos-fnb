@@ -12,6 +12,7 @@
     "test:watch": "vitest",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
+    "db:migrate:prod": "drizzle-kit migrate --config drizzle.config.production.ts",
     "seed:demo": "tsx scripts/seed-demo.ts",
     "seed:catalog": "tsx scripts/seed-catalog.ts",
     "bootstrap:production": "tsx scripts/bootstrap-production.ts",

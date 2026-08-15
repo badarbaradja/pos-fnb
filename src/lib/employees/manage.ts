@@ -2,6 +2,7 @@ import { z } from "zod";
 import { and, eq } from "drizzle-orm";
 import type { UserDbHandle } from "@/lib/db/client";
 import { employees } from "@/lib/db/schema";
+import { isUniqueViolation } from "@/lib/db/errors";
 import { generateId } from "@/lib/utils/id";
 import { hashPin } from "@/lib/auth/pin";
 import { hasOpenShiftForEmployee } from "@/lib/pos/shift";
@@ -47,16 +48,6 @@ export type EmployeeActionResult = {
   error?: string;
   success?: { employeeId: string };
 };
-
-function isUniqueViolation(err: unknown): boolean {
-  // Drizzle membungkus PostgresError asli sebagai `.cause` (pesan luarnya
-  // "Failed query: ...") -- cek keduanya supaya tidak bergantung versi.
-  if (err && typeof err === "object" && "code" in err && err.code === "23505") {
-    return true;
-  }
-  const cause = err && typeof err === "object" ? (err as { cause?: unknown }).cause : undefined;
-  return Boolean(cause && typeof cause === "object" && "code" in cause && cause.code === "23505");
-}
 
 export async function createEmployeeWithDb(
   db: Db,
