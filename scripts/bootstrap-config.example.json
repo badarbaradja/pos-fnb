@@ -1,0 +1,18 @@
+{
+  "ownerEmail": "owner@contoh.com",
+  "business": {
+    "name": "Nama Bisnis",
+    "timezone": "Asia/Jakarta"
+  },
+  "outlet": {
+    "name": "Nama Outlet",
+    "code": "KODE",
+    "address": "Alamat lengkap outlet",
+    "dayCutoffTime": "04:00",
+    "taxPercent": 10,
+    "taxInclusive": false,
+    "serviceChargePercent": 0,
+    "cashEnabled": true,
+    "roundingTo": 100
+  }
+}

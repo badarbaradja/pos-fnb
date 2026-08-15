@@ -106,6 +106,13 @@ Omzet hari ini, jumlah transaksi, average check, grafik 7 hari, item terlaris.
 **[ ] T19 — Deploy**
 Cloudflare Workers via OpenNext + Supabase prod. Uji semua alur di production sebelum kasih ke klien.
 
+**[ ] T19b — Lupa password owner**
+Ditemukan saat bootstrap produksi (T19): satu-satunya jalan pemulihan
+password owner sekarang adalah Supabase Dashboard (operator manual,
+klien tidak bisa lakukan sendiri). Butuh alur "lupa password" biasa
+(reset via email) sebelum benar-benar diserahkan ke klien yang tidak
+punya akses dashboard Supabase.
+
 **[ ] T20 — Uji lapangan**
 Pasang paralel di cafe pilot selama seminggu, jalan bersama sistem lama mereka. Catat semua keluhan. Ini lebih berharga dari dua minggu coding.
 

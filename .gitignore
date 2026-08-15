@@ -47,3 +47,7 @@ next-env.d.ts
 .dev.vars*
 !.dev.vars.example
 cloudflare-env.d.ts
+
+# scripts -- config bootstrap produksi (data bisnis klien sungguhan, T19)
+scripts/bootstrap-config.json
+!scripts/bootstrap-config.example.json
