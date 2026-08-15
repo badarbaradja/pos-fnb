@@ -309,6 +309,9 @@ export const categories = pgTable(
     color: text("color"),
     sortOrder: integer("sort_order").notNull().default(0),
     parentId: uuid("parent_id").references((): AnyPgColumn => categories.id),
+    // Master data tidak pernah dihapus, cuma dinonaktifkan (CLAUDE.md §3.2)
+    // -- kategori nonaktif tidak muncul sebagai chip filter di layar kasir.
+    isActive: boolean("is_active").notNull().default(true),
   },
   (t) => [
     pgPolicy("categories_select", {
@@ -532,6 +535,9 @@ export const modifierGroups = pgTable(
     minSelect: integer("min_select").notNull().default(0),
     maxSelect: integer("max_select").notNull().default(1),
     isRequired: boolean("is_required").notNull().default(false),
+    // Master data tidak pernah dihapus, cuma dinonaktifkan (CLAUDE.md §3.2)
+    // -- grup nonaktif tidak lagi ditawarkan di dialog pilih modifier kasir.
+    isActive: boolean("is_active").notNull().default(true),
   },
   (t) => [
     pgPolicy("modifier_groups_select", {
@@ -562,6 +568,9 @@ export const modifiers = pgTable(
     ingredientId: uuid("ingredient_id"), // konsumsi bahan -- tabel ingredients belum ada (Fase 2)
     ingredientQty: numeric("ingredient_qty", { precision: 16, scale: 4 }), // misal extra shot = 9 gram kopi
     sortOrder: integer("sort_order").notNull().default(0),
+    // Master data tidak pernah dihapus, cuma dinonaktifkan (CLAUDE.md §3.2)
+    // -- modifier nonaktif tidak lagi ditawarkan di dialog pilih modifier kasir.
+    isActive: boolean("is_active").notNull().default(true),
   },
   (t) => [
     pgPolicy("modifiers_select", {

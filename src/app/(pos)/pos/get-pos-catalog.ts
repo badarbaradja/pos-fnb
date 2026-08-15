@@ -140,7 +140,7 @@ export async function getPosCatalog(
   const categoryRows = await db
     .select()
     .from(categories)
-    .where(eq(categories.businessId, businessId))
+    .where(and(eq(categories.businessId, businessId), eq(categories.isActive, true)))
     .orderBy(asc(categories.sortOrder), asc(categories.name));
 
   const productRows = await db
@@ -203,7 +203,12 @@ export async function getPosCatalog(
           modifierGroups,
           eq(productModifierGroups.modifierGroupId, modifierGroups.id)
         )
-        .where(inArray(productModifierGroups.productId, productIds))
+        .where(
+          and(
+            inArray(productModifierGroups.productId, productIds),
+            eq(modifierGroups.isActive, true)
+          )
+        )
     : [];
 
   const groupIds = [...new Set(assignmentRows.map((a) => a.groupId))];
@@ -211,7 +216,9 @@ export async function getPosCatalog(
     ? await db
         .select()
         .from(modifiers)
-        .where(inArray(modifiers.modifierGroupId, groupIds))
+        .where(
+          and(inArray(modifiers.modifierGroupId, groupIds), eq(modifiers.isActive, true))
+        )
         .orderBy(asc(modifiers.sortOrder), asc(modifiers.name))
     : [];
 

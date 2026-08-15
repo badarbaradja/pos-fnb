@@ -3,6 +3,7 @@ import { createServerSupabaseClient } from "@/lib/auth/supabase";
 import { requirePermissionDb } from "@/lib/auth/permissions";
 import { categories } from "@/lib/db/schema";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import {
   Table,
   TableBody,
@@ -13,6 +14,7 @@ import {
 } from "@/components/ui/table";
 import { id as strings } from "@/lib/i18n/id";
 import { CategoryFormDialog } from "./category-form-dialog";
+import { CategoryToggleActiveButton } from "./category-row-actions";
 
 export default async function CategoriesPage() {
   const supabase = await createServerSupabaseClient();
@@ -56,6 +58,7 @@ export default async function CategoriesPage() {
             <TableRow>
               <TableHead>{strings.categories.name}</TableHead>
               <TableHead>{strings.categories.sortOrder}</TableHead>
+              <TableHead>{strings.categories.colStatus}</TableHead>
               <TableHead className="text-right">
                 {strings.common.actions}
               </TableHead>
@@ -72,15 +75,26 @@ export default async function CategoriesPage() {
                   {row.name}
                 </TableCell>
                 <TableCell>{row.sortOrder}</TableCell>
+                <TableCell>
+                  <Badge variant={row.isActive ? "default" : "secondary"}>
+                    {row.isActive ? strings.common.active : strings.common.inactive}
+                  </Badge>
+                </TableCell>
                 <TableCell className="text-right">
-                  <CategoryFormDialog
-                    category={row}
-                    trigger={
-                      <Button variant="ghost" size="sm">
-                        {strings.common.edit}
-                      </Button>
-                    }
-                  />
+                  <div className="flex items-center justify-end gap-1">
+                    <CategoryFormDialog
+                      category={row}
+                      trigger={
+                        <Button variant="ghost" size="sm">
+                          {strings.common.edit}
+                        </Button>
+                      }
+                    />
+                    <CategoryToggleActiveButton
+                      categoryId={row.id}
+                      isActive={row.isActive}
+                    />
+                  </div>
                 </TableCell>
               </TableRow>
             ))}

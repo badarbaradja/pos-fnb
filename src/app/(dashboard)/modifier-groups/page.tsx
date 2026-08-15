@@ -4,6 +4,7 @@ import { createServerSupabaseClient } from "@/lib/auth/supabase";
 import { requirePermissionDb } from "@/lib/auth/permissions";
 import { modifierGroups } from "@/lib/db/schema";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import {
   Table,
   TableBody,
@@ -14,6 +15,7 @@ import {
 } from "@/components/ui/table";
 import { id as strings } from "@/lib/i18n/id";
 import { ModifierGroupFormDialog } from "./modifier-group-form-dialog";
+import { ModifierGroupToggleActiveButton } from "./modifier-group-row-actions";
 
 export default async function ModifierGroupsPage() {
   const supabase = await createServerSupabaseClient();
@@ -59,6 +61,7 @@ export default async function ModifierGroupsPage() {
               <TableHead>{strings.modifierGroups.minSelect}</TableHead>
               <TableHead>{strings.modifierGroups.maxSelect}</TableHead>
               <TableHead>{strings.modifierGroups.isRequired}</TableHead>
+              <TableHead>{strings.modifierGroups.colStatus}</TableHead>
               <TableHead className="text-right">
                 {strings.common.actions}
               </TableHead>
@@ -73,7 +76,12 @@ export default async function ModifierGroupsPage() {
                 <TableCell>
                   {row.isRequired ? strings.common.active : strings.common.inactive}
                 </TableCell>
-                <TableCell className="flex justify-end gap-2">
+                <TableCell>
+                  <Badge variant={row.isActive ? "default" : "secondary"}>
+                    {row.isActive ? strings.common.active : strings.common.inactive}
+                  </Badge>
+                </TableCell>
+                <TableCell className="flex justify-end gap-1">
                   <Button
                     variant="ghost"
                     size="sm"
@@ -91,6 +99,10 @@ export default async function ModifierGroupsPage() {
                         {strings.common.edit}
                       </Button>
                     }
+                  />
+                  <ModifierGroupToggleActiveButton
+                    modifierGroupId={row.id}
+                    isActive={row.isActive}
                   />
                 </TableCell>
               </TableRow>

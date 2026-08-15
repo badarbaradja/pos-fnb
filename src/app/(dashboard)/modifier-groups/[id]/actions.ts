@@ -92,3 +92,61 @@ export async function saveModifier(
   revalidatePath(`/modifier-groups/${parsed.data.modifierGroupId}`);
   return {};
 }
+
+export type SetModifierActiveResult = { error?: string };
+
+/**
+ * Modifier TIDAK PERNAH dihapus (master data, CLAUDE.md §3.2), cuma
+ * disembunyikan dari dialog pilih modifier di layar kasir
+ * (get-pos-catalog.ts sudah filter isActive).
+ */
+export async function setModifierActive(
+  id: string,
+  modifierGroupId: string,
+  isActive: boolean
+): Promise<SetModifierActiveResult> {
+  const parsed = z
+    .object({ id: z.string().uuid(), modifierGroupId: z.string().uuid(), isActive: z.boolean() })
+    .safeParse({ id, modifierGroupId, isActive });
+  if (!parsed.success) {
+    return { error: parsed.error.issues[0]?.message ?? strings.common.unexpectedError };
+  }
+
+  const supabase = await createServerSupabaseClient();
+  const { db, closeDb, businessId } = await requirePermissionDb(
+    supabase,
+    "product.manage"
+  );
+
+  try {
+    // business_id difilter eksplisit lewat parent modifier_groups -- RLS
+    // lapisan terakhir, bukan satu-satunya (CLAUDE.md §3.4).
+    const [group] = await db
+      .select({ id: modifierGroups.id })
+      .from(modifierGroups)
+      .where(
+        and(
+          eq(modifierGroups.id, parsed.data.modifierGroupId),
+          eq(modifierGroups.businessId, businessId)
+        )
+      );
+    if (!group) {
+      return { error: strings.common.unexpectedError };
+    }
+
+    await db
+      .update(modifiers)
+      .set({ isActive: parsed.data.isActive })
+      .where(
+        and(
+          eq(modifiers.id, parsed.data.id),
+          eq(modifiers.modifierGroupId, parsed.data.modifierGroupId)
+        )
+      );
+  } finally {
+    await closeDb();
+  }
+
+  revalidatePath(`/modifier-groups/${parsed.data.modifierGroupId}`);
+  return {};
+}

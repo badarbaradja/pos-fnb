@@ -80,3 +80,46 @@ export async function saveModifierGroup(
   revalidatePath("/modifier-groups");
   return {};
 }
+
+export type SetModifierGroupActiveResult = { error?: string };
+
+/**
+ * Grup modifier TIDAK PERNAH dihapus (master data, CLAUDE.md §3.2), cuma
+ * disembunyikan dari dialog pilih modifier di layar kasir
+ * (get-pos-catalog.ts sudah filter isActive).
+ */
+export async function setModifierGroupActive(
+  id: string,
+  isActive: boolean
+): Promise<SetModifierGroupActiveResult> {
+  const parsed = z.object({ id: z.string().uuid(), isActive: z.boolean() }).safeParse({
+    id,
+    isActive,
+  });
+  if (!parsed.success) {
+    return { error: parsed.error.issues[0]?.message ?? strings.common.unexpectedError };
+  }
+
+  const supabase = await createServerSupabaseClient();
+  const { db, closeDb, businessId } = await requirePermissionDb(
+    supabase,
+    "product.manage"
+  );
+
+  try {
+    await db
+      .update(modifierGroups)
+      .set({ isActive: parsed.data.isActive })
+      .where(
+        and(
+          eq(modifierGroups.id, parsed.data.id),
+          eq(modifierGroups.businessId, businessId)
+        )
+      );
+  } finally {
+    await closeDb();
+  }
+
+  revalidatePath("/modifier-groups");
+  return {};
+}

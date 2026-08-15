@@ -5,6 +5,7 @@ import { createServerSupabaseClient } from "@/lib/auth/supabase";
 import { requirePermissionDb } from "@/lib/auth/permissions";
 import { modifierGroups, modifiers } from "@/lib/db/schema";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import {
   Table,
   TableBody,
@@ -15,6 +16,7 @@ import {
 } from "@/components/ui/table";
 import { id as strings } from "@/lib/i18n/id";
 import { ModifierFormDialog } from "./modifier-form-dialog";
+import { ModifierToggleActiveButton } from "./modifier-row-actions";
 
 export default async function ModifierGroupDetailPage({
   params,
@@ -84,6 +86,7 @@ export default async function ModifierGroupDetailPage({
               <TableHead>{strings.modifiers.name}</TableHead>
               <TableHead>{strings.modifiers.price}</TableHead>
               <TableHead>{strings.modifiers.sortOrder}</TableHead>
+              <TableHead>{strings.modifiers.colStatus}</TableHead>
               <TableHead className="text-right">
                 {strings.common.actions}
               </TableHead>
@@ -95,16 +98,28 @@ export default async function ModifierGroupDetailPage({
                 <TableCell>{row.name}</TableCell>
                 <TableCell>{row.price}</TableCell>
                 <TableCell>{row.sortOrder}</TableCell>
+                <TableCell>
+                  <Badge variant={row.isActive ? "default" : "secondary"}>
+                    {row.isActive ? strings.common.active : strings.common.inactive}
+                  </Badge>
+                </TableCell>
                 <TableCell className="text-right">
-                  <ModifierFormDialog
-                    modifierGroupId={modifierGroupId}
-                    modifier={row}
-                    trigger={
-                      <Button variant="ghost" size="sm">
-                        {strings.common.edit}
-                      </Button>
-                    }
-                  />
+                  <div className="flex items-center justify-end gap-1">
+                    <ModifierFormDialog
+                      modifierGroupId={modifierGroupId}
+                      modifier={row}
+                      trigger={
+                        <Button variant="ghost" size="sm">
+                          {strings.common.edit}
+                        </Button>
+                      }
+                    />
+                    <ModifierToggleActiveButton
+                      modifierId={row.id}
+                      modifierGroupId={modifierGroupId}
+                      isActive={row.isActive}
+                    />
+                  </div>
                 </TableCell>
               </TableRow>
             ))}

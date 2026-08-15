@@ -73,3 +73,41 @@ export async function saveCategory(
   revalidatePath("/categories");
   return {};
 }
+
+export type SetCategoryActiveResult = { error?: string };
+
+/**
+ * Kategori TIDAK PERNAH dihapus (master data, CLAUDE.md §3.2), cuma
+ * disembunyikan dari chip filter di layar kasir (get-pos-catalog.ts sudah
+ * filter isActive).
+ */
+export async function setCategoryActive(
+  id: string,
+  isActive: boolean
+): Promise<SetCategoryActiveResult> {
+  const parsed = z.object({ id: z.string().uuid(), isActive: z.boolean() }).safeParse({
+    id,
+    isActive,
+  });
+  if (!parsed.success) {
+    return { error: parsed.error.issues[0]?.message ?? strings.common.unexpectedError };
+  }
+
+  const supabase = await createServerSupabaseClient();
+  const { db, closeDb, businessId } = await requirePermissionDb(
+    supabase,
+    "product.manage"
+  );
+
+  try {
+    await db
+      .update(categories)
+      .set({ isActive: parsed.data.isActive })
+      .where(and(eq(categories.id, parsed.data.id), eq(categories.businessId, businessId)));
+  } finally {
+    await closeDb();
+  }
+
+  revalidatePath("/categories");
+  return {};
+}
