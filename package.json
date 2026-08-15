@@ -15,6 +15,7 @@
     "db:migrate:prod": "drizzle-kit migrate --config drizzle.config.production.ts",
     "seed:demo": "tsx scripts/seed-demo.ts",
     "seed:catalog": "tsx scripts/seed-catalog.ts",
+    "seed:indokopi-catalog": "tsx scripts/seed-indokopi-catalog.ts",
     "bootstrap:production": "tsx scripts/bootstrap-production.ts",
     "preview": "opennextjs-cloudflare build && opennextjs-cloudflare preview",
     "deploy": "opennextjs-cloudflare build && opennextjs-cloudflare deploy",
