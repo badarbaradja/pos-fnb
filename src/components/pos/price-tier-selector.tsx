@@ -17,7 +17,9 @@ export function PriceTierSelector({
   trailing?: React.ReactNode;
 }) {
   return (
-    <div className="flex items-center gap-3 border-b p-3">
+    // sticky, bukan bagian dari height-chain manapun -- tetap kelihatan
+    // waktu halaman discroll (lihat komentar di (pos)/layout.tsx).
+    <div className="sticky top-0 z-30 flex items-center gap-3 border-b bg-background p-3">
       <Label className="text-xs text-muted-foreground">
         {strings.pos.priceTierLabel}
       </Label>

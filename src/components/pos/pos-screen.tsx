@@ -82,7 +82,7 @@ export function PosScreen({
   }
 
   return (
-    <div className="flex min-h-dvh flex-col md:h-full">
+    <div className="flex min-h-dvh flex-col">
       <PriceTierSelector
         priceTiers={priceTiers}
         value={priceTierId}
@@ -108,7 +108,7 @@ export function PosScreen({
           </div>
         }
       />
-      <div className="grid grid-cols-1 md:min-h-0 md:flex-1 md:grid-cols-[1fr_360px]">
+      <div className="grid grid-cols-1 md:grid-cols-[1fr_360px]">
         <ProductGrid
           products={products}
           categories={categories}
