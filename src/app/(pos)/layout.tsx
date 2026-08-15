@@ -14,19 +14,16 @@ export default async function PosLayout({
     redirect("/login");
   }
 
-  // Dulu di sini ada h-dvh + overflow-hidden dari md ke atas, mengaktifkan
-  // rantai tinggi pasti (min-h-0/flex-1) di pos-screen.tsx/product-grid.tsx
-  // supaya ProductGrid scroll SENDIRI di kolomnya (bukan halaman). Rantai
-  // itu terbukti rapuh -- product grid gagal discroll sama sekali di
-  // pengujian nyata, dan cart-panel.tsx punya catatan soal leluhur tak
-  // dikenal di pohon ini yang pernah bikin position:fixed salah anchor
-  // (lihat komentar di cart-panel.tsx). Karena CartPanel SUDAH sepenuhnya
-  // lepas dari flow halaman (fixed + portal ke document.body, lihat
-  // cart-panel.tsx), rantai tinggi-pasti ini tidak lagi punya fungsi selain
-  // bikin ProductGrid scroll sendiri -- diganti scroll halaman biasa di
-  // semua breakpoint (lebih sederhana, tidak butuh setiap elemen di
-  // tengah pohon menghitung tinggi pasti dengan benar). Header Tingkat
-  // Harga tetap kelihatan waktu scroll lewat position:sticky di
-  // price-tier-selector.tsx, bukan lewat pemotongan tinggi presisi.
-  return <div className="min-h-dvh">{children}</div>;
+  // h-dvh + overflow-hidden HANYA dari md ke atas -- itu yang mengaktifkan
+  // rantai tinggi pasti (min-h-0/flex-1) yang dipakai product-grid.tsx dan
+  // cart-panel.tsx untuk scroll internal per kolom di desktop. Di layar
+  // sempit, ProductGrid dan CartPanel jadi dua baris bertumpuk (grid-cols-1
+  // di pos-screen.tsx), dan tumpukan auto-row itu TIDAK ikut terbagi rapi
+  // oleh min-h-0/flex-1 -- CartPanel jadi tumbuh sebebas kontennya, lalu
+  // overflow-hidden di sini memotongnya (footer/tombol Bayar "tenggelam",
+  // tidak bisa di-scroll ke sana sama sekali). Makanya di layar sempit
+  // biarkan halaman tumbuh & scroll alami (min-h-dvh, tanpa overflow-hidden)
+  // -- tombol Bayar tetap kelihatan lewat position:fixed di cart-panel.tsx,
+  // bukan lewat pemotongan tinggi presisi.
+  return <div className="min-h-dvh md:h-dvh md:overflow-hidden">{children}</div>;
 }

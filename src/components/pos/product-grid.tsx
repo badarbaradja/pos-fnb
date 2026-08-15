@@ -33,7 +33,7 @@ export function ProductGrid({
   }, [products, search, categoryId]);
 
   return (
-    <div className="flex flex-col gap-3 p-4">
+    <div className="flex h-full flex-col gap-3 p-4">
       <Input
         value={search}
         onChange={(e) => setSearch(e.target.value)}
@@ -63,9 +63,12 @@ export function ProductGrid({
       {filtered.length === 0 ? (
         <p className="text-sm text-muted-foreground">{strings.pos.emptyProducts}</p>
       ) : (
-        // Scroll halaman biasa (lihat (pos)/layout.tsx) -- bukan lagi
-        // overflow-y-auto internal, jadi tidak butuh min-h-0/flex-1 di sini.
-        <div className="grid grid-cols-2 gap-3 pb-4 sm:grid-cols-3 lg:grid-cols-4">
+        // min-h-0 sama alasannya dengan cart-panel.tsx: tanpa ini,
+        // flex-1 + overflow-y-auto tidak benar-benar membatasi tinggi
+        // grid produk, jadi tidak pernah scroll -- mendorong konten
+        // di bawahnya (tidak ada di sini, tapi mencegah masalah yang
+        // sama muncul kalau nanti ada elemen setelah grid ini).
+        <div className="grid min-h-0 flex-1 grid-cols-2 gap-3 overflow-y-auto pb-4 sm:grid-cols-3 lg:grid-cols-4">
           {filtered.map((p) => (
             <ProductCard
               key={p.id}
