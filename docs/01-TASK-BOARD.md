@@ -86,6 +86,14 @@ ringkas, tanpa filter/paginasi. Ada tombol dari layar kasir ke halaman ini.
 **[x] T15 — Shift**
 Buka shift: kode karyawan + PIN (`verifyCashierPin`) + modal awal, `businessDate` dari cutoff outlet. Kas masuk/keluar selama shift berjalan. Tutup shift dua langkah: `countedCash` write-once (ditegakkan di server lewat guard `status='open' AND counted_cash IS NULL`, bukan cuma UI) dulu baru `expectedCash`/selisih dihitung & ditampilkan; selisih di atas toleransi outlet (setting `cash_variance_tolerance`, default Rp 20.000) wajib alasan sebelum shift benar-benar closed. Layar kasir (`/pos`) redirect ke `/pos/shift/open` kalau belum ada shift, atau `/pos/shift/close` kalau sedang menunggu alasan. `payOrderWithDb` mengisi `shiftId`/`cashierId` dari shift aktif device, menolak bayar kalau tidak ada.
 
+**[x] T15b — CRUD Karyawan**
+Halaman dashboard (`/employees`, permission `employee.manage`): daftar
+per outlet, tambah (kode + PIN awal 6 digit), ubah nama/role/outlet,
+reset PIN (tidak pernah menampilkan PIN lama, cuma set PIN baru),
+buka kunci akun terkunci. Nonaktifkan, bukan hapus — ditolak di server
+kalau karyawan sedang punya shift terbuka. Kode karyawan unik per
+bisnis. Karyawan nonaktif tidak lolos `verifyCashierPin`.
+
 **[x] T15c — CRUD Perangkat**
 Halaman dashboard (`/devices`, permission `employee.manage` -- BLUEPRINT
 §7 tidak punya key khusus device, dikelompokkan satu modul dengan
@@ -109,14 +117,68 @@ total dibayar. Tabel `audit_logs` (append-only) mencatat setiap void dan
 refund. Order void tetap tampil di "Transaksi Hari Ini", ditandai badge,
 otomatis keluar dari agregasi karena filter `status='paid'`.
 
-**[ ] T17 — Laporan penjualan dasar**
-Ringkasan harian, per produk, per kategori, per kasir, per metode bayar, riwayat transaksi dengan filter. Semua filter pakai `business_date`.
+**[x] T17 — Laporan penjualan dasar**
+`lib/db/queries/sales-report.ts`: `getSalesSummary`, `getSalesByProduct`,
+`getSalesByCategory`, `getSalesByCashier`, `getSalesByPaymentMethod`,
+`getSalesByChannel`, `getSalesByHour` (timezone bisnis, bukan UTC
+server), `getTransactionHistory` dengan filter. Semua filter pakai
+`business_date`, bukan `created_at`/`paid_at`. Order void tidak masuk
+ringkasan maupun breakdown produk; refund mengurangi net sales di
+ringkasan tapi tidak mengubah breakdown per produk (net dari amount
+yang ditendang, bukan amount mentah).
 
-**[ ] T18 — Dashboard owner**
-Omzet hari ini, jumlah transaksi, average check, grafik 7 hari, item terlaris.
+**[x] T18 — Dashboard owner**
+`(dashboard)/page.tsx` + `components/dashboard/home/*`: omzet hari ini
+vs hari yang sama minggu lalu (persen, `percentChange` di `kpi.ts`),
+jumlah transaksi, average check, grafik tren 7 hari (`getSalesByDay`,
+Recharts), 5 item terlaris, status shift (siapa yang sedang bertugas,
+`getOpenShiftsForBusiness`), perbandingan antar outlet kalau bisnis
+multi-outlet (`getSalesByOutlet`). Placeholder laba (HPP belum ada,
+Fase 2) ditandai jelas, bukan Rp0 yang menyesatkan. Query berat di-stream
+lewat Suspense (`deferred-sections.tsx` + `dashboard-skeleton.tsx`)
+supaya halaman terasa instan, tidak menunggu semua query sebelum
+render pertama.
 
-**[ ] T19 — Deploy**
-Cloudflare Workers via OpenNext + Supabase prod. Uji semua alur di production sebelum kasih ke klien.
+**[x] T19 — Deploy**
+Cloudflare Workers via OpenNext (`@opennextjs/cloudflare`) + project
+Supabase produksi terpisah (region Singapore). Migration selalu lewat
+`db:migrate`/`db:migrate:prod`, tidak pernah `push` (CLAUDE.md §3.6).
+`scripts/bootstrap-production.ts` (idempoten): owner + business +
+outlet pertama + metode pembayaran sesuai `cash_enabled` + device
+default, baca config dari `scripts/bootstrap-config.json`, password
+owner dari env (tidak pernah digenerate+ditampilkan). Secret Cloudflare
+lewat `wrangler secret put`, bukan di `wrangler.jsonc`. Storage bucket
+`products` + RLS-nya diverifikasi jalan di produksi (T09c). Backup
+harian lewat GitHub Actions (`.github/workflows/backup.yml`).
+
+**[x] T18b — Responsif mobile & tablet `/pos` + dashboard**
+Rancangan di `docs/04-CATATAN-TEKNIS.md` §14. Breakpoint Tailwind
+default (`md`=768px, `lg`=1024px). `/pos` mobile: keranjang jadi
+`MobileCartBar` (bar melayang, badge jumlah item + total) yang membuka
+`MobileCartSheet` (bottom sheet); grid produk dapat lebar penuh. `/pos`
+tablet: dua kolom, keranjang 280px. `/pos` desktop: keranjang 360px
+seperti sebelumnya. Tier selector & tab kategori: scroll horizontal
+satu baris di SEMUA breakpoint (sebelumnya `flex-wrap` makan sampai 3
+baris dengan 15 kategori Indokopi, menyita ruang grid produk bahkan di
+desktop). Dashboard: sidebar jadi drawer hamburger di bawah 1024px.
+Target sentuh 44px untuk semua tombol `/pos`. **Dikonfirmasi user:
+mobile dan tablet sudah benar** -- scroll desktop TIDAK ikut
+terselesaikan, dipisah ke T18c karena kasir Indokopi sehari-hari pakai
+tablet, bukan desktop.
+
+**[ ] T18c — Perbaikan scroll desktop `/pos`**
+Grid produk dan panel keranjang desktop (>1024px) masih tidak bisa
+discroll setelah dua kali percobaan perbaikan (rantai `min-h-0`/
+`flex-1`/`overflow-y-auto`, lalu percobaan "scroll halaman biasa" yang
+malah meregresi keranjang, lalu dikembalikan ke rantai height-chain
+semula). **Mobile dan tablet sudah benar sejak T18b** -- masalahnya
+spesifik di layout desktop, bukan arsitektur scroll secara umum.
+Analisis statis (baca kode) sudah dilakukan berulang tanpa hasil;
+kemungkinan penyebabnya baru ketahuan lewat inspeksi computed style
+langsung di DevTools (leluhur tak dikenal yang membentuk containing
+block baru -- dicurigai sejak catatan di `cart-panel.tsx`), bukan
+tebakan lagi dari pembacaan kode. Prioritas rendah untuk sekarang
+karena Indokopi jual lewat tablet, bukan desktop.
 
 **[ ] T19b — Lupa password owner**
 Ditemukan saat bootstrap produksi (T19): satu-satunya jalan pemulihan
