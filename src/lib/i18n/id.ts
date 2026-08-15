@@ -225,6 +225,7 @@ export const id = {
     allCategories: "Semua",
     emptyProducts: "Tidak ada produk yang cocok.",
     addedToCart: "Ditambahkan ke keranjang",
+    priceNotSet: "Harga belum diatur",
 
     dialogTitle: "Pilih Varian & Modifier",
     variantLabel: "Varian",

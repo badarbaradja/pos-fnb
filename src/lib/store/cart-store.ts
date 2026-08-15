@@ -62,6 +62,31 @@ type CartState = {
   clear: () => void;
 };
 
+/**
+ * Dua baris digabung (qty dijumlahkan) kalau product_id, variant_id, SET
+ * modifier, catatan, dan diskon item semuanya sama -- kalau ada satu saja
+ * beda (mis. catatan "tanpa gula" vs kosong), tetap baris terpisah. Modifier
+ * dibandingkan sebagai SET (urutan pilih tidak masalah), bukan array
+ * berurutan.
+ */
+function sameModifierSet(a: SelectedModifier[], b: SelectedModifier[]): boolean {
+  if (a.length !== b.length) return false;
+  const aIds = a.map((m) => m.modifierId).sort();
+  const bIds = b.map((m) => m.modifierId).sort();
+  return aIds.every((id, i) => id === bIds[i]);
+}
+
+function findMergeableLine(lines: CartLine[], candidate: CartLine): CartLine | undefined {
+  return lines.find(
+    (l) =>
+      l.productId === candidate.productId &&
+      l.variantId === candidate.variantId &&
+      l.note === candidate.note &&
+      l.itemDiscount.equals(candidate.itemDiscount) &&
+      sameModifierSet(l.modifiers, candidate.modifiers)
+  );
+}
+
 export const useCartStore = create<CartState>((set) => ({
   lines: [],
   discountType: "none",
@@ -69,17 +94,25 @@ export const useCartStore = create<CartState>((set) => ({
   orderDiscountPercentInput: new Decimal(0),
 
   addLine: (line) =>
-    set((state) => ({
-      lines: [
-        ...state.lines,
-        {
-          ...line,
-          id: generateId(),
-          itemDiscount: line.itemDiscount ?? new Decimal(0),
-          note: line.note ?? "",
-        },
-      ],
-    })),
+    set((state) => {
+      const candidate: CartLine = {
+        ...line,
+        id: generateId(),
+        itemDiscount: line.itemDiscount ?? new Decimal(0),
+        note: line.note ?? "",
+      };
+
+      const existing = findMergeableLine(state.lines, candidate);
+      if (existing) {
+        return {
+          lines: state.lines.map((l) =>
+            l.id === existing.id ? { ...l, qty: l.qty.plus(candidate.qty) } : l
+          ),
+        };
+      }
+
+      return { lines: [...state.lines, candidate] };
+    }),
 
   removeLine: (id) =>
     set((state) => ({ lines: state.lines.filter((l) => l.id !== id) })),
