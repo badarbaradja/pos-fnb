@@ -207,6 +207,15 @@ export const employees = pgTable(
       for: "insert",
       withCheck: sql`${t.businessId} = any(auth_business_ids())`,
     }),
+    // Gap dari T07 (sama pola dengan devices_update di bawah) -- tidak ada
+    // policy UPDATE berarti tidak ada UPDATE ke employees yang bisa lewat
+    // koneksi RLS-bound sama sekali. Dibutuhkan T15b untuk edit/reset PIN/
+    // buka kunci/nonaktifkan karyawan lewat dashboard.
+    pgPolicy("employees_update", {
+      for: "update",
+      using: sql`${t.businessId} = any(auth_business_ids())`,
+      withCheck: sql`${t.businessId} = any(auth_business_ids())`,
+    }),
   ]
 ).enableRLS();
 

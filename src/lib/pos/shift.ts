@@ -140,6 +140,16 @@ export async function getOpenShiftsForBusiness(
     .orderBy(shifts.openedAt);
 }
 
+/** Dipakai T15b untuk menolak menonaktifkan karyawan yang sedang bertugas. */
+export async function hasOpenShiftForEmployee(db: Db, employeeId: string): Promise<boolean> {
+  const [row] = await db
+    .select({ id: shifts.id })
+    .from(shifts)
+    .where(and(eq(shifts.employeeId, employeeId), eq(shifts.status, "open")))
+    .limit(1);
+  return row !== undefined;
+}
+
 // ---------------------------------------------------------------------
 // Buka shift
 // ---------------------------------------------------------------------

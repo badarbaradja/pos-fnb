@@ -1,0 +1,1 @@
+CREATE POLICY "employees_update" ON "employees" AS PERMISSIVE FOR UPDATE TO public USING ("employees"."business_id" = any(auth_business_ids())) WITH CHECK ("employees"."business_id" = any(auth_business_ids()));
