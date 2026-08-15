@@ -14,6 +14,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { id as strings } from "@/lib/i18n/id";
+import { ProductToggleActiveButton } from "./product-row-actions";
 
 export default async function ProductsPage() {
   const supabase = await createServerSupabaseClient();
@@ -80,12 +81,18 @@ export default async function ProductsPage() {
                   </Badge>
                 </TableCell>
                 <TableCell className="text-right">
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    nativeButton={false}
-                    render={<Link href={`/products/${row.id}`}>{strings.common.edit}</Link>}
-                  />
+                  <div className="flex items-center justify-end gap-1">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      nativeButton={false}
+                      render={<Link href={`/products/${row.id}`}>{strings.common.edit}</Link>}
+                    />
+                    <ProductToggleActiveButton
+                      productId={row.id}
+                      isActive={row.isActive}
+                    />
+                  </div>
                 </TableCell>
               </TableRow>
             ))}

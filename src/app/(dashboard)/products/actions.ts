@@ -306,3 +306,42 @@ export async function saveProduct(
   revalidatePath("/products");
   redirect(`/products/${productId}`);
 }
+
+export type SetProductActiveResult = { error?: string };
+
+/**
+ * Tombol nonaktifkan/aktifkan satu klik di daftar produk -- sebelumnya
+ * cuma bisa lewat checkbox di dalam form edit lengkap, terlalu tersembunyi
+ * untuk aksi sesering ini (audit kelengkapan master data). Produk TIDAK
+ * PERNAH dihapus (master data, CLAUDE.md §3.2).
+ */
+export async function setProductActive(
+  id: string,
+  isActive: boolean
+): Promise<SetProductActiveResult> {
+  const parsed = z.object({ id: z.string().uuid(), isActive: z.boolean() }).safeParse({
+    id,
+    isActive,
+  });
+  if (!parsed.success) {
+    return { error: parsed.error.issues[0]?.message ?? strings.common.unexpectedError };
+  }
+
+  const supabase = await createServerSupabaseClient();
+  const { db, closeDb, businessId } = await requirePermissionDb(
+    supabase,
+    "product.manage"
+  );
+
+  try {
+    await db
+      .update(products)
+      .set({ isActive: parsed.data.isActive })
+      .where(and(eq(products.id, parsed.data.id), eq(products.businessId, businessId)));
+  } finally {
+    await closeDb();
+  }
+
+  revalidatePath("/products");
+  return {};
+}
