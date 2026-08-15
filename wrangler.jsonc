@@ -15,11 +15,8 @@
   // di rencana deploy untuk daftar lengkap secret yang wajib diisi
   // sebelum `wrangler deploy` produksi jalan.
   "vars": {
-    "NEXT_PUBLIC_APP_NAME": "Nama POS Kamu",
-    // Placeholder -- ganti dengan URL *.workers.dev sesungguhnya (baru
-    // diketahui setelah deploy pertama, tergantung subdomain akun
-    // Cloudflare Anda) atau domain custom kalau sudah ada.
-    "NEXT_PUBLIC_APP_URL": "https://pos-fnb.workers.dev",
+    "NEXT_PUBLIC_APP_NAME": "Indokopi POS",
+    "NEXT_PUBLIC_APP_URL": "https://pos-fnb.badarbaradja112.workers.dev",
     "DEFAULT_TIMEZONE": "Asia/Jakarta"
   }
 }
