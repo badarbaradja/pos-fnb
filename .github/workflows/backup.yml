@@ -1,0 +1,35 @@
+name: Nightly DB Backup
+
+on:
+  schedule:
+    - cron: "0 19 * * *" # 02:00 WIB (Supabase region Singapore)
+  workflow_dispatch:
+
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+    container:
+      image: postgres:17 # matches pg_dump to a recent Postgres major version
+    steps:
+      - name: Check SUPABASE_DB_URL is set
+        env:
+          DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+        run: |
+          if [ -z "$DB_URL" ]; then
+            echo "::error::SUPABASE_DB_URL secret kosong. Set di Settings -> Secrets -> Actions sebelum backup bisa jalan."
+            exit 1
+          fi
+
+      - name: Dump database
+        env:
+          DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+        run: |
+          pg_dump "$DB_URL" --no-owner --no-acl \
+            | gzip > backup-$(date +%Y%m%d).sql.gz
+
+      - name: Upload backup artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: db-backup-${{ github.run_id }}
+          path: backup-*.sql.gz
+          retention-days: 30
