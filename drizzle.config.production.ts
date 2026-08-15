@@ -2,6 +2,7 @@ import type { Config } from "drizzle-kit";
 import { existsSync } from "node:fs";
 import { resolve } from "node:path";
 import { config as loadEnv } from "dotenv";
+import { assertValidDatabaseUrl } from "./src/lib/db/validate-database-url";
 
 /**
  * Config drizzle-kit KHUSUS produksi (T19) -- file terpisah dari
@@ -32,6 +33,16 @@ if (!databaseUrl) {
   throw new Error(
     "drizzle.config.production.ts: DATABASE_URL kosong/tidak ada di .env.production.local."
   );
+}
+
+// Ditambahkan setelah insiden: password produksi mengandung "@"/"]" yang
+// tidak di-encode membuat koneksi gagal dengan 28P01 (pesan menyesatkan,
+// terlihat seperti password salah padahal penyebabnya parsing). Gagal di
+// sini dulu, SEBELUM koneksi dibuka, dengan pesan yang menunjuk penyebabnya.
+try {
+  assertValidDatabaseUrl(databaseUrl);
+} catch (err) {
+  throw new Error(`drizzle.config.production.ts: ${(err as Error).message}`);
 }
 
 export default {
