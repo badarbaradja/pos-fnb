@@ -86,6 +86,18 @@ ringkas, tanpa filter/paginasi. Ada tombol dari layar kasir ke halaman ini.
 **[x] T15 — Shift**
 Buka shift: kode karyawan + PIN (`verifyCashierPin`) + modal awal, `businessDate` dari cutoff outlet. Kas masuk/keluar selama shift berjalan. Tutup shift dua langkah: `countedCash` write-once (ditegakkan di server lewat guard `status='open' AND counted_cash IS NULL`, bukan cuma UI) dulu baru `expectedCash`/selisih dihitung & ditampilkan; selisih di atas toleransi outlet (setting `cash_variance_tolerance`, default Rp 20.000) wajib alasan sebelum shift benar-benar closed. Layar kasir (`/pos`) redirect ke `/pos/shift/open` kalau belum ada shift, atau `/pos/shift/close` kalau sedang menunggu alasan. `payOrderWithDb` mengisi `shiftId`/`cashierId` dari shift aktif device, menolak bayar kalau tidak ada.
 
+**[x] T15c — CRUD Perangkat**
+Halaman dashboard (`/devices`, permission `employee.manage` -- BLUEPRINT
+§7 tidak punya key khusus device, dikelompokkan satu modul dengan
+employee/tenancy di M01): daftar device per outlet, tambah, ubah nama/
+outlet, nonaktifkan. Tampilkan serial number, `last_seq`, dan kapan
+terakhir sinkron. Tidak ada hapus sama sekali -- RLS `devices` cuma
+punya policy select/insert/update, master data cuma dinonaktifkan
+(CLAUDE.md §3.2) supaya nomor struk lama tetap bisa ditelusuri.
+`bootstrap-production.ts` juga diperbaiki supaya bikin satu device
+default ("Kasir 1") saat bootstrap -- sebelumnya `/pos` gagal total
+di produksi karena device aktif tidak pernah ada sama sekali.
+
 **[x] T16 — Void & refund**
 Void order paid (wajib alasan, `pos.void_after_send`), refund sebagian
 per item (nominal proporsional dari `order_items.net_amount`, tidak
