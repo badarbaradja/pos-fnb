@@ -128,6 +128,15 @@ Sebuah tugas dianggap selesai kalau **semua** ini terpenuhi:
 - [ ] Tidak ada `console.log` yang tertinggal
 - [ ] Kalau menyentuh database: migration Drizzle sudah dibuat dan RLS sudah diaktifkan
 - [ ] Kalau menyentuh `lib/calc/`: test golden case di `docs/03-CALC-SPEC.md` masih hijau
+- [ ] Kalau menyentuh middleware/proxy/config runtime (`middleware.ts`,
+      `next.config.ts`, `open-next.config.ts`, `wrangler.jsonc`): wajib
+      jalankan `npx opennextjs-cloudflare build` sampai selesai tanpa
+      error, bukan cuma `npm run build` — `next build` sendiri tidak
+      menangkap ketidakcocokan runtime Cloudflare (mis. Proxy Next.js 16
+      yang selalu Node.js runtime tapi @opennextjs/cloudflare belum
+      mendukungnya sama sekali), baru ketahuan di tahap bundling OpenNext.
+      Ini pernah bikin deploy produksi Indokopi gagal total walau
+      `npm run build` hijau.
 
 ## 7. Cara kerja yang saya harapkan dari kamu
 
