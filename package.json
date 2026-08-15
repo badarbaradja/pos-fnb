@@ -13,10 +13,15 @@
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
     "seed:demo": "tsx scripts/seed-demo.ts",
-    "seed:catalog": "tsx scripts/seed-catalog.ts"
+    "seed:catalog": "tsx scripts/seed-catalog.ts",
+    "bootstrap:production": "tsx scripts/bootstrap-production.ts",
+    "preview": "opennextjs-cloudflare build && opennextjs-cloudflare preview",
+    "deploy": "opennextjs-cloudflare build && opennextjs-cloudflare deploy",
+    "cf-typegen": "wrangler types"
   },
   "dependencies": {
     "@base-ui/react": "^1.7.0",
+    "@opennextjs/cloudflare": "^1.20.2",
     "@supabase/ssr": "^0.12.4",
     "@supabase/supabase-js": "^2.109.0",
     "bcryptjs": "^3.0.3",
@@ -53,6 +58,7 @@
     "tailwindcss": "^4",
     "tsx": "^4.23.12",
     "typescript": "^5",
-    "vitest": "^3.2.7"
+    "vitest": "^3.2.7",
+    "wrangler": "^4.123.0"
   }
 }

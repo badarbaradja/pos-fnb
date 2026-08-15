@@ -1,0 +1,19 @@
+# Dipakai `wrangler dev` / `npm run preview` untuk simulasi binding
+# Cloudflare secara lokal (T19) -- BUKAN dipakai `next dev` biasa, itu tetap
+# baca .env.local (lihat .env.example). Salin jadi `.dev.vars`, isi nilai dev
+# yang sama seperti .env.local kamu.
+#
+# Untuk secret PRODUKSI, jangan taruh di file -- pakai `wrangler secret put
+# <NAMA>` satu per satu (lihat rencana deploy T19).
+
+# ─── Supabase ────────────────────────────────────────────────
+NEXT_PUBLIC_SUPABASE_URL=https://xxxxxxxxxxxx.supabase.co
+NEXT_PUBLIC_SUPABASE_ANON_KEY=eyJhbGciOi...
+SUPABASE_SERVICE_ROLE_KEY=eyJhbGciOi...
+DATABASE_URL=postgresql://postgres.xxxx:PASSWORD@aws-0-ap-southeast-1.pooler.supabase.com:5432/postgres
+
+# ─── Aplikasi ────────────────────────────────────────────────
+NEXT_PUBLIC_APP_NAME="Nama POS Kamu"
+NEXT_PUBLIC_APP_URL=http://localhost:8788
+DEFAULT_TIMEZONE=Asia/Jakarta
+CRON_SECRET=ganti-dengan-string-acak-panjang

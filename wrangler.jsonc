@@ -1,0 +1,25 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "pos-fnb",
+  "main": ".open-next/worker.js",
+  "compatibility_date": "2026-08-15",
+  "compatibility_flags": ["nodejs_compat"],
+  "assets": {
+    "directory": ".open-next/assets",
+    "binding": "ASSETS"
+  },
+  // Non-secret saja -- boleh masuk git. Secret (semua key Supabase,
+  // DATABASE_URL, CRON_SECRET) TIDAK di sini, didaftar lewat
+  // `wrangler secret put <NAMA>` (CLAUDE.md §3.6 semangat yang sama:
+  // kredensial tidak nyangkut di file yang ikut commit). Lihat docs/T19
+  // di rencana deploy untuk daftar lengkap secret yang wajib diisi
+  // sebelum `wrangler deploy` produksi jalan.
+  "vars": {
+    "NEXT_PUBLIC_APP_NAME": "Nama POS Kamu",
+    // Placeholder -- ganti dengan URL *.workers.dev sesungguhnya (baru
+    // diketahui setelah deploy pertama, tergantung subdomain akun
+    // Cloudflare Anda) atau domain custom kalau sudah ada.
+    "NEXT_PUBLIC_APP_URL": "https://pos-fnb.workers.dev",
+    "DEFAULT_TIMEZONE": "Asia/Jakarta"
+  }
+}
