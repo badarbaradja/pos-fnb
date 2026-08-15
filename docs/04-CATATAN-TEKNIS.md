@@ -423,3 +423,154 @@ Diverifikasi dengan test isolasi tenant yang setara
 `src/lib/db/__tests__/storage-tenant-isolation.test.ts` — business A
 benar-benar ditolak (bukan diasumsikan tertolak) saat mencoba
 `download()`/`list()` objek business B.
+
+---
+
+## 13. Kenapa `src/middleware.ts`, BUKAN `src/proxy.ts` (T19)
+
+Next.js 16 mendeprecated konvensi `middleware.ts`, ganti nama jadi
+`proxy.ts` (`export function proxy` alih-alih `export function
+middleware`), dan menyediakan codemod resmi
+(`npx @next/codemod@canary middleware-to-proxy .`) untuk migrasi
+otomatis. **JANGAN jalankan codemod itu di proyek ini** sampai kondisi
+di bawah terpenuhi — sudah pernah dijalankan sekali dan membuat
+`npm run deploy` gagal total di produksi Indokopi.
+
+**Kenapa gagal:** Proxy (nama baru) **selalu** jalan di Node.js
+runtime di Next.js 16 — tidak ada cara memaksanya ke Edge runtime lewat
+config apa pun (Next.js sendiri melempar error kalau field `runtime`
+di-set di file Proxy). `@opennextjs/cloudflare` versi 1.20.2 (versi
+terbaru yang ada saat ditulis) **belum mendukung Node.js middleware
+sama sekali** — `npx opennextjs-cloudflare build` berhenti dengan
+"Node.js middleware is not currently supported. Consider switching to
+Edge Middleware." `next build` sendiri **tidak** menangkap masalah ini
+(lolos hijau), cuma ketahuan di tahap bundling OpenNext -- makanya
+Definition of Done (CLAUDE.md §6) sekarang mewajibkan
+`opennextjs-cloudflare build` untuk perubahan yang menyentuh
+middleware/proxy/config runtime.
+
+`middleware.ts` (konvensi lama, deprecated tapi masih berfungsi penuh
+di Next.js 16.3.0) tetap jalan di Edge runtime seperti sebelumnya dan
+didukung penuh oleh OpenNext -- itu yang dipakai sekarang.
+
+**Kapan boleh migrasi ke `proxy.ts` lagi:** setelah
+`@opennextjs/cloudflare` merilis versi yang mendukung Node.js
+middleware/Proxy. Cek status di
+<https://github.com/opennextjs/opennextjs-cloudflare/issues/962>
+(dan issue terkait di pihak Cloudflare,
+<https://github.com/cloudflare/workers-sdk/issues/13755> dan
+<https://github.com/cloudflare/workers-sdk/issues/13937>) sebelum
+mencoba lagi. Kalau sudah ada rilis yang mengklaim dukungan ini, tetap
+verifikasi dengan `npx opennextjs-cloudflare build` sampai selesai
+tanpa error SEBELUM commit migrasinya -- jangan percaya changelog saja.
+
+Guard auth (redirect ke `/login`) **tidak** ada di file ini, jadi
+konvensi lama/baru tidak mengubah perilaku proteksi akses sama sekali
+-- lihat komentar di `src/middleware.ts` sendiri untuk detail. Proteksi
+akses sesungguhnya ada di `getSession()`/`requirePermissionDb()` per
+layout/page.
+
+---
+
+## 14. T18b — Rancangan responsif mobile & tablet
+
+Ditulis SEBELUM kode (langkah 1 dari 3), per instruksi eksplisit --
+`/pos` dan dashboard sebelumnya cuma pernah dirancang/diuji untuk layar
+desktop lebar. Ini juga akar masalah kenapa bug scroll `/pos` desktop
+begitu sulit dilacak dua putaran sebelumnya: rantai `min-h-0`/`flex-1`
+yang ada sekarang tidak pernah didesain untuk lebih dari satu bentuk
+layout sekaligus. Breakpoint pakai default Tailwind (`md`=768px,
+`lg`=1024px) -- sama persis dengan batas yang diminta, jadi tidak perlu
+kustomisasi `tailwind.config`.
+
+### 14.1 `/pos`
+
+**Mobile (<768px, tanpa prefix):**
+- `ProductGrid` dapat lebar penuh, 2 kolom produk (sudah `grid-cols-2`
+  di `product-grid.tsx`, tidak berubah).
+- `CartPanel` (panel sisi kanan yang ada sekarang) **disembunyikan**
+  total (`hidden md:flex` di root-nya sendiri -- karena `display:none`,
+  otomatis tidak ikut dihitung sebagai grid item, tidak perlu wrapper
+  tambahan).
+- Sebagai gantinya: `MobileCartBar` -- bar melayang di bagian bawah
+  layar (`fixed inset-x-0 bottom-0`), tampil kalau keranjang tidak
+  kosong, isinya badge jumlah item + total + label "Lihat Keranjang".
+  Tap membuka `MobileCartSheet`.
+- `MobileCartSheet` -- bottom sheet (dialog base-ui yang di-style ulang
+  jadi slide-up dari bawah, tinggi ~85dvh, BUKAN memakai
+  `DialogContent` yang sudah ada supaya dialog lain di app tidak ikut
+  berubah), isinya sama persis dengan isi `CartPanel` (baris item +
+  diskon + total + tombol Bayar) tapi sebagai konten sheet yang scroll
+  alami -- TIDAK butuh trik `position:fixed`+portal seperti footer
+  `CartPanel` desktop, karena sheet-nya sendiri sudah jadi overlay
+  dengan batas tinggi sendiri.
+- Tombol Bayar di dalam sheet membuka `PaymentDialog` yang sudah ada
+  (dialog base-ui bertumpuk di atas sheet -- portal masing-masing
+  independen, didukung base-ui secara native).
+
+**Tablet (768–1024px, `md:`):** dua kolom seperti desktop
+(`grid-cols-[1fr_280px]`), tapi kolom keranjang lebih SEMPIT (280px,
+bukan 360px) -- `CartPanel` tampil (`md:flex`), rantai scroll internal
+(`md:h-full` di root, `md:min-h-0 md:flex-1 md:overflow-y-auto` di
+daftar item) TETAP SAMA seperti desktop karena breakpoint-nya memang
+sama-sama "md ke atas", cukup lebar kolomnya yang beda per `lg:`.
+
+**Desktop (>1024px, `lg:`):** sama seperti sekarang, kolom keranjang
+360px (`lg:grid-cols-[1fr_360px]`).
+
+**Tier selector & tab kategori -- SEMUA breakpoint:** baris horizontal
+scroll (`flex flex-nowrap overflow-x-auto`, bukan `flex-wrap`), tidak
+pernah menumpuk ke banyak baris. Ini juga memperbaiki desktop: dengan
+15 kategori Indokopi, `flex-wrap` sebelumnya makan 3 baris dan menyita
+ruang vertikal grid produk -- scroll horizontal satu baris konsisten
+di semua ukuran, bukan cuma perbaikan mobile.
+
+**Header shift-info (trailing di `PriceTierSelector`) -- mobile only:**
+info "Kasir aktif" + tombol Tutup Shift/Transaksi Hari Ini/Kas pindah
+ke baris KEDUA di bawah baris tier selector (`flex-col md:flex-row`)
+supaya tidak berdesakan dengan tier yang sudah scroll horizontal --
+tablet/desktop tetap satu baris seperti sekarang.
+
+### 14.2 Dashboard (`(dashboard)/layout.tsx`)
+
+**<1024px (di bawah `lg:`):** `<aside>` sidebar yang ada sekarang
+disembunyikan (`hidden lg:flex`). Sebagai gantinya: tombol hamburger di
+header/topbar (baru, belum ada topbar mobile sama sekali sekarang --
+ditambahkan) membuka `MobileNavDrawer`, dialog base-ui di-style jadi
+drawer dari kiri (`fixed inset-y-0 left-0`, lebar terbatas mis.
+`w-72`), isinya sama persis dengan isi `<aside>` (logo, role, nav
+items, tombol keluar). Drawer tertutup otomatis saat link nav ditekan
+(navigasi = ganti halaman = drawer harus hilang).
+
+**≥1024px (`lg:`):** sidebar tetap seperti sekarang, tombol hamburger
+disembunyikan (`lg:hidden`).
+
+### 14.3 Target sentuh 44px
+
+Variant `size` di `components/ui/button.tsx` **tidak diubah** (dipakai
+di seluruh dashboard, mengubahnya menggeser tombol di halaman yang
+tidak diminta berubah). Sebagai gantinya, tombol-tombol interaktif
+`/pos` yang dipakai kasir (tier selector, tab kategori, +/- qty
+keranjang, tombol Bayar, trigger `MobileCartBar`) diberi override
+`className="h-11 ..."` (44px) langsung per elemen lewat `cn()`/
+`twMerge` (`src/lib/utils.ts`) -- variant besar bawaan (`lg`) cuma
+36px, tidak cukup.
+
+### 14.4 File yang berubah/baru
+
+Baru: `mobile-cart-bar.tsx`, `mobile-cart-sheet.tsx`,
+`cart-line-row.tsx` + `total-row.tsx` (diekstrak dari `cart-panel.tsx`
+supaya dipakai ulang oleh sheet, bukan diduplikasi),
+`cart-summary.tsx` (blok diskon+total+tombol Bayar, diekstrak dari
+`cart-panel.tsx`, dipakai `CartPanel` DAN `MobileCartSheet`),
+`components/dashboard/mobile-nav-drawer.tsx`.
+
+Diubah: `pos-screen.tsx`, `cart-panel.tsx`, `product-grid.tsx`,
+`price-tier-selector.tsx`, `(dashboard)/layout.tsx`.
+
+### 14.5 Langkah 3 -- verifikasi manual (bukan saya yang menyatakan selesai)
+
+Setelah implementasi, daftar hal yang PERLU dicek langsung di HP
+(bukan asumsi dari saya) ada di respons setelah kode ini selesai --
+lihat riwayat percakapan untuk daftar per-langkah yang diberikan ke
+user setelah implementasi T18b.
