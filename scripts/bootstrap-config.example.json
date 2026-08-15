@@ -13,6 +13,7 @@
     "taxInclusive": false,
     "serviceChargePercent": 0,
     "cashEnabled": true,
-    "roundingTo": 100
+    "roundingTo": 100,
+    "deviceSerialNumber": "KODE-KASIR1"
   }
 }

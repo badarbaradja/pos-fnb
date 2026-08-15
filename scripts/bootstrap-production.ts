@@ -42,7 +42,14 @@ import { z } from "zod";
 import { and, eq } from "drizzle-orm";
 import { getAdminDb } from "../src/lib/db/client";
 import { createSupabaseAdminClient } from "../src/lib/auth/supabase";
-import { businesses, outlets, memberships, profiles, paymentMethods } from "../src/lib/db/schema";
+import {
+  businesses,
+  outlets,
+  memberships,
+  profiles,
+  paymentMethods,
+  devices,
+} from "../src/lib/db/schema";
 import { generateId } from "../src/lib/utils/id";
 import { assertValidDatabaseUrl } from "../src/lib/db/validate-database-url";
 
@@ -84,6 +91,11 @@ const configSchema = z.object({
     serviceChargePercent: z.number(),
     cashEnabled: z.boolean(),
     roundingTo: z.number().int(),
+    // Opsional -- kalau kosong, default deterministik `${code}-KASIR1`
+    // dipakai (lihat buildDefaultDeviceSerialNumber()). Harus stabil
+    // antar run (bukan random) supaya cek idempoten "device sudah ada"
+    // tetap konsisten.
+    deviceSerialNumber: z.string().trim().min(1).optional(),
   }),
 });
 
@@ -230,6 +242,28 @@ async function main() {
     } else {
       console.log(`[payment_methods] sudah ada: ${pm.name} (${pm.code})`);
     }
+  }
+
+  // Tanpa ini, layar kasir (/pos) gagal dengan "Belum ada device aktif
+  // untuk outlet ini." -- get-pos-catalog.ts mewajibkan minimal satu
+  // device aktif per outlet (dipakai untuk penomoran struk, T13).
+  const [existingDevice] = await db
+    .select()
+    .from(devices)
+    .where(and(eq(devices.outletId, outlet.id), eq(devices.isActive, true)));
+  if (!existingDevice) {
+    const serialNumber = config.outlet.deviceSerialNumber ?? `${config.outlet.code}-KASIR1`;
+    await db.insert(devices).values({
+      id: generateId(),
+      businessId: business.id,
+      outletId: outlet.id,
+      serialNumber,
+      name: "Kasir 1",
+      deviceType: "pos",
+    });
+    console.log(`[devices] dibuat: Kasir 1 (${serialNumber})`);
+  } else {
+    console.log(`[devices] sudah ada device aktif: ${existingDevice.name} (${existingDevice.serialNumber})`);
   }
 
   const [existingMembership] = await db
