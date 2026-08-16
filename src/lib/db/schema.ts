@@ -1537,10 +1537,23 @@ export const ingredients = pgTable(
  * Level stok per outlet + WAC — BLUEPRINT §3.3 "stock_levels".
  * Composite PK (ingredient_id, outlet_id). Tidak pernah DELETE langsung,
  * hanya di-update oleh stock-ledger.ts saat ada movement.
+ *
+ * business_id didenormalisasi ke sini (bukan cuma lewat outlet_id) supaya
+ * RLS bisa memeriksanya langsung tanpa subquery, DAN supaya ada kolom
+ * eksplisit untuk trigger di bawah memvalidasi ingredient_id & outlet_id
+ * sungguh-sungguh milik business_id yang sama (lihat CHECK trigger
+ * `check_ingredient_outlet_business_id` di migration 0017 — tidak bisa
+ * diekspresikan di schema.ts, CLAUDE.md §3.6). Tanpa ini, satu baris bisa
+ * memasangkan ingredient bisnis A dengan outlet bisnis B untuk user yang
+ * kebetulan anggota keduanya — RLS lama (subquery via outlet saja) tidak
+ * menangkap itu. Ditemukan saat review migration T21.
  */
 export const stockLevels = pgTable(
   "stock_levels",
   {
+    businessId: uuid("business_id")
+      .notNull()
+      .references(() => businesses.id, { onDelete: "cascade" }),
     ingredientId: uuid("ingredient_id")
       .notNull()
       .references(() => ingredients.id, { onDelete: "cascade" }),
@@ -1563,17 +1576,15 @@ export const stockLevels = pgTable(
     primaryKey({ columns: [t.ingredientId, t.outletId] }),
     pgPolicy("stock_levels_select", {
       for: "select",
-      // join via outlets.business_id — stock_levels tidak punya business_id
-      // sendiri, jadi policy lewat outlet
-      using: sql`${t.outletId} in (select id from outlets where business_id = any(auth_business_ids()))`,
+      using: sql`${t.businessId} = any(auth_business_ids())`,
     }),
     pgPolicy("stock_levels_insert", {
       for: "insert",
-      withCheck: sql`${t.outletId} in (select id from outlets where business_id = any(auth_business_ids()))`,
+      withCheck: sql`${t.businessId} = any(auth_business_ids())`,
     }),
     pgPolicy("stock_levels_update", {
       for: "update",
-      using: sql`${t.outletId} in (select id from outlets where business_id = any(auth_business_ids()))`,
+      using: sql`${t.businessId} = any(auth_business_ids())`,
     }),
   ]
 ).enableRLS();
@@ -1607,6 +1618,16 @@ export const movementTypeEnum = pgEnum("movement_type", [
  * yang sama).
  *
  * TIDAK ADA policy UPDATE/DELETE — append-only (sama seperti audit_logs).
+ *
+ * business_id di sini sudah eksplisit, tapi RLS tetap tidak memverifikasi
+ * bahwa outlet_id & ingredient_id sungguh milik business_id yang sama —
+ * baris bisa saja diinsert dengan business_id benar tapi outlet_id/
+ * ingredient_id dari bisnis lain (RLS cuma memeriksa kolom business_id
+ * literal, bukan konsistensi FK-nya). Trigger
+ * `check_ingredient_outlet_business_id` yang sama dengan stock_levels
+ * dipasang di sini juga (migration 0017) untuk menutup celah itu — dan
+ * karena trigger jalan lepas dari RLS, ini juga menutupi getAdminDb()
+ * (BYPASSRLS, CLAUDE.md §3.4) kalau suatu saat dipakai keliru di sini.
  */
 export const stockMovements = pgTable(
   "stock_movements",
@@ -1624,7 +1645,13 @@ export const stockMovements = pgTable(
     movementType: movementTypeEnum("movement_type").notNull(),
     qty: numeric("qty", { precision: 16, scale: 4 }).notNull(), // + masuk, − keluar
     unitCost: numeric("unit_cost", { precision: 20, scale: 8 }).notNull(), // cost saat kejadian
-    totalCost: numeric("total_cost", { precision: 20, scale: 2 }).notNull(), // qty × unitCost
+    // qty × unitCost. Presisi (20,2), bukan (16,2) seperti nilai transaksi
+    // lain (CLAUDE.md §3.1) -- ini nilai TURUNAN dari qty(16,4) × unit_cost
+    // (20,8), bukan nilai transaksi yang diinput langsung, jadi butuh lebih
+    // banyak digit agar tidak overflow di movement bervolume besar.
+    // JANGAN dikembalikan ke (16,2) -- lihat juga COMMENT ON COLUMN di
+    // migration 0017.
+    totalCost: numeric("total_cost", { precision: 20, scale: 2 }).notNull(),
     balanceAfter: numeric("balance_after", { precision: 16, scale: 4 }).notNull(), // saldo setelah movement
     avgCostAfter: numeric("avg_cost_after", { precision: 20, scale: 8 }).notNull(), // WAC setelah movement
     refType: text("ref_type"), // 'order','purchase','opname','waste'

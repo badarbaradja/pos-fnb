@@ -1,5 +1,5 @@
 {
-  "id": "23b17802-4d7d-43e1-8dc1-e08ffc9b4190",
+  "id": "5ee49e68-df6c-42af-abdb-ba3528512fd9",
   "prevId": "e5853cdb-cddf-4dfc-80d5-a11356db3903",
   "version": "7",
   "dialect": "postgresql",
@@ -3842,6 +3842,12 @@
       "name": "stock_levels",
       "schema": "",
       "columns": {
+        "business_id": {
+          "name": "business_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
         "ingredient_id": {
           "name": "ingredient_id",
           "type": "uuid",
@@ -3890,6 +3896,19 @@
       },
       "indexes": {},
       "foreignKeys": {
+        "stock_levels_business_id_businesses_id_fk": {
+          "name": "stock_levels_business_id_businesses_id_fk",
+          "tableFrom": "stock_levels",
+          "tableTo": "businesses",
+          "columnsFrom": [
+            "business_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
         "stock_levels_ingredient_id_ingredients_id_fk": {
           "name": "stock_levels_ingredient_id_ingredients_id_fk",
           "tableFrom": "stock_levels",
@@ -3935,7 +3954,7 @@
           "to": [
             "public"
           ],
-          "using": "\"stock_levels\".\"outlet_id\" in (select id from outlets where business_id = any(auth_business_ids()))"
+          "using": "\"stock_levels\".\"business_id\" = any(auth_business_ids())"
         },
         "stock_levels_insert": {
           "name": "stock_levels_insert",
@@ -3944,7 +3963,7 @@
           "to": [
             "public"
           ],
-          "withCheck": "\"stock_levels\".\"outlet_id\" in (select id from outlets where business_id = any(auth_business_ids()))"
+          "withCheck": "\"stock_levels\".\"business_id\" = any(auth_business_ids())"
         },
         "stock_levels_update": {
           "name": "stock_levels_update",
@@ -3953,7 +3972,7 @@
           "to": [
             "public"
           ],
-          "using": "\"stock_levels\".\"outlet_id\" in (select id from outlets where business_id = any(auth_business_ids()))"
+          "using": "\"stock_levels\".\"business_id\" = any(auth_business_ids())"
         }
       },
       "checkConstraints": {},

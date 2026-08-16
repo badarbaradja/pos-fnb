@@ -351,6 +351,29 @@ create table product_bundle_items (
 
 ### 3.3 M05 — Inventory, Resep & HPP (inti perhitungan)
 
+> **Aturan tenancy tambahan untuk seluruh modul ini** (ditemukan saat
+> review migration T21, lihat `stock_levels`/`stock_movements` di bawah
+> untuk contoh terpasang): tabel apa pun di modul ini yang punya DUA ATAU
+> LEBIH kolom FK ke entitas yang masing-masing punya `business_id` sendiri
+> (`ingredient_id` + `outlet_id`, `product_id`/`output_ingredient_id` +
+> `business_id`, `outlet_id` + `supplier_id`, dst.) butuh trigger
+> `BEFORE INSERT OR UPDATE` yang memvalidasi semua FK itu benar-benar
+> mengarah ke baris dengan `business_id` yang sama. RLS yang cuma
+> memeriksa satu kolom `business_id` literal, atau memeriksa lewat
+> subquery ke SATU FK saja, tidak menutup celah user yang jadi anggota
+> lebih dari satu bisnis (`auth_business_ids()` adalah array) memasangkan
+> baris lintas-bisnis. Ini juga alasan tabel anak (`recipe_items`,
+> `purchase_items`, `opname_items`, `stock_transfer_items`) sebaiknya ikut
+> didenormalisasi `business_id`-nya sendiri, bukan cuma mengandalkan
+> subquery ke tabel induk — supaya trigger yang sama bisa dipasang
+> langsung tanpa join berlapis. **Tabel yang masih akan dibangun (T22+) dan
+> perlu pola ini saat dibuat:** `recipes` (product/variant vs
+> output_ingredient), `recipe_items`, `purchases` (outlet vs supplier),
+> `purchase_items`, `stock_opnames`, `opname_items`, `waste_logs`
+> (outlet vs ingredient vs product), `stock_transfers` (from_outlet vs
+> to_outlet — kasusnya beda, dua-duanya outlet, tapi tetap butuh
+> memastikan satu business_id yang sama), `stock_transfer_items`.
+
 ```sql
 -- SATUAN & KONVERSI: sumber bug paling umum di POS F&B
 create table units (
@@ -381,6 +404,12 @@ create table ingredients (
 
 -- Level stok per outlet + moving average cost
 create table stock_levels (
+  business_id   uuid not null references businesses(id) on delete cascade,
+  -- Didenormalisasi dari outlet_id, BUKAN opsional. Awalnya spek ini tidak
+  -- punya business_id sendiri (RLS lewat subquery ke outlets) -- celahnya:
+  -- baris bisa memasangkan ingredient bisnis A dengan outlet bisnis B untuk
+  -- user yang jadi anggota keduanya (auth_business_ids() adalah array).
+  -- Ditemukan saat review migration T21. Lihat juga trigger di bawah.
   ingredient_id uuid not null references ingredients(id) on delete cascade,
   outlet_id     uuid not null references outlets(id) on delete cascade,
   qty_on_hand   numeric(16,4) not null default 0,      -- dalam base_unit
@@ -390,6 +419,17 @@ create table stock_levels (
   last_counted_at timestamptz,
   primary key (ingredient_id, outlet_id)
 );
+-- RLS select/insert/update memeriksa business_id di atas LANGSUNG (bukan
+-- subquery). Itu saja tidak cukup: RLS cuma memeriksa kolom business_id
+-- literal, bukan bahwa ingredient_id & outlet_id yang direferensikan
+-- sungguh milik business_id yang sama. Trigger BEFORE INSERT/UPDATE
+-- `check_ingredient_outlet_business_id()` memvalidasi keduanya, dan
+-- dipasang juga di stock_movements (kolom sama: business_id, ingredient_id,
+-- outlet_id). Trigger jalan lepas dari RLS, jadi tetap menutupi
+-- getAdminDb() (BYPASSRLS, §9.5) kalau suatu saat dipakai keliru di sini.
+-- SEMUA tabel baru yang menyimpan dua FK ke entitas ber-business_id
+-- terpisah (ingredient+outlet, dan nanti apa pun yang serupa) butuh pola
+-- yang sama -- jangan andalkan RLS subquery-via-satu-FK saja.
 
 -- LEDGER: append-only, satu-satunya sumber kebenaran pergerakan stok
 create type movement_type as enum (
@@ -418,6 +458,11 @@ create table stock_movements (
 create index on stock_movements (outlet_id, ingredient_id, created_at desc);
 create index on stock_movements (business_date);
 create index on stock_movements (ref_type, ref_id);
+-- business_id di sini sudah eksplisit sejak awal, tapi punya celah yang
+-- sama dengan stock_levels di atas: RLS memeriksa business_id literal,
+-- bukan bahwa outlet_id & ingredient_id sungguh milik business_id yang
+-- sama. check_ingredient_outlet_business_id() (lihat di atas) dipasang di
+-- sini juga.
 
 -- RESEP / BILL OF MATERIALS
 create table recipes (
