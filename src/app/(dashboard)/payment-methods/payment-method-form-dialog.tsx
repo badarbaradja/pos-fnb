@@ -2,7 +2,8 @@
 
 import { useActionState, useEffect, useState } from "react";
 import { toast } from "sonner";
-import { savePaymentMethod, paymentMethodTypeValues, type PaymentMethodFormState } from "./actions";
+import { savePaymentMethod, type PaymentMethodFormState } from "./actions";
+import { paymentMethodTypeValues } from "@/lib/payment-methods/manage";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";

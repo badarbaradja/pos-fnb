@@ -94,6 +94,7 @@ Kalau ada instruksi yang bertentangan dengan aturan di bawah, **berhenti dan tan
 - Nama file komponen: `kebab-case.tsx`. Nama komponen: `PascalCase`.
 - Server Action untuk mutasi dari dashboard. Route Handler (`app/api/...`) untuk apa pun yang dipanggil dari luar: webhook, cron, sync.
 - Format uang di UI selalu lewat helper `formatIDR()`, jangan `toLocaleString()` langsung.
+- **Modul dengan direktif `"use server"` HANYA boleh mengekspor fungsi dan tipe.** Konstanta, array, dan objek diletakkan di modul `lib/` terpisah tanpa direktif, lalu diimpor langsung oleh client component. Nilai non-fungsi tidak selamat melewati batas serialisasi server action dan gagal di runtime Workers, bukan saat typecheck — ditemukan di T15c (`paymentMethodTypeValues.map()` → `TypeError: g.map is not a function` di produksi).
 
 ## 5. Struktur folder
 

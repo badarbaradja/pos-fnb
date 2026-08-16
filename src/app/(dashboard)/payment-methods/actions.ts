@@ -5,13 +5,11 @@ import { createServerSupabaseClient } from "@/lib/auth/supabase";
 import { requirePermissionDb } from "@/lib/auth/permissions";
 import {
   deletePaymentMethodWithDb,
-  paymentMethodTypeValues,
   savePaymentMethodWithDb,
   setPaymentMethodActiveWithDb,
   type PaymentMethodActionResult,
 } from "@/lib/payment-methods/manage";
 
-export { paymentMethodTypeValues };
 export type { PaymentMethodActionResult };
 
 export type PaymentMethodFormState = {
