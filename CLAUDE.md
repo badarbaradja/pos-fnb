@@ -143,7 +143,7 @@ Sebuah tugas dianggap selesai kalau **semua** ini terpenuhi:
 
 1. **Baca dulu, tulis kemudian.** Sebelum mengubah file, baca file terkait dan `docs/BLUEPRINT.md` bagian yang relevan.
 2. **Satu tugas satu commit.** Jangan menggabungkan refactor besar dengan fitur baru.
-3. **Rencanakan sebelum eksekusi.** Untuk tugas yang menyentuh lebih dari 3 file, tulis rencana singkat dulu dan tunggu konfirmasi.
+3. **Rencanakan sebelum eksekusi.** Untuk tugas yang menyentuh lebih dari 3 file, tulis rencana singkat dulu dan tunggu konfirmasi. **Tidak ada mekanisme persetujuan otomatis.** Persetujuan hanya sah kalau datang dari saya sebagai pesan — bukan timeout, bukan default sistem, bukan asumsi apa pun. Kalau saya tidak menjawab, rencana belum disetujui, titik. Kalau menurutmu suatu keputusan tidak perlu jawaban saya, jangan ajukan sebagai pertanyaan yang menunggu persetujuan — putuskan sendiri dan sebutkan alasannya secara eksplisit, supaya saya bisa mengoreksi kalau salah.
 4. **Test dulu untuk logika bisnis.** Untuk apa pun di `lib/calc/`, tulis test dari spesifikasi sebelum menulis implementasinya.
 5. **Jangan menambah dependency baru tanpa izin.** Kalau butuh, jelaskan kenapa yang sudah ada tidak cukup.
 6. **Kalau ragu, tanya.** Menebak aturan bisnis lebih mahal daripada bertanya.
@@ -153,5 +153,5 @@ Sebuah tugas dianggap selesai kalau **semua** ini terpenuhi:
 
 > Update bagian ini setiap ganti fase.
 
-**Fase: 1 — MVP POS**
-**Tugas aktif:** T08 (skema katalog)
+**Fase: 2 — Inventory & HPP**
+**Tugas aktif:** T21 (fondasi inventori: skema, bahan, satuan, ledger stok, kartu stok)

@@ -114,6 +114,22 @@ export const outlets = pgTable(
     // ada (masih perlu tahu siapa kasir yang bertugas), tapi tutup shift
     // lewat jalur ringkas tanpa rekonsiliasi (T15 lanjutan).
     cashEnabled: boolean("cash_enabled").notNull().default(true),
+    // Ambang variance per outlet — opname dengan selisih di atas ambang
+    // wajib approval manajer. Dua ambang terpisah: persen dari pemakaian
+    // teoritis DAN nilai absolut per bahan. Alert muncul kalau salah satu
+    // terlampaui (T21, jawaban owner soal ambang peringatan variance).
+    varianceAlertPercent: numeric("variance_alert_percent", {
+      precision: 7,
+      scale: 4,
+    })
+      .notNull()
+      .default("3"), // 3% dari pemakaian teoritis — standard industri F&B
+    varianceAlertValue: numeric("variance_alert_value", {
+      precision: 16,
+      scale: 2,
+    })
+      .notNull()
+      .default("100000"), // Rp 100.000 per bahan per opname
     isActive: boolean("is_active").notNull().default(true),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
@@ -1419,6 +1435,220 @@ export const auditLogs = pgTable(
       using: sql`${t.businessId} = any(auth_business_ids())`,
     }),
     pgPolicy("audit_logs_insert", {
+      for: "insert",
+      withCheck: sql`${t.businessId} = any(auth_business_ids())`,
+    }),
+  ]
+).enableRLS();
+
+// ---------------------------------------------------------------------------
+// BLUEPRINT §3.3 — M05 Inventory, Resep & HPP (fondasi T21)
+// ---------------------------------------------------------------------------
+
+/**
+ * Satuan & konversi — BLUEPRINT §3.3 "units".
+ * Semua stok disimpan dalam base_unit (g, ml, pcs). Konversi hanya di
+ * layer tampilan/input. factor = berapa base_unit dalam 1 unit ini
+ * (1 kg = 1000 g → factor 1000).
+ */
+export const units = pgTable(
+  "units",
+  {
+    id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+    businessId: uuid("business_id")
+      .notNull()
+      .references(() => businesses.id, { onDelete: "cascade" }),
+    code: text("code").notNull(), // 'kg','g','l','ml','pcs','pack','botol'
+    name: text("name").notNull(),
+    baseUnit: text("base_unit").notNull(), // satuan dasar: 'g','ml','pcs'
+    factor: numeric("factor", { precision: 20, scale: 8 }).notNull(), // 1 kg = 1000 g → factor 1000
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    unique().on(t.businessId, t.code),
+    pgPolicy("units_select", {
+      for: "select",
+      using: sql`${t.businessId} = any(auth_business_ids())`,
+    }),
+    pgPolicy("units_insert", {
+      for: "insert",
+      withCheck: sql`${t.businessId} = any(auth_business_ids())`,
+    }),
+    pgPolicy("units_update", {
+      for: "update",
+      using: sql`${t.businessId} = any(auth_business_ids())`,
+    }),
+    pgPolicy("units_delete", {
+      for: "delete",
+      using: sql`${t.businessId} = any(auth_business_ids())`,
+    }),
+  ]
+).enableRLS();
+
+/**
+ * Master bahan baku — BLUEPRINT §3.3 "ingredients".
+ * category = teks bebas ('Bahan Kering','Dairy','Kemasan') bukan FK,
+ * sesuai BLUEPRINT. Bisa ditingkatkan ke tabel terpisah nanti.
+ */
+export const ingredients = pgTable(
+  "ingredients",
+  {
+    id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+    businessId: uuid("business_id")
+      .notNull()
+      .references(() => businesses.id, { onDelete: "cascade" }),
+    code: text("code"),
+    name: text("name").notNull(), // 'Biji Kopi Arabika', 'Susu UHT'
+    category: text("category"), // 'Bahan Kering','Dairy','Kemasan'
+    baseUnit: text("base_unit").notNull(), // 'g','ml','pcs'
+    purchaseUnit: text("purchase_unit").notNull(), // 'kg','l','dus'
+    purchaseFactor: numeric("purchase_factor", { precision: 20, scale: 8 })
+      .notNull(), // 1 dus = 24 pcs → 24
+    yieldPercent: numeric("yield_percent", { precision: 7, scale: 4 })
+      .notNull()
+      .default("100"), // 1 kg ayam → 800 g siap saji → 80
+    isSemiFinished: boolean("is_semi_finished").notNull().default(false),
+    shelfLifeDays: integer("shelf_life_days"),
+    isActive: boolean("is_active").notNull().default(true),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    unique().on(t.businessId, t.code),
+    pgPolicy("ingredients_select", {
+      for: "select",
+      using: sql`${t.businessId} = any(auth_business_ids())`,
+    }),
+    pgPolicy("ingredients_insert", {
+      for: "insert",
+      withCheck: sql`${t.businessId} = any(auth_business_ids())`,
+    }),
+    pgPolicy("ingredients_update", {
+      for: "update",
+      using: sql`${t.businessId} = any(auth_business_ids())`,
+    }),
+  ]
+).enableRLS();
+
+/**
+ * Level stok per outlet + WAC — BLUEPRINT §3.3 "stock_levels".
+ * Composite PK (ingredient_id, outlet_id). Tidak pernah DELETE langsung,
+ * hanya di-update oleh stock-ledger.ts saat ada movement.
+ */
+export const stockLevels = pgTable(
+  "stock_levels",
+  {
+    ingredientId: uuid("ingredient_id")
+      .notNull()
+      .references(() => ingredients.id, { onDelete: "cascade" }),
+    outletId: uuid("outlet_id")
+      .notNull()
+      .references(() => outlets.id, { onDelete: "cascade" }),
+    qtyOnHand: numeric("qty_on_hand", { precision: 16, scale: 4 })
+      .notNull()
+      .default("0"), // dalam base_unit
+    avgCost: numeric("avg_cost", { precision: 20, scale: 8 })
+      .notNull()
+      .default("0"), // WAC per base_unit
+    minStock: numeric("min_stock", { precision: 16, scale: 4 })
+      .notNull()
+      .default("0"), // trigger alert
+    maxStock: numeric("max_stock", { precision: 16, scale: 4 }),
+    lastCountedAt: timestamp("last_counted_at", { withTimezone: true }),
+  },
+  (t) => [
+    primaryKey({ columns: [t.ingredientId, t.outletId] }),
+    pgPolicy("stock_levels_select", {
+      for: "select",
+      // join via outlets.business_id — stock_levels tidak punya business_id
+      // sendiri, jadi policy lewat outlet
+      using: sql`${t.outletId} in (select id from outlets where business_id = any(auth_business_ids()))`,
+    }),
+    pgPolicy("stock_levels_insert", {
+      for: "insert",
+      withCheck: sql`${t.outletId} in (select id from outlets where business_id = any(auth_business_ids()))`,
+    }),
+    pgPolicy("stock_levels_update", {
+      for: "update",
+      using: sql`${t.outletId} in (select id from outlets where business_id = any(auth_business_ids()))`,
+    }),
+  ]
+).enableRLS();
+
+/**
+ * Tipe pergerakan stok — BLUEPRINT §3.3 "movement_type".
+ * Append-only: movement TIDAK PERNAH di-update/delete (CLAUDE.md §3.2).
+ */
+export const movementTypeEnum = pgEnum("movement_type", [
+  "purchase",
+  "sale",
+  "waste",
+  "opname_adjust",
+  "transfer_in",
+  "transfer_out",
+  "production_in",
+  "production_out",
+  "refund_in",
+  "initial",
+  "manual_adjust",
+]);
+
+/**
+ * Ledger pergerakan stok — BLUEPRINT §3.3 "stock_movements".
+ * Append-only, satu-satunya sumber kebenaran pergerakan stok.
+ *
+ * balance_after & avg_cost_after = snapshot sesaat setelah movement ini,
+ * dipakai untuk kartu stok (saldo berjalan). Dihitung oleh
+ * lib/inventory/stock-ledger.ts, BUKAN oleh generated column Postgres,
+ * karena nilainya bergantung pada movement sebelumnya (bukan kolom tabel
+ * yang sama).
+ *
+ * TIDAK ADA policy UPDATE/DELETE — append-only (sama seperti audit_logs).
+ */
+export const stockMovements = pgTable(
+  "stock_movements",
+  {
+    id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+    businessId: uuid("business_id")
+      .notNull()
+      .references(() => businesses.id),
+    outletId: uuid("outlet_id")
+      .notNull()
+      .references(() => outlets.id),
+    ingredientId: uuid("ingredient_id")
+      .notNull()
+      .references(() => ingredients.id),
+    movementType: movementTypeEnum("movement_type").notNull(),
+    qty: numeric("qty", { precision: 16, scale: 4 }).notNull(), // + masuk, − keluar
+    unitCost: numeric("unit_cost", { precision: 20, scale: 8 }).notNull(), // cost saat kejadian
+    totalCost: numeric("total_cost", { precision: 20, scale: 2 }).notNull(), // qty × unitCost
+    balanceAfter: numeric("balance_after", { precision: 16, scale: 4 }).notNull(), // saldo setelah movement
+    avgCostAfter: numeric("avg_cost_after", { precision: 20, scale: 8 }).notNull(), // WAC setelah movement
+    refType: text("ref_type"), // 'order','purchase','opname','waste'
+    refId: uuid("ref_id"),
+    businessDate: date("business_date").notNull(),
+    note: text("note"),
+    createdBy: uuid("created_by").references(() => employees.id),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    index("stock_movements_outlet_ingredient_idx").on(
+      t.outletId,
+      t.ingredientId,
+      t.createdAt
+    ),
+    index("stock_movements_business_date_idx").on(t.businessDate),
+    index("stock_movements_ref_idx").on(t.refType, t.refId),
+    pgPolicy("stock_movements_select", {
+      for: "select",
+      using: sql`${t.businessId} = any(auth_business_ids())`,
+    }),
+    pgPolicy("stock_movements_insert", {
       for: "insert",
       withCheck: sql`${t.businessId} = any(auth_business_ids())`,
     }),
