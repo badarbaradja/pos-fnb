@@ -72,6 +72,7 @@ export default async function EmployeesPage() {
         <div>
           <h1 className="text-xl font-semibold">{strings.employees.title}</h1>
           <p className="text-sm text-muted-foreground">{strings.employees.subtitle}</p>
+          <p className="text-xs text-muted-foreground">{strings.employees.noDeleteHint}</p>
         </div>
         <EmployeeFormDialog
           outlets={outletOptions}

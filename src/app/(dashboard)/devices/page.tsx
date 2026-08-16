@@ -69,6 +69,7 @@ export default async function DevicesPage() {
         <div>
           <h1 className="text-xl font-semibold">{strings.devices.title}</h1>
           <p className="text-sm text-muted-foreground">{strings.devices.subtitle}</p>
+          <p className="text-xs text-muted-foreground">{strings.devices.noDeleteHint}</p>
         </div>
         <DeviceFormDialog
           outlets={outletOptions}

@@ -86,6 +86,8 @@ export const id = {
     unlockSuccess: "Karyawan berhasil dibuka kuncinya",
     lockedUntilLabel: "Terkunci sampai {time}",
     duplicateCode: "Kode karyawan sudah dipakai",
+    codeLockedHint: "Kode tidak bisa diubah setelah dibuat -- kalau salah ketik, nonaktifkan karyawan ini dan buat yang baru dengan kode yang benar.",
+    noDeleteHint: "Tidak ada hapus permanen di sini -- nonaktifkan supaya riwayat shift dan transaksi lama tetap merujuk ke karyawan yang benar.",
     deactivateBlockedOpenShift:
       "Tidak bisa menonaktifkan karyawan yang sedang punya shift terbuka",
     pinFormatError: "PIN harus 6 digit angka",
@@ -118,6 +120,8 @@ export const id = {
     duplicateSerialNumber: "Serial number sudah dipakai perangkat lain",
     groupNoOutlet: "Tanpa Outlet",
     empty: "Belum ada perangkat",
+    lockedFieldsHint: "Serial number dan tipe perangkat tidak bisa diubah setelah dibuat -- kalau salah, nonaktifkan perangkat ini dan buat yang baru.",
+    noDeleteHint: "Tidak ada hapus permanen di sini -- nonaktifkan supaya nomor struk lama tetap bisa ditelusuri ke perangkat yang benar.",
   },
   categories: {
     title: "Kategori",
@@ -255,6 +259,7 @@ export const id = {
   products: {
     title: "Produk",
     subtitle: "Daftar produk yang dijual",
+    noDeleteHint: "Tidak ada hapus permanen di sini -- nonaktifkan supaya riwayat transaksi lama tetap merujuk ke produk yang benar.",
     addButton: "Tambah Produk",
     editTitle: "Ubah Produk",
     addTitle: "Produk Baru",

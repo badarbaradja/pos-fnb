@@ -46,6 +46,7 @@ export default async function ModifierGroupsPage() {
           <p className="text-sm text-muted-foreground">
             {strings.modifierGroups.subtitle}
           </p>
+          <p className="text-xs text-muted-foreground">{strings.modifierGroups.noDeleteHint}</p>
         </div>
         <ModifierGroupFormDialog
           trigger={<Button>{strings.modifierGroups.addButton}</Button>}

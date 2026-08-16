@@ -45,6 +45,7 @@ export default async function PriceTiersPage() {
           <p className="text-sm text-muted-foreground">
             {strings.priceTiers.subtitle}
           </p>
+          <p className="text-xs text-muted-foreground">{strings.priceTiers.noDeleteHint}</p>
         </div>
         <PriceTierFormDialog
           trigger={<Button>{strings.priceTiers.addButton}</Button>}

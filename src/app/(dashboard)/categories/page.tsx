@@ -42,6 +42,7 @@ export default async function CategoriesPage() {
           <p className="text-sm text-muted-foreground">
             {strings.categories.subtitle}
           </p>
+          <p className="text-xs text-muted-foreground">{strings.categories.noDeleteHint}</p>
         </div>
         <CategoryFormDialog
           trigger={<Button>{strings.categories.addButton}</Button>}

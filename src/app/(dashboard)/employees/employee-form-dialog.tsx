@@ -85,6 +85,11 @@ export function EmployeeFormDialog({
                 required
                 disabled={Boolean(employee)}
               />
+              {employee ? (
+                <p className="text-xs text-muted-foreground">
+                  {strings.employees.codeLockedHint}
+                </p>
+              ) : null}
             </div>
             <div className="flex flex-col gap-2">
               <Label htmlFor="fullName">{strings.employees.fullName}</Label>

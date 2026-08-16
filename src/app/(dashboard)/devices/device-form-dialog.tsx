@@ -122,13 +122,32 @@ export function DeviceFormDialog({
                 </div>
               </>
             ) : (
+              <>
+                <div className="flex flex-col gap-2">
+                  <Label htmlFor="serialNumber">{strings.devices.serialNumber}</Label>
+                  <Input id="serialNumber" defaultValue={device.serialNumber} disabled />
+                </div>
+                <div className="flex flex-col gap-2">
+                  <Label htmlFor="deviceType">{strings.devices.deviceType}</Label>
+                  <Input
+                    id="deviceType"
+                    defaultValue={deviceTypeLabels[device.deviceType]}
+                    disabled
+                  />
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  {strings.devices.lockedFieldsHint}
+                </p>
+              </>
+            )}
+            {device ? (
               <div className="flex items-center gap-2">
                 <Checkbox id="isActive" name="isActive" defaultChecked={device.isActive} />
                 <Label htmlFor="isActive" className="text-sm font-normal">
                   {strings.devices.isActive}
                 </Label>
               </div>
-            )}
+            ) : null}
           </div>
           <DialogFooter>
             <Button type="submit" disabled={isPending}>

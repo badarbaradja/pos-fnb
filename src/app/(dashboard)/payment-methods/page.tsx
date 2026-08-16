@@ -55,6 +55,7 @@ export default async function PaymentMethodsPage() {
           <p className="text-sm text-muted-foreground">
             {strings.paymentMethods.subtitle}
           </p>
+          <p className="text-xs text-muted-foreground">{strings.paymentMethods.noDeleteHint}</p>
         </div>
         <PaymentMethodFormDialog
           trigger={<Button>{strings.paymentMethods.addButton}</Button>}

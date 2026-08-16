@@ -70,6 +70,7 @@ export default async function ModifierGroupDetailPage({
           <h1 className="text-xl font-semibold">
             {strings.modifiers.title} — {group.name}
           </h1>
+          <p className="text-xs text-muted-foreground">{strings.modifiers.noDeleteHint}</p>
         </div>
         <ModifierFormDialog
           modifierGroupId={modifierGroupId}
