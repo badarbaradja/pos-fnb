@@ -15,7 +15,10 @@ import {
 } from "@/components/ui/table";
 import { id as strings } from "@/lib/i18n/id";
 import { ModifierGroupFormDialog } from "./modifier-group-form-dialog";
-import { ModifierGroupToggleActiveButton } from "./modifier-group-row-actions";
+import {
+  ModifierGroupDeleteButton,
+  ModifierGroupToggleActiveButton,
+} from "./modifier-group-row-actions";
 
 export default async function ModifierGroupsPage() {
   const supabase = await createServerSupabaseClient();
@@ -104,6 +107,7 @@ export default async function ModifierGroupsPage() {
                     modifierGroupId={row.id}
                     isActive={row.isActive}
                   />
+                  <ModifierGroupDeleteButton modifierGroupId={row.id} />
                 </TableCell>
               </TableRow>
             ))}

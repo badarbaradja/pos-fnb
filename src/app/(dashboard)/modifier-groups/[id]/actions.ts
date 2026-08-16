@@ -2,11 +2,12 @@
 
 import { z } from "zod";
 import { revalidatePath } from "next/cache";
-import { and, eq } from "drizzle-orm";
+import { and, count, eq } from "drizzle-orm";
 import { createServerSupabaseClient } from "@/lib/auth/supabase";
 import { requirePermissionDb } from "@/lib/auth/permissions";
-import { modifierGroups, modifiers } from "@/lib/db/schema";
+import { modifierGroups, modifiers, orderItemModifiers } from "@/lib/db/schema";
 import { generateId } from "@/lib/utils/id";
+import { DeleteBlockedError } from "@/lib/db/errors";
 import { id as strings } from "@/lib/i18n/id";
 
 const modifierSchema = z.object({
@@ -85,6 +86,76 @@ export async function saveModifier(
         sortOrder: parsed.data.sortOrder,
       });
     }
+  } finally {
+    await closeDb();
+  }
+
+  revalidatePath(`/modifier-groups/${parsed.data.modifierGroupId}`);
+  return {};
+}
+
+export type DeleteModifierResult = { error?: string };
+
+/**
+ * Hapus permanen -- HANYA untuk item modifier yang belum pernah dipesan
+ * (audit kelengkapan master data). Cek + delete dalam SATU transaksi.
+ */
+export async function deleteModifier(
+  id: string,
+  modifierGroupId: string
+): Promise<DeleteModifierResult> {
+  const parsed = z
+    .object({ id: z.string().uuid(), modifierGroupId: z.string().uuid() })
+    .safeParse({ id, modifierGroupId });
+  if (!parsed.success) {
+    return { error: strings.common.unexpectedError };
+  }
+
+  const supabase = await createServerSupabaseClient();
+  const { db, closeDb, businessId } = await requirePermissionDb(
+    supabase,
+    "product.manage"
+  );
+
+  try {
+    await db.transaction(async (tx) => {
+      // business_id difilter eksplisit lewat parent modifier_groups -- RLS
+      // lapisan terakhir, bukan satu-satunya (CLAUDE.md §3.4).
+      const [group] = await tx
+        .select({ id: modifierGroups.id })
+        .from(modifierGroups)
+        .where(
+          and(
+            eq(modifierGroups.id, parsed.data.modifierGroupId),
+            eq(modifierGroups.businessId, businessId)
+          )
+        );
+      if (!group) {
+        throw new DeleteBlockedError(strings.common.unexpectedError);
+      }
+
+      const [orderedCount] = await tx
+        .select({ n: count() })
+        .from(orderItemModifiers)
+        .where(eq(orderItemModifiers.modifierId, parsed.data.id));
+      if (orderedCount && orderedCount.n > 0) {
+        throw new DeleteBlockedError(strings.modifiers.deleteBlockedOrders);
+      }
+
+      await tx
+        .delete(modifiers)
+        .where(
+          and(
+            eq(modifiers.id, parsed.data.id),
+            eq(modifiers.modifierGroupId, parsed.data.modifierGroupId)
+          )
+        );
+    });
+  } catch (err) {
+    if (err instanceof DeleteBlockedError) {
+      return { error: err.message };
+    }
+    throw err;
   } finally {
     await closeDb();
   }

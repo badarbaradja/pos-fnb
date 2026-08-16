@@ -14,7 +14,7 @@ import {
 } from "@/components/ui/table";
 import { id as strings } from "@/lib/i18n/id";
 import { CategoryFormDialog } from "./category-form-dialog";
-import { CategoryToggleActiveButton } from "./category-row-actions";
+import { CategoryToggleActiveButton, CategoryDeleteButton } from "./category-row-actions";
 
 export default async function CategoriesPage() {
   const supabase = await createServerSupabaseClient();
@@ -94,6 +94,7 @@ export default async function CategoriesPage() {
                       categoryId={row.id}
                       isActive={row.isActive}
                     />
+                    <CategoryDeleteButton categoryId={row.id} />
                   </div>
                 </TableCell>
               </TableRow>

@@ -21,3 +21,13 @@ export function isUniqueViolation(err: unknown): boolean {
   const cause = err && typeof err === "object" ? (err as { cause?: unknown }).cause : undefined;
   return hasCode(cause, "23505");
 }
+
+/**
+ * Dilempar di DALAM db.transaction() untuk membatalkan hapus permanen kalau
+ * baris masih direferensikan (audit kelengkapan master data). Melempar
+ * error di dalam transaction callback Drizzle otomatis rollback lalu
+ * re-throw error yang sama ke pemanggil -- pesan .message sudah final,
+ * siap ditampilkan ke user (mis. "Kategori ini dipakai oleh 5 produk"),
+ * bukan pesan Postgres mentah.
+ */
+export class DeleteBlockedError extends Error {}

@@ -16,7 +16,7 @@ import {
 } from "@/components/ui/table";
 import { id as strings } from "@/lib/i18n/id";
 import { ModifierFormDialog } from "./modifier-form-dialog";
-import { ModifierToggleActiveButton } from "./modifier-row-actions";
+import { ModifierDeleteButton, ModifierToggleActiveButton } from "./modifier-row-actions";
 
 export default async function ModifierGroupDetailPage({
   params,
@@ -118,6 +118,10 @@ export default async function ModifierGroupDetailPage({
                       modifierId={row.id}
                       modifierGroupId={modifierGroupId}
                       isActive={row.isActive}
+                    />
+                    <ModifierDeleteButton
+                      modifierId={row.id}
+                      modifierGroupId={modifierGroupId}
                     />
                   </div>
                 </TableCell>

@@ -2,11 +2,11 @@
 
 import { z } from "zod";
 import { revalidatePath } from "next/cache";
-import { and, eq } from "drizzle-orm";
+import { and, count, eq } from "drizzle-orm";
 import { createServerSupabaseClient } from "@/lib/auth/supabase";
 import { requirePermissionDb } from "@/lib/auth/permissions";
-import { paymentMethods } from "@/lib/db/schema";
-import { isUniqueViolation } from "@/lib/db/errors";
+import { paymentMethods, payments } from "@/lib/db/schema";
+import { DeleteBlockedError, isUniqueViolation } from "@/lib/db/errors";
 import { generateId } from "@/lib/utils/id";
 import { id as strings } from "@/lib/i18n/id";
 
@@ -105,6 +105,58 @@ export async function savePaymentMethod(
   } catch (err) {
     if (isUniqueViolation(err)) {
       return { error: strings.paymentMethods.duplicateCode };
+    }
+    throw err;
+  } finally {
+    await closeDb();
+  }
+
+  revalidatePath("/payment-methods");
+  return {};
+}
+
+export type DeletePaymentMethodResult = { error?: string };
+
+/**
+ * Hapus permanen -- HANYA untuk metode yang belum pernah dipakai (audit
+ * kelengkapan master data). Cek + delete dalam SATU transaksi.
+ */
+export async function deletePaymentMethod(id: string): Promise<DeletePaymentMethodResult> {
+  const parsed = z.string().uuid().safeParse(id);
+  if (!parsed.success) {
+    return { error: strings.common.unexpectedError };
+  }
+
+  const supabase = await createServerSupabaseClient();
+  const { db, closeDb, businessId } = await requirePermissionDb(
+    supabase,
+    "price.manage"
+  );
+
+  try {
+    await db.transaction(async (tx) => {
+      const [paymentCount] = await tx
+        .select({ n: count() })
+        .from(payments)
+        .where(eq(payments.paymentMethodId, parsed.data));
+      if (paymentCount && paymentCount.n > 0) {
+        throw new DeleteBlockedError(
+          strings.paymentMethods.deleteBlockedPayments.replace(
+            "{count}",
+            String(paymentCount.n)
+          )
+        );
+      }
+
+      await tx
+        .delete(paymentMethods)
+        .where(
+          and(eq(paymentMethods.id, parsed.data), eq(paymentMethods.businessId, businessId))
+        );
+    });
+  } catch (err) {
+    if (err instanceof DeleteBlockedError) {
+      return { error: err.message };
     }
     throw err;
   } finally {

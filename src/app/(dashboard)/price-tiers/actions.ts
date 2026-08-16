@@ -2,11 +2,11 @@
 
 import { z } from "zod";
 import { revalidatePath } from "next/cache";
-import { and, eq } from "drizzle-orm";
+import { and, count, eq } from "drizzle-orm";
 import { createServerSupabaseClient } from "@/lib/auth/supabase";
 import { requirePermissionDb } from "@/lib/auth/permissions";
-import { priceTiers } from "@/lib/db/schema";
-import { isUniqueViolation } from "@/lib/db/errors";
+import { orders, priceTiers, productPrices } from "@/lib/db/schema";
+import { DeleteBlockedError, isUniqueViolation } from "@/lib/db/errors";
 import { generateId } from "@/lib/utils/id";
 import { id as strings } from "@/lib/i18n/id";
 
@@ -78,6 +78,65 @@ export async function savePriceTier(
   } catch (err) {
     if (isUniqueViolation(err)) {
       return { error: strings.priceTiers.duplicateCode };
+    }
+    throw err;
+  } finally {
+    await closeDb();
+  }
+
+  revalidatePath("/price-tiers");
+  return {};
+}
+
+export type DeletePriceTierResult = { error?: string };
+
+/**
+ * Hapus permanen -- HANYA untuk tier yang belum pernah dipakai (audit
+ * kelengkapan master data). Dua pengecualian: belum ada harga produk di
+ * tier ini, DAN belum pernah dipakai di order manapun (product_prices
+ * CASCADE ikut terhapus, jadi kalau tier-nya sudah pernah dipakai jualan
+ * itu harus dicegah lebih dulu, bukan dibiarkan CASCADE diam-diam). Cek +
+ * delete dalam SATU transaksi.
+ */
+export async function deletePriceTier(id: string): Promise<DeletePriceTierResult> {
+  const parsed = z.string().uuid().safeParse(id);
+  if (!parsed.success) {
+    return { error: strings.common.unexpectedError };
+  }
+
+  const supabase = await createServerSupabaseClient();
+  const { db, closeDb, businessId } = await requirePermissionDb(
+    supabase,
+    "price.manage"
+  );
+
+  try {
+    await db.transaction(async (tx) => {
+      const [priceCount] = await tx
+        .select({ n: count() })
+        .from(productPrices)
+        .where(eq(productPrices.priceTierId, parsed.data));
+      if (priceCount && priceCount.n > 0) {
+        throw new DeleteBlockedError(
+          strings.priceTiers.deleteBlockedPrices.replace("{count}", String(priceCount.n))
+        );
+      }
+
+      const [orderCount] = await tx
+        .select({ n: count() })
+        .from(orders)
+        .where(eq(orders.priceTierId, parsed.data));
+      if (orderCount && orderCount.n > 0) {
+        throw new DeleteBlockedError(strings.priceTiers.deleteBlockedOrders);
+      }
+
+      await tx
+        .delete(priceTiers)
+        .where(and(eq(priceTiers.id, parsed.data), eq(priceTiers.businessId, businessId)));
+    });
+  } catch (err) {
+    if (err instanceof DeleteBlockedError) {
+      return { error: err.message };
     }
     throw err;
   } finally {

@@ -14,7 +14,10 @@ import {
 } from "@/components/ui/table";
 import { id as strings } from "@/lib/i18n/id";
 import { PaymentMethodFormDialog } from "./payment-method-form-dialog";
-import { PaymentMethodToggleActiveButton } from "./payment-method-row-actions";
+import {
+  PaymentMethodDeleteButton,
+  PaymentMethodToggleActiveButton,
+} from "./payment-method-row-actions";
 
 const typeLabels: Record<string, string> = {
   cash: strings.paymentMethods.typeCash,
@@ -96,6 +99,7 @@ export default async function PaymentMethodsPage() {
                       paymentMethodId={row.id}
                       isActive={row.isActive}
                     />
+                    <PaymentMethodDeleteButton paymentMethodId={row.id} />
                   </div>
                 </TableCell>
               </TableRow>

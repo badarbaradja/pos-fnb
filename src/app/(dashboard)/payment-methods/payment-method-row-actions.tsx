@@ -3,8 +3,9 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { setPaymentMethodActive } from "./actions";
+import { deletePaymentMethod, setPaymentMethodActive } from "./actions";
 import { Button } from "@/components/ui/button";
+import { DeleteConfirmButton } from "@/components/dashboard/delete-confirm-button";
 import { id as strings } from "@/lib/i18n/id";
 
 export function PaymentMethodToggleActiveButton({
@@ -40,5 +41,17 @@ export function PaymentMethodToggleActiveButton({
     <Button variant="outline" size="sm" onClick={handleToggle} disabled={isPending}>
       {isActive ? strings.paymentMethods.deactivateButton : strings.paymentMethods.activateButton}
     </Button>
+  );
+}
+
+export function PaymentMethodDeleteButton({ paymentMethodId }: { paymentMethodId: string }) {
+  return (
+    <DeleteConfirmButton
+      onDelete={() => deletePaymentMethod(paymentMethodId)}
+      confirmTitle={strings.paymentMethods.deleteConfirmTitle}
+      confirmHint={strings.paymentMethods.deleteConfirmHint}
+      successMessage={strings.paymentMethods.deleteSuccess}
+      buttonLabel={strings.paymentMethods.deleteButton}
+    />
   );
 }

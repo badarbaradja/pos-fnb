@@ -14,7 +14,10 @@ import {
 } from "@/components/ui/table";
 import { id as strings } from "@/lib/i18n/id";
 import { PriceTierFormDialog } from "./price-tier-form-dialog";
-import { PriceTierToggleActiveButton } from "./price-tier-row-actions";
+import {
+  PriceTierDeleteButton,
+  PriceTierToggleActiveButton,
+} from "./price-tier-row-actions";
 
 export default async function PriceTiersPage() {
   const supabase = await createServerSupabaseClient();
@@ -97,6 +100,7 @@ export default async function PriceTiersPage() {
                       priceTierId={row.id}
                       isActive={row.isActive}
                     />
+                    <PriceTierDeleteButton priceTierId={row.id} />
                   </div>
                 </TableCell>
               </TableRow>

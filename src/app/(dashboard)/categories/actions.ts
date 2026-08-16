@@ -2,11 +2,12 @@
 
 import { z } from "zod";
 import { revalidatePath } from "next/cache";
-import { and, eq } from "drizzle-orm";
+import { and, count, eq } from "drizzle-orm";
 import { createServerSupabaseClient } from "@/lib/auth/supabase";
 import { requirePermissionDb } from "@/lib/auth/permissions";
-import { categories } from "@/lib/db/schema";
+import { categories, products } from "@/lib/db/schema";
 import { generateId } from "@/lib/utils/id";
+import { DeleteBlockedError } from "@/lib/db/errors";
 import { id as strings } from "@/lib/i18n/id";
 
 const categorySchema = z.object({
@@ -66,6 +67,68 @@ export async function saveCategory(
         sortOrder: parsed.data.sortOrder,
       });
     }
+  } finally {
+    await closeDb();
+  }
+
+  revalidatePath("/categories");
+  return {};
+}
+
+export type DeleteCategoryResult = { error?: string };
+
+/**
+ * Hapus permanen -- HANYA untuk kategori yang belum pernah dipakai (audit
+ * kelengkapan master data). Cek referensi + delete dalam SATU transaksi
+ * (bukan dua round-trip terpisah) supaya tidak ada celah balapan antara
+ * cek dan hapus. Kalau masih dipakai, DeleteBlockedError membatalkan
+ * transaksi dan pesannya (menyebutkan apa yang menghalangi) dikirim balik
+ * ke user apa adanya.
+ */
+export async function deleteCategory(id: string): Promise<DeleteCategoryResult> {
+  const parsed = z.string().uuid().safeParse(id);
+  if (!parsed.success) {
+    return { error: strings.common.unexpectedError };
+  }
+
+  const supabase = await createServerSupabaseClient();
+  const { db, closeDb, businessId } = await requirePermissionDb(
+    supabase,
+    "product.manage"
+  );
+
+  try {
+    await db.transaction(async (tx) => {
+      const [productCount] = await tx
+        .select({ n: count() })
+        .from(products)
+        .where(eq(products.categoryId, parsed.data));
+      if (productCount && productCount.n > 0) {
+        throw new DeleteBlockedError(
+          strings.categories.deleteBlockedProducts.replace(
+            "{count}",
+            String(productCount.n)
+          )
+        );
+      }
+
+      const [childCount] = await tx
+        .select({ n: count() })
+        .from(categories)
+        .where(eq(categories.parentId, parsed.data));
+      if (childCount && childCount.n > 0) {
+        throw new DeleteBlockedError(strings.categories.deleteBlockedChildren);
+      }
+
+      await tx
+        .delete(categories)
+        .where(and(eq(categories.id, parsed.data), eq(categories.businessId, businessId)));
+    });
+  } catch (err) {
+    if (err instanceof DeleteBlockedError) {
+      return { error: err.message };
+    }
+    throw err;
   } finally {
     await closeDb();
   }

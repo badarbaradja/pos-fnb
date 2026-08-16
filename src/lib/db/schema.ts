@@ -327,6 +327,13 @@ export const categories = pgTable(
       using: sql`${t.businessId} = any(auth_business_ids())`,
       withCheck: sql`${t.businessId} = any(auth_business_ids())`,
     }),
+    // Delete cuma untuk kategori yang belum pernah dipakai (dicek eksplisit
+    // di server sebelum delete, bukan cuma di sini -- CLAUDE.md §3.4). RLS
+    // ini cuma menegakkan tenancy, sama seperti policy lain di tabel ini.
+    pgPolicy("categories_delete", {
+      for: "delete",
+      using: sql`${t.businessId} = any(auth_business_ids())`,
+    }),
   ]
 ).enableRLS();
 
@@ -466,6 +473,12 @@ export const priceTiers = pgTable(
       using: sql`${t.businessId} = any(auth_business_ids())`,
       withCheck: sql`${t.businessId} = any(auth_business_ids())`,
     }),
+    // Delete cuma untuk tier yang belum pernah dipakai (dicek eksplisit di
+    // server sebelum delete -- CLAUDE.md §3.4). RLS ini cuma tenancy.
+    pgPolicy("price_tiers_delete", {
+      for: "delete",
+      using: sql`${t.businessId} = any(auth_business_ids())`,
+    }),
   ]
 ).enableRLS();
 
@@ -553,6 +566,12 @@ export const modifierGroups = pgTable(
       using: sql`${t.businessId} = any(auth_business_ids())`,
       withCheck: sql`${t.businessId} = any(auth_business_ids())`,
     }),
+    // Delete cuma untuk grup yang belum pernah dipakai (dicek eksplisit di
+    // server sebelum delete -- CLAUDE.md §3.4). RLS ini cuma tenancy.
+    pgPolicy("modifier_groups_delete", {
+      for: "delete",
+      using: sql`${t.businessId} = any(auth_business_ids())`,
+    }),
   ]
 ).enableRLS();
 
@@ -597,6 +616,16 @@ export const modifiers = pgTable(
           and mg.business_id = any(auth_business_ids())
       )`,
       withCheck: sql`exists (
+        select 1 from modifier_groups mg
+        where mg.id = ${t.modifierGroupId}
+          and mg.business_id = any(auth_business_ids())
+      )`,
+    }),
+    // Delete cuma untuk modifier yang belum pernah dipakai (dicek eksplisit
+    // di server sebelum delete -- CLAUDE.md §3.4). RLS ini cuma tenancy.
+    pgPolicy("modifiers_delete", {
+      for: "delete",
+      using: sql`exists (
         select 1 from modifier_groups mg
         where mg.id = ${t.modifierGroupId}
           and mg.business_id = any(auth_business_ids())
@@ -1173,6 +1202,12 @@ export const paymentMethods = pgTable(
       for: "update",
       using: sql`${t.businessId} = any(auth_business_ids())`,
       withCheck: sql`${t.businessId} = any(auth_business_ids())`,
+    }),
+    // Delete cuma untuk metode yang belum pernah dipakai (dicek eksplisit
+    // di server sebelum delete -- CLAUDE.md §3.4). RLS ini cuma tenancy.
+    pgPolicy("payment_methods_delete", {
+      for: "delete",
+      using: sql`${t.businessId} = any(auth_business_ids())`,
     }),
   ]
 ).enableRLS();

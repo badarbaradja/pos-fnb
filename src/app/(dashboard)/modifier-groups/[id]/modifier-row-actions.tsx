@@ -3,8 +3,9 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { setModifierActive } from "./actions";
+import { deleteModifier, setModifierActive } from "./actions";
 import { Button } from "@/components/ui/button";
+import { DeleteConfirmButton } from "@/components/dashboard/delete-confirm-button";
 import { id as strings } from "@/lib/i18n/id";
 
 export function ModifierToggleActiveButton({
@@ -40,5 +41,23 @@ export function ModifierToggleActiveButton({
     <Button variant="outline" size="sm" onClick={handleToggle} disabled={isPending}>
       {isActive ? strings.modifiers.deactivateButton : strings.modifiers.activateButton}
     </Button>
+  );
+}
+
+export function ModifierDeleteButton({
+  modifierId,
+  modifierGroupId,
+}: {
+  modifierId: string;
+  modifierGroupId: string;
+}) {
+  return (
+    <DeleteConfirmButton
+      onDelete={() => deleteModifier(modifierId, modifierGroupId)}
+      confirmTitle={strings.modifiers.deleteConfirmTitle}
+      confirmHint={strings.modifiers.deleteConfirmHint}
+      successMessage={strings.modifiers.deleteSuccess}
+      buttonLabel={strings.modifiers.deleteButton}
+    />
   );
 }

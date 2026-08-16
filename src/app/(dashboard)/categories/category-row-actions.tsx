@@ -3,8 +3,9 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { setCategoryActive } from "./actions";
+import { deleteCategory, setCategoryActive } from "./actions";
 import { Button } from "@/components/ui/button";
+import { DeleteConfirmButton } from "@/components/dashboard/delete-confirm-button";
 import { id as strings } from "@/lib/i18n/id";
 
 export function CategoryToggleActiveButton({
@@ -38,5 +39,17 @@ export function CategoryToggleActiveButton({
     <Button variant="outline" size="sm" onClick={handleToggle} disabled={isPending}>
       {isActive ? strings.categories.deactivateButton : strings.categories.activateButton}
     </Button>
+  );
+}
+
+export function CategoryDeleteButton({ categoryId }: { categoryId: string }) {
+  return (
+    <DeleteConfirmButton
+      onDelete={() => deleteCategory(categoryId)}
+      confirmTitle={strings.categories.deleteConfirmTitle}
+      confirmHint={strings.categories.deleteConfirmHint}
+      successMessage={strings.categories.deleteSuccess}
+      buttonLabel={strings.categories.deleteButton}
+    />
   );
 }
