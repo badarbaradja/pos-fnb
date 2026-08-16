@@ -143,7 +143,7 @@ export const id = {
     deleteConfirmHint: "Cuma bisa dihapus kalau belum dipakai produk manapun. Tidak bisa dibatalkan.",
     deleteSuccess: "Kategori dihapus",
     deleteBlockedProducts: "Kategori ini dipakai oleh {count} produk, tidak bisa dihapus. Nonaktifkan saja.",
-    deleteBlockedChildren: "Kategori ini punya subkategori, tidak bisa dihapus. Nonaktifkan saja.",
+    deleteBlockedChildren: "Kategori ini punya {count} subkategori, tidak bisa dihapus. Nonaktifkan saja.",
     noDeleteHint: "Tidak ada hapus permanen untuk kategori yang sudah dipakai -- nonaktifkan supaya riwayat produk lama tetap merujuk ke data yang benar.",
   },
   priceTiers: {
@@ -169,7 +169,7 @@ export const id = {
     deleteConfirmHint: "Cuma bisa dihapus kalau belum punya harga produk dan belum pernah dipakai transaksi. Tidak bisa dibatalkan.",
     deleteSuccess: "Tingkat harga dihapus",
     deleteBlockedPrices: "Tier ini punya harga di {count} produk, tidak bisa dihapus. Nonaktifkan saja.",
-    deleteBlockedOrders: "Tier ini sudah pernah dipakai transaksi, tidak bisa dihapus. Nonaktifkan saja.",
+    deleteBlockedOrders: "Tier ini sudah dipakai di {count} transaksi, tidak bisa dihapus. Nonaktifkan saja.",
     noDeleteHint: "Tidak ada hapus permanen untuk tier yang sudah dipakai -- nonaktifkan supaya riwayat transaksi lama tetap merujuk ke data yang benar.",
   },
   paymentMethods: {
@@ -232,7 +232,7 @@ export const id = {
     deleteConfirmHint: "Cuma bisa dihapus kalau belum ditempel ke produk manapun dan belum pernah dipesan. Tidak bisa dibatalkan.",
     deleteSuccess: "Grup modifier dihapus",
     deleteBlockedProducts: "Grup ini ditempel ke {count} produk, tidak bisa dihapus. Nonaktifkan saja.",
-    deleteBlockedOrders: "Item di grup ini sudah pernah dipesan, tidak bisa dihapus. Nonaktifkan saja.",
+    deleteBlockedOrders: "Item di grup ini sudah dipesan di {count} transaksi, tidak bisa dihapus. Nonaktifkan saja.",
     noDeleteHint: "Tidak ada hapus permanen untuk grup yang sudah dipakai -- nonaktifkan supaya riwayat pesanan lama tetap merujuk ke data yang benar.",
   },
   modifiers: {
@@ -253,7 +253,7 @@ export const id = {
     deleteConfirmTitle: "Hapus item modifier ini secara permanen?",
     deleteConfirmHint: "Cuma bisa dihapus kalau belum pernah dipesan. Tidak bisa dibatalkan.",
     deleteSuccess: "Item modifier dihapus",
-    deleteBlockedOrders: "Item ini sudah pernah dipesan, tidak bisa dihapus. Nonaktifkan saja.",
+    deleteBlockedOrders: "Item ini sudah dipesan di {count} transaksi, tidak bisa dihapus. Nonaktifkan saja.",
     noDeleteHint: "Tidak ada hapus permanen untuk item yang sudah pernah dipesan -- nonaktifkan supaya riwayat pesanan lama tetap merujuk ke data yang benar.",
   },
   products: {
