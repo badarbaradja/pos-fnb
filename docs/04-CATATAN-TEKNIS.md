@@ -574,3 +574,55 @@ Setelah implementasi, daftar hal yang PERLU dicek langsung di HP
 (bukan asumsi dari saya) ada di respons setelah kode ini selesai --
 lihat riwayat percakapan untuk daftar per-langkah yang diberikan ke
 user setelah implementasi T18b.
+
+## 15. Kenapa `units.code` tersimpan sebagai teks di `ingredients`, bukan FK -- dan kenapa code harus immutable (T21)
+
+BLUEPRINT §3.3 memang merancangnya begitu: `ingredients.base_unit` dan
+`ingredients.purchase_unit` bertipe `text`, isinya string kode satuan
+("g", "kg", "pcs", ...), BUKAN foreign key ke `units.id`. Ini keputusan
+BLUEPRINT, bukan penyimpangan yang dibuat saat implementasi T21 --
+dicatat di sini karena konsekuensinya baru terasa sekarang setelah CRUD
+`units` dibangun.
+
+**Kenapa BLUEPRINT memilih teks, bukan FK:**
+- `stock_movements` bersifat append-only dan snapshot nilainya sendiri
+  (`unit_cost`, `balance_after`, dst, CLAUDE.md §3.2) -- filosofi yang
+  sama berlaku ke satuan: kartu stok dan riwayat pembelian ingin
+  menampilkan "g", "kg" sebagai LABEL, bukan hasil JOIN ke tabel lain
+  yang bisa berubah.
+- `units` bersifat GLOBAL per bisnis (satu daftar kosakata satuan),
+  sementara base_unit/purchase_unit ingredient cukup mencocokkan salah
+  satu KODE di kosakata itu -- tidak butuh integritas referensial
+  seketat, misalnya, `stock_movements.ingredient_id` yang benar-benar
+  harus menunjuk baris `ingredients` yang masih ada.
+
+**Konsekuensi yang WAJIB dijaga karena ini teks, bukan FK:**
+Postgres tidak bisa mencegah `units.code` berubah sementara
+`ingredients.base_unit`/`purchase_unit` masih menyimpan nilai lama --
+tidak ada `ON UPDATE CASCADE` untuk pencocokan teks. Kalau `code` boleh
+diedit, mengubah "kg" jadi "KG" (misalnya) akan membuat setiap
+ingredient yang sebelumnya mengacu "kg" DIAM-DIAM kehilangan
+acuannya -- tidak ada error di database, tidak ada constraint yang
+gagal, cuma pencocokan teks yang berhenti berhasil. `deleteUnitWithDb`
+(lib/units/manage.ts) yang mengecek referensi lewat pencocokan
+`units.code` juga jadi buta terhadap satuan yang sudah "yatim" seperti
+ini -- dia akan menganggap satuan lama tidak dipakai siapa pun (karena
+tidak ada lagi ingredient yang cocok dengan kode LAMA), padahal
+sebenarnya masih "dipakai" oleh ingredient yang sekarang menunjuk kode
+yang sudah tidak ada.
+
+**Karena itu**: `units.code` dikunci permanen setelah dibuat
+(`createUnitWithDb`/`updateUnitWithDb` di lib/units/manage.ts sengaja
+jadi dua fungsi terpisah, `code` cuma ada di skema create). Sama
+seperti kode karyawan dan serial number perangkat -- kalau salah ketik,
+jalan keluarnya hapus (kalau belum dipakai bahan manapun) lalu buat
+baru, bukan edit di tempat. `name`, `base_unit`, dan `factor` tetap
+boleh diedit karena tidak ada tabel lain yang mencocokkan teksnya.
+
+**Kalau nanti ini mau diubah jadi FK sungguhan** (`ingredients.base_unit_id
+uuid references units(id)`), itu BUKAN perubahan kecil -- perlu
+migration data yang menerjemahkan setiap nilai teks yang sudah ada
+jadi `units.id` yang benar per bisnis, plus keputusan ulang soal apakah
+`stock_movements` juga ikut di-FK-kan atau tetap snapshot teks. Jangan
+dikerjakan diam-diam sebagai "refactor kecil" -- ini keputusan skema
+yang butuh persetujuan eksplisit dulu.

@@ -49,6 +49,7 @@ import {
   profiles,
   paymentMethods,
   devices,
+  units,
 } from "../src/lib/db/schema";
 import { generateId } from "../src/lib/utils/id";
 import { assertValidDatabaseUrl } from "../src/lib/db/validate-database-url";
@@ -136,6 +137,25 @@ function buildPaymentMethods(cashEnabled: boolean) {
   if (!cashEnabled) return [qris];
   const cash = { code: "CASH", name: "Tunai", type: "cash", isCashDrawer: true, requiresRef: false } as const;
   return [cash, qris];
+}
+
+/**
+ * HANYA satuan rasio-tetap yang faktornya benar secara universal (fisika,
+ * bukan kemasan) -- kg/g, l/ml, dan pcs sebagai satuan dasarnya sendiri.
+ * SENGAJA TIDAK menyertakan dus/pack/botol/krat dkk: itu satuan kemasan
+ * yang isinya beda-beda per bahan (BLUEPRINT: "1 dus telur" != "1 dus
+ * tisu"), jadi tidak ada faktor global yang jujur untuk diseed -- owner
+ * membuatnya sendiri lewat /units dengan faktor yang benar untuk bahan
+ * masing-masing (lihat docs/04-CATATAN-TEKNIS.md #15).
+ */
+function buildDefaultUnits() {
+  return [
+    { code: "g", name: "Gram", baseUnit: "g", factor: "1" },
+    { code: "kg", name: "Kilogram", baseUnit: "g", factor: "1000" },
+    { code: "ml", name: "Mililiter", baseUnit: "ml", factor: "1" },
+    { code: "l", name: "Liter", baseUnit: "ml", factor: "1000" },
+    { code: "pcs", name: "Pcs", baseUnit: "pcs", factor: "1" },
+  ] as const;
 }
 
 async function findOrCreateAuthUserByEmail(email: string, password: string) {
@@ -241,6 +261,26 @@ async function main() {
       console.log(`[payment_methods] dibuat: ${pm.name} (${pm.code})`);
     } else {
       console.log(`[payment_methods] sudah ada: ${pm.name} (${pm.code})`);
+    }
+  }
+
+  for (const u of buildDefaultUnits()) {
+    const [existingUnit] = await db
+      .select()
+      .from(units)
+      .where(and(eq(units.businessId, business.id), eq(units.code, u.code)));
+    if (!existingUnit) {
+      await db.insert(units).values({
+        id: generateId(),
+        businessId: business.id,
+        code: u.code,
+        name: u.name,
+        baseUnit: u.baseUnit,
+        factor: u.factor,
+      });
+      console.log(`[units] dibuat: ${u.name} (${u.code})`);
+    } else {
+      console.log(`[units] sudah ada: ${u.name} (${u.code})`);
     }
   }
 
