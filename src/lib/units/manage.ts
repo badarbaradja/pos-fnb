@@ -91,10 +91,12 @@ export async function updateUnitWithDb(
   }
   const data = parsed.data;
 
-  await db
+  const updated = await db
     .update(units)
     .set({ name: data.name, baseUnit: data.baseUnit, factor: String(data.factor) })
-    .where(and(eq(units.id, data.id), eq(units.businessId, businessId)));
+    .where(and(eq(units.id, data.id), eq(units.businessId, businessId)))
+    .returning({ id: units.id });
+  assertRowsAffected(updated, "satuan");
 
   return { success: { unitId: data.id } };
 }

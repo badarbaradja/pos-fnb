@@ -56,7 +56,7 @@ export async function savePaymentMethodWithDb(
     if (data.id) {
       // business_id difilter eksplisit juga -- RLS lapisan terakhir, bukan
       // satu-satunya (CLAUDE.md §3.4).
-      await db
+      const updated = await db
         .update(paymentMethods)
         .set({
           code: data.code,
@@ -67,7 +67,9 @@ export async function savePaymentMethodWithDb(
           requiresRef: data.requiresRef,
           sortOrder: data.sortOrder,
         })
-        .where(and(eq(paymentMethods.id, data.id), eq(paymentMethods.businessId, businessId)));
+        .where(and(eq(paymentMethods.id, data.id), eq(paymentMethods.businessId, businessId)))
+        .returning({ id: paymentMethods.id });
+      assertRowsAffected(updated, "metode pembayaran");
       return { success: { paymentMethodId: data.id } };
     }
 
@@ -110,10 +112,12 @@ export async function setPaymentMethodActiveWithDb(
   }
   const { id, isActive } = parsed.data;
 
-  await db
+  const updated = await db
     .update(paymentMethods)
     .set({ isActive })
-    .where(and(eq(paymentMethods.id, id), eq(paymentMethods.businessId, businessId)));
+    .where(and(eq(paymentMethods.id, id), eq(paymentMethods.businessId, businessId)))
+    .returning({ id: paymentMethods.id });
+  assertRowsAffected(updated, "metode pembayaran");
 
   return { success: { paymentMethodId: id } };
 }

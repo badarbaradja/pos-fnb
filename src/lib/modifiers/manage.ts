@@ -61,10 +61,12 @@ export async function saveModifierWithDb(
   }
 
   if (data.id) {
-    await db
+    const updated = await db
       .update(modifiers)
       .set({ name: data.name, price: String(data.price), sortOrder: data.sortOrder })
-      .where(and(eq(modifiers.id, data.id), eq(modifiers.modifierGroupId, data.modifierGroupId)));
+      .where(and(eq(modifiers.id, data.id), eq(modifiers.modifierGroupId, data.modifierGroupId)))
+      .returning({ id: modifiers.id });
+    assertRowsAffected(updated, "modifier");
     return { success: { modifierId: data.id } };
   }
 
@@ -105,10 +107,12 @@ export async function setModifierActiveWithDb(
     return { error: strings.common.unexpectedError };
   }
 
-  await db
+  const updated = await db
     .update(modifiers)
     .set({ isActive })
-    .where(and(eq(modifiers.id, id), eq(modifiers.modifierGroupId, modifierGroupId)));
+    .where(and(eq(modifiers.id, id), eq(modifiers.modifierGroupId, modifierGroupId)))
+    .returning({ id: modifiers.id });
+  assertRowsAffected(updated, "modifier");
 
   return { success: { modifierId: id } };
 }

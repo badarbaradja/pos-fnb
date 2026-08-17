@@ -44,10 +44,12 @@ export async function saveCategoryWithDb(
   if (data.id) {
     // business_id difilter eksplisit juga -- RLS lapisan terakhir, bukan
     // satu-satunya (CLAUDE.md §3.4).
-    await db
+    const updated = await db
       .update(categories)
       .set({ name: data.name, color: data.color ?? null, sortOrder: data.sortOrder })
-      .where(and(eq(categories.id, data.id), eq(categories.businessId, businessId)));
+      .where(and(eq(categories.id, data.id), eq(categories.businessId, businessId)))
+      .returning({ id: categories.id });
+    assertRowsAffected(updated, "kategori");
     return { success: { categoryId: data.id } };
   }
 
@@ -80,10 +82,12 @@ export async function setCategoryActiveWithDb(
   }
   const { id, isActive } = parsed.data;
 
-  await db
+  const updated = await db
     .update(categories)
     .set({ isActive })
-    .where(and(eq(categories.id, id), eq(categories.businessId, businessId)));
+    .where(and(eq(categories.id, id), eq(categories.businessId, businessId)))
+    .returning({ id: categories.id });
+  assertRowsAffected(updated, "kategori");
 
   return { success: { categoryId: id } };
 }

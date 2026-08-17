@@ -176,7 +176,7 @@ export async function saveProduct(
 
     await db.transaction(async (tx) => {
       if (!isNewProduct) {
-        await tx
+        const updated = await tx
           .update(products)
           .set({
             categoryId: parsed.data.categoryId ?? null,
@@ -194,7 +194,9 @@ export async function saveProduct(
             isActive: parsed.data.isActive,
             ...(imagePathUpdate !== undefined ? { imagePath: imagePathUpdate } : {}),
           })
-          .where(and(eq(products.id, productId), eq(products.businessId, businessId)));
+          .where(and(eq(products.id, productId), eq(products.businessId, businessId)))
+          .returning({ id: products.id });
+        assertRowsAffected(updated, "produk");
       } else {
         await tx.insert(products).values({
           id: productId,
@@ -218,7 +220,7 @@ export async function saveProduct(
 
       for (const variant of variantRows) {
         if (variant.id) {
-          await tx
+          const updated = await tx
             .update(productVariants)
             .set({
               name: variant.name,
@@ -232,7 +234,9 @@ export async function saveProduct(
                 eq(productVariants.id, variant.id),
                 eq(productVariants.productId, productId)
               )
-            );
+            )
+            .returning({ id: productVariants.id });
+          assertRowsAffected(updated, "varian produk");
         } else {
           await tx.insert(productVariants).values({
             id: generateId(),
@@ -345,10 +349,12 @@ export async function setProductActive(
   );
 
   try {
-    await db
+    const updated = await db
       .update(products)
       .set({ isActive: parsed.data.isActive })
-      .where(and(eq(products.id, parsed.data.id), eq(products.businessId, businessId)));
+      .where(and(eq(products.id, parsed.data.id), eq(products.businessId, businessId)))
+      .returning({ id: products.id });
+    assertRowsAffected(updated, "produk");
   } finally {
     await closeDb();
   }

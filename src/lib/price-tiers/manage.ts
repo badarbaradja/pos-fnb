@@ -44,7 +44,7 @@ export async function savePriceTierWithDb(
     if (data.id) {
       // business_id difilter eksplisit juga -- RLS lapisan terakhir, bukan
       // satu-satunya (CLAUDE.md §3.4).
-      await db
+      const updated = await db
         .update(priceTiers)
         .set({
           code: data.code,
@@ -53,7 +53,9 @@ export async function savePriceTierWithDb(
           markupPercent: String(data.markupPercent),
           isDefault: data.isDefault,
         })
-        .where(and(eq(priceTiers.id, data.id), eq(priceTiers.businessId, businessId)));
+        .where(and(eq(priceTiers.id, data.id), eq(priceTiers.businessId, businessId)))
+        .returning({ id: priceTiers.id });
+      assertRowsAffected(updated, "tingkat harga");
       return { success: { priceTierId: data.id } };
     }
 
@@ -94,10 +96,12 @@ export async function setPriceTierActiveWithDb(
   }
   const { id, isActive } = parsed.data;
 
-  await db
+  const updated = await db
     .update(priceTiers)
     .set({ isActive })
-    .where(and(eq(priceTiers.id, id), eq(priceTiers.businessId, businessId)));
+    .where(and(eq(priceTiers.id, id), eq(priceTiers.businessId, businessId)))
+    .returning({ id: priceTiers.id });
+  assertRowsAffected(updated, "tingkat harga");
 
   return { success: { priceTierId: id } };
 }

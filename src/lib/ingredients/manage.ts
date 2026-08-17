@@ -163,7 +163,7 @@ export async function updateIngredientWithDb(
         }
       }
 
-      await tx
+      const updated = await tx
         .update(ingredients)
         .set({
           code: data.code || null,
@@ -176,7 +176,9 @@ export async function updateIngredientWithDb(
           isSemiFinished: data.isSemiFinished,
           shelfLifeDays: data.shelfLifeDays ?? null,
         })
-        .where(and(eq(ingredients.id, data.id), eq(ingredients.businessId, businessId)));
+        .where(and(eq(ingredients.id, data.id), eq(ingredients.businessId, businessId)))
+        .returning({ id: ingredients.id });
+      assertRowsAffected(updated, "bahan");
     });
 
     return { success: { ingredientId: data.id } };
@@ -209,10 +211,12 @@ export async function setIngredientActiveWithDb(
   }
   const { id, isActive } = parsed.data;
 
-  await db
+  const updated = await db
     .update(ingredients)
     .set({ isActive })
-    .where(and(eq(ingredients.id, id), eq(ingredients.businessId, businessId)));
+    .where(and(eq(ingredients.id, id), eq(ingredients.businessId, businessId)))
+    .returning({ id: ingredients.id });
+  assertRowsAffected(updated, "bahan");
 
   return { success: { ingredientId: id } };
 }

@@ -20,6 +20,7 @@ import {
   productVariants,
 } from "@/lib/db/schema";
 import { calculateOrder, type CalcLine, type CalcSettings } from "@/lib/calc/order-calculator";
+import { assertRowsAffected } from "@/lib/db/errors";
 import { businessDate } from "@/lib/utils/business-date";
 import { generateId } from "@/lib/utils/id";
 import { getOpenShiftForDevice, isShiftSellable } from "@/lib/pos/shift";
@@ -308,11 +309,13 @@ export async function payOrderWithDb(
       // device.last_seq atomik di dalam transaction yang sama supaya
       // gagal di tengah jalan tidak menyisakan counter yang sudah maju
       // tapi order-nya tidak pernah tersimpan.
-      const [updatedDevice] = await tx
+      const updatedDeviceRows = await tx
         .update(devices)
         .set({ lastSeq: sql`${devices.lastSeq} + 1` })
         .where(eq(devices.id, data.deviceId))
         .returning({ lastSeq: devices.lastSeq, serialNumber: devices.serialNumber });
+      assertRowsAffected(updatedDeviceRows, "perangkat (nomor struk)");
+      const updatedDevice = updatedDeviceRows[0];
       const yymmdd = bDate.slice(2).replaceAll("-", "");
       const counter = String(updatedDevice!.lastSeq).padStart(4, "0");
       orderNumber = `${outlet.code}-${yymmdd}-${updatedDevice!.serialNumber}-${counter}`;

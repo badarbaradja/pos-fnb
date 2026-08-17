@@ -2,7 +2,7 @@ import { z } from "zod";
 import { and, eq } from "drizzle-orm";
 import type { UserDbHandle } from "@/lib/db/client";
 import { devices } from "@/lib/db/schema";
-import { isUniqueViolation } from "@/lib/db/errors";
+import { assertRowsAffected, isUniqueViolation } from "@/lib/db/errors";
 import { generateId } from "@/lib/utils/id";
 import { id as strings } from "@/lib/i18n/id";
 
@@ -85,14 +85,16 @@ export async function updateDeviceWithDb(
   }
   const data = parsed.data;
 
-  await db
+  const updated = await db
     .update(devices)
     .set({
       name: data.name,
       outletId: data.outletId,
       isActive: data.isActive,
     })
-    .where(and(eq(devices.id, data.id), eq(devices.businessId, businessId)));
+    .where(and(eq(devices.id, data.id), eq(devices.businessId, businessId)))
+    .returning({ id: devices.id });
+  assertRowsAffected(updated, "perangkat");
 
   return { success: { deviceId: data.id } };
 }

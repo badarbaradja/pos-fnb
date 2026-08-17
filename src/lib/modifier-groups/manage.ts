@@ -42,7 +42,7 @@ export async function saveModifierGroupWithDb(
   if (data.id) {
     // business_id difilter eksplisit juga -- RLS lapisan terakhir, bukan
     // satu-satunya (CLAUDE.md §3.4).
-    await db
+    const updated = await db
       .update(modifierGroups)
       .set({
         name: data.name,
@@ -50,7 +50,9 @@ export async function saveModifierGroupWithDb(
         maxSelect: data.maxSelect,
         isRequired: data.isRequired,
       })
-      .where(and(eq(modifierGroups.id, data.id), eq(modifierGroups.businessId, businessId)));
+      .where(and(eq(modifierGroups.id, data.id), eq(modifierGroups.businessId, businessId)))
+      .returning({ id: modifierGroups.id });
+    assertRowsAffected(updated, "grup modifier");
     return { success: { modifierGroupId: data.id } };
   }
 
@@ -84,10 +86,12 @@ export async function setModifierGroupActiveWithDb(
   }
   const { id, isActive } = parsed.data;
 
-  await db
+  const updated = await db
     .update(modifierGroups)
     .set({ isActive })
-    .where(and(eq(modifierGroups.id, id), eq(modifierGroups.businessId, businessId)));
+    .where(and(eq(modifierGroups.id, id), eq(modifierGroups.businessId, businessId)))
+    .returning({ id: modifierGroups.id });
+  assertRowsAffected(updated, "grup modifier");
 
   return { success: { modifierGroupId: id } };
 }

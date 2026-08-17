@@ -2,7 +2,7 @@ import { z } from "zod";
 import { and, eq } from "drizzle-orm";
 import type { UserDbHandle } from "@/lib/db/client";
 import { employees } from "@/lib/db/schema";
-import { isUniqueViolation } from "@/lib/db/errors";
+import { assertRowsAffected, isUniqueViolation } from "@/lib/db/errors";
 import { generateId } from "@/lib/utils/id";
 import { hashPin } from "@/lib/auth/pin";
 import { hasOpenShiftForEmployee } from "@/lib/pos/shift";
@@ -101,7 +101,7 @@ export async function updateEmployeeWithDb(
     }
   }
 
-  await db
+  const updated = await db
     .update(employees)
     .set({
       fullName: data.fullName,
@@ -109,7 +109,9 @@ export async function updateEmployeeWithDb(
       outletId: data.outletId,
       isActive: data.isActive,
     })
-    .where(and(eq(employees.id, data.id), eq(employees.businessId, businessId)));
+    .where(and(eq(employees.id, data.id), eq(employees.businessId, businessId)))
+    .returning({ id: employees.id });
+  assertRowsAffected(updated, "karyawan");
 
   return { success: { employeeId: data.id } };
 }
@@ -128,10 +130,12 @@ export async function resetPinWithDb(
   const pinHash = await hashPin(newPin);
   // Reset PIN sekalian membuka kunci -- kalau tidak, owner reset PIN tapi
   // karyawan masih terkunci dari lockout PIN LAMA, membingungkan.
-  await db
+  const updated = await db
     .update(employees)
     .set({ pinHash, failedAttempts: 0, lockedUntil: null })
-    .where(and(eq(employees.id, employeeId), eq(employees.businessId, businessId)));
+    .where(and(eq(employees.id, employeeId), eq(employees.businessId, businessId)))
+    .returning({ id: employees.id });
+  assertRowsAffected(updated, "karyawan");
 
   return { success: { employeeId } };
 }
@@ -147,10 +151,12 @@ export async function unlockEmployeeWithDb(
   }
   const { employeeId } = parsed.data;
 
-  await db
+  const updated = await db
     .update(employees)
     .set({ failedAttempts: 0, lockedUntil: null })
-    .where(and(eq(employees.id, employeeId), eq(employees.businessId, businessId)));
+    .where(and(eq(employees.id, employeeId), eq(employees.businessId, businessId)))
+    .returning({ id: employees.id });
+  assertRowsAffected(updated, "karyawan");
 
   return { success: { employeeId } };
 }
