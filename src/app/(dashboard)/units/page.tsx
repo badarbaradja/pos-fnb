@@ -37,6 +37,7 @@ export default async function UnitsPage() {
           <h1 className="text-xl font-semibold">{strings.units.title}</h1>
           <p className="text-sm text-muted-foreground">{strings.units.subtitle}</p>
           <p className="text-xs text-muted-foreground">{strings.units.noDeleteHint}</p>
+          <p className="text-xs text-muted-foreground">{strings.units.packagingHint}</p>
         </div>
         <UnitFormDialog trigger={<Button>{strings.units.addButton}</Button>} />
       </div>

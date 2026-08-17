@@ -149,6 +149,7 @@ export const id = {
     deleteSuccess: "Satuan dihapus",
     deleteBlockedIngredients: "Satuan ini dipakai oleh {count} bahan, tidak bisa dihapus.",
     noDeleteHint: "Satuan yang sudah dipakai bahan tidak bisa dihapus -- ini menjaga supaya data bahan lama tidak tiba-tiba kehilangan satuannya.",
+    packagingHint: "Satuan kemasan seperti dus, pack, atau krat sengaja tidak disediakan otomatis -- isinya beda-beda per bahan (1 dus telur bukan 1 dus tisu), jadi tidak ada angka yang benar untuk ditebak. Buat sendiri dengan faktor yang sesuai untuk bahan Anda.",
     factorMustBePositive: "Faktor konversi harus lebih besar dari 0",
     empty: "Belum ada satuan. Tambah satuan pertama.",
   },
