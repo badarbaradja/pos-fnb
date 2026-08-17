@@ -1530,6 +1530,19 @@ export const ingredients = pgTable(
       for: "update",
       using: sql`${t.businessId} = any(auth_business_ids())`,
     }),
+    // Ditambah setelah ditemukan lewat verifikasi UI manual (bukan test --
+    // test lib/ingredients/__tests__/manage.test.ts lolos tanpa policy ini
+    // karena getAdminDb() BYPASSRLS): tanpa policy delete, deleteIngredientWithDb
+    // lewat getUserDb() (jalur produksi sungguhan) diam-diam menghapus 0 baris,
+    // tidak ada error sama sekali -- persis pola "policy hilang, bukan bocor",
+    // sama seperti alasan migration 0016 menambah delete policy untuk 5
+    // entitas lain. Tenancy-only, sama seperti policy lain di tabel ini --
+    // aturan "cuma boleh kalau belum dipakai" tetap di application layer
+    // (lib/ingredients/manage.ts), RLS di sini cuma lapisan terakhir (CLAUDE.md §3.4).
+    pgPolicy("ingredients_delete", {
+      for: "delete",
+      using: sql`${t.businessId} = any(auth_business_ids())`,
+    }),
   ]
 ).enableRLS();
 

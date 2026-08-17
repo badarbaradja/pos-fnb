@@ -1,0 +1,1 @@
+CREATE POLICY "ingredients_delete" ON "ingredients" AS PERMISSIVE FOR DELETE TO public USING ("ingredients"."business_id" = any(auth_business_ids()));
