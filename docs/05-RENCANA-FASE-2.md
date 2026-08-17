@@ -216,6 +216,29 @@ opname di atas ambang" butuh angka batas — nominal rupiah tetap (mis.
 Rp 50.000), atau persentase dari nilai stok bahan itu? Tidak ada info dari
 lapangan soal ini, jangan ditebak.
 
+**6.4 (baru, diangkat saat CRUD ingredients T21) — Satu bahan, beberapa
+kemasan beli berbeda: apakah `purchase_unit` tunggal per ingredient cukup?**
+Desain saat ini (`ingredients.purchase_unit` + `purchase_factor`, satu
+nilai per bahan) mengasumsikan satu bahan selalu dibeli dalam SATU jenis
+kemasan. Tapi kasus seperti susu UHT — kadang dibeli per liter, kadang
+per dus isi 12 — punya DUA rasio konversi berbeda untuk bahan yang sama.
+Skema sekarang tidak bisa menangkap ini tanpa salah satunya dipaksakan
+tidak akurat.
+
+Ini relevan untuk T22 (penerimaan dari gudang, mekanisme stok-masuk yang
+memang sudah direncanakan) dan untuk pembelian dari supplier eksternal
+kalau/kapan itu jadi kebutuhan nyata (§7). Belum diputuskan solusinya
+sekarang — opsi kasar yang perlu Anda konfirmasi nanti dengan Indokopi:
+(a) `ingredients` boleh punya beberapa baris "kemasan beli" per bahan
+(perlu tabel baru, mis. `ingredient_purchase_units`), atau (b) form
+penerimaan/pembelian membiarkan pilih satuan APA PUN dari `units` lalu
+konversi manual per baris (fleksibel tapi lebih rawan salah ketik --
+persis masalah yang sedang dihindari), atau (c) kalau ternyata jarang
+terjadi di praktik, cukup catat sebagai keterbatasan yang diterima.
+**Jangan diselesaikan sekarang** -- tanyakan ke user saat sampai di T22,
+setelah dikonfirmasi ke Indokopi apakah pola beli-kemasan-ganda ini
+benar terjadi.
+
 ---
 
 ## 7. Yang TIDAK dikerjakan dulu (tetap di rencana lama, tidak berubah urutannya)
