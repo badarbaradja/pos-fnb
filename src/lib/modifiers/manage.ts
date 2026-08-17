@@ -2,7 +2,7 @@ import { z } from "zod";
 import { and, count, eq } from "drizzle-orm";
 import type { UserDbHandle } from "@/lib/db/client";
 import { modifierGroups, modifiers, orderItemModifiers } from "@/lib/db/schema";
-import { DeleteBlockedError } from "@/lib/db/errors";
+import { assertRowsAffected, DeleteBlockedError } from "@/lib/db/errors";
 import { generateId } from "@/lib/utils/id";
 import { id as strings } from "@/lib/i18n/id";
 
@@ -152,9 +152,11 @@ export async function deleteModifierWithDb(
         );
       }
 
-      await tx
+      const deleted = await tx
         .delete(modifiers)
-        .where(and(eq(modifiers.id, id), eq(modifiers.modifierGroupId, modifierGroupId)));
+        .where(and(eq(modifiers.id, id), eq(modifiers.modifierGroupId, modifierGroupId)))
+        .returning({ id: modifiers.id });
+      assertRowsAffected(deleted, "modifier");
     });
   } catch (err) {
     if (err instanceof DeleteBlockedError) {

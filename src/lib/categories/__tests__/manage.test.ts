@@ -4,16 +4,22 @@
  * test sungguhan (bukan cuma dipercaya dari pembacaan kode), sama seperti
  * lib/employees/__tests__/manage.test.ts (T15b) dan
  * lib/devices/__tests__/manage.test.ts (T15c).
+ *
+ * Lewat getUserDb() (via createUserDbFixture), BUKAN getAdminDb() --
+ * ditemukan lewat kasus ingredients (docs/04-CATATAN-TEKNIS.md) bahwa
+ * getAdminDb() BYPASSRLS, jadi test yang memakainya tidak pernah
+ * membuktikan policy RLS DELETE benar-benar ada di jalur produksi
+ * sungguhan.
  */
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { config as loadEnv } from "dotenv";
 import { eq } from "drizzle-orm";
 loadEnv({ path: [".env.local", ".env"], quiet: true });
 
-import { getAdminDb } from "@/lib/db/client";
-import { businesses, categories, products } from "@/lib/db/schema";
+import { categories, products } from "@/lib/db/schema";
 import { generateId } from "@/lib/utils/id";
 import { deleteCategoryWithDb } from "../manage";
+import { createUserDbFixture, type UserDbFixture } from "@/lib/db/__tests__/helpers/user-db-fixture";
 
 const hasEnv = Boolean(
   process.env["DATABASE_URL"] &&
@@ -22,33 +28,25 @@ const hasEnv = Boolean(
 );
 
 describe.skipIf(!hasEnv)("categories/manage — hapus permanen", () => {
-  const db = getAdminDb();
-  const PREFIX = `TEST_CATEGORIES_${Date.now()}`;
-
-  let businessId: string;
+  let fixture: UserDbFixture;
 
   beforeAll(async () => {
-    const [business] = await db
-      .insert(businesses)
-      .values({ name: `${PREFIX}_business` })
-      .returning({ id: businesses.id });
-    businessId = business!.id;
+    fixture = await createUserDbFixture("TEST_CATEGORIES");
   });
 
   afterAll(async () => {
-    if (businessId) {
-      await db.delete(businesses).where(eq(businesses.id, businessId));
-    }
+    if (fixture) await fixture.cleanup();
   });
 
   it("data uji benar-benar terbentuk sebelum diuji (bukan hijau karena kosong)", () => {
-    expect(businessId).toBeTruthy();
+    expect(fixture.businessId).toBeTruthy();
   });
 
   it("kategori TANPA produk apa pun -- berhasil dihapus", async () => {
+    const { db, businessId } = fixture;
     const [category] = await db
       .insert(categories)
-      .values({ id: generateId(), businessId, name: `${PREFIX}_unused` })
+      .values({ id: generateId(), businessId, name: "unused" })
       .returning({ id: categories.id });
     const categoryId = category!.id;
 
@@ -61,9 +59,10 @@ describe.skipIf(!hasEnv)("categories/manage — hapus permanen", () => {
   });
 
   it("kategori dipakai 3 produk -- DITOLAK, pesan menyebutkan jumlah yang benar, kategori tetap ada", async () => {
+    const { db, businessId } = fixture;
     const [category] = await db
       .insert(categories)
-      .values({ id: generateId(), businessId, name: `${PREFIX}_used` })
+      .values({ id: generateId(), businessId, name: "used" })
       .returning({ id: categories.id });
     const categoryId = category!.id;
 
@@ -72,7 +71,7 @@ describe.skipIf(!hasEnv)("categories/manage — hapus permanen", () => {
         id: generateId(),
         businessId,
         categoryId,
-        name: `${PREFIX}_product_${i}`,
+        name: `product_${i}`,
       });
     }
 
@@ -86,15 +85,14 @@ describe.skipIf(!hasEnv)("categories/manage — hapus permanen", () => {
   });
 
   it("kategori punya subkategori -- DITOLAK, kategori induk tetap ada", async () => {
+    const { db, businessId } = fixture;
     const [parent] = await db
       .insert(categories)
-      .values({ id: generateId(), businessId, name: `${PREFIX}_parent` })
+      .values({ id: generateId(), businessId, name: "parent" })
       .returning({ id: categories.id });
     const parentId = parent!.id;
 
-    await db
-      .insert(categories)
-      .values({ id: generateId(), businessId, name: `${PREFIX}_child`, parentId });
+    await db.insert(categories).values({ id: generateId(), businessId, name: "child", parentId });
 
     const result = await deleteCategoryWithDb(db, businessId, { id: parentId });
     expect(result.error).toBeTruthy();

@@ -31,3 +31,31 @@ export function isUniqueViolation(err: unknown): boolean {
  * bukan pesan Postgres mentah.
  */
 export class DeleteBlockedError extends Error {}
+
+/**
+ * Ditemukan lewat verifikasi UI manual /ingredients (bukan lewat test --
+ * seluruh test safe-delete sebelumnya lewat getAdminDb(), yang BYPASSRLS,
+ * jadi tidak pernah membuktikan policy DELETE di jalur produksi asli):
+ * `ingredients` sempat tidak punya RLS policy DELETE sama sekali.
+ * deleteIngredientWithDb() TIDAK melempar error apa pun -- DELETE lewat
+ * getUserDb() cuma diam-diam mempengaruhi 0 baris (perilaku standar RLS:
+ * baris yang tidak lolos USING clause policy DELETE bukan error, cuma
+ * tidak ikut ter-delete), dan fungsi tetap melaporkan `{success: {...}}`.
+ *
+ * assertRowsAffected() menutup SELURUH kelas bug ini, bukan cuma kasus
+ * ingredients: setiap `tx.delete(...)` di lib/*\/manage.ts WAJIB pakai
+ * `.returning({ id: table.id })` lalu dicek lewat helper ini. Baris nol
+ * berarti ada yang salah secara struktural (policy RLS hilang, WHERE
+ * salah target, dst) -- itu BUKAN kasus bisnis "masih dipakai" yang
+ * pantas dapat DeleteBlockedError dengan pesan ramah, jadi sengaja
+ * melempar Error biasa yang menembus ke error boundary/log, bukan
+ * ditangkap jadi toast halus. Penghapusan yang gagal diam-diam lebih
+ * berbahaya daripada permintaan yang terlihat jelas gagal.
+ */
+export function assertRowsAffected(deletedRows: unknown[], context: string): void {
+  if (deletedRows.length === 0) {
+    throw new Error(
+      `Penghapusan ${context} tidak mempengaruhi baris apa pun -- kemungkinan policy RLS DELETE hilang atau target salah. Ini bug internal, seharusnya tidak pernah terjadi kalau data yang dicek sebelumnya benar.`
+    );
+  }
+}

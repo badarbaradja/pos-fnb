@@ -626,3 +626,48 @@ jadi `units.id` yang benar per bisnis, plus keputusan ulang soal apakah
 `stock_movements` juga ikut di-FK-kan atau tetap snapshot teks. Jangan
 dikerjakan diam-diam sebagai "refactor kecil" -- ini keputusan skema
 yang butuh persetujuan eksplisit dulu.
+
+## 16. `getAdminDb()` di test safe-delete membuktikan kode, bukan produksi -- dan penutupnya: `assertRowsAffected`
+
+Bug #15 (ingredients tanpa policy RLS DELETE) lolos 11 test yang
+kelihatannya lengkap. Sebabnya: test itu memakai `getAdminDb()`
+(BYPASSRLS) untuk memanggil `deleteIngredientWithDb`, bukan cuma untuk
+menyiapkan data. Baris `tx.delete(ingredients)...` di dalamnya jalan
+tanpa RLS sama sekali, jadi tidak peduli policy DELETE ada atau tidak
+-- baru terlihat gagal saat dashboard sungguhan (yang lewat
+`getUserDb()`, RLS aktif) diverifikasi manual lewat browser.
+
+Setelah ditemukan, dicek ulang: **seluruh** test safe-delete lain
+(categories, price-tiers, modifier-groups, modifiers, payment-methods,
+units) punya kelemahan struktural yang sama -- semuanya memanggil
+fungsi yang diuji lewat `getAdminDb()`. Kebetulan kelimanya memang
+punya policy DELETE yang benar (dicek manual, lihat commit yang
+menambah `assertRowsAffected`), tapi test-nya sendiri tidak pernah
+membuktikan itu.
+
+**Perbaikan dua lapis, bukan cuma satu:**
+
+1. **Test**: semua test safe-delete (`lib/*/​__tests__/manage.test.ts`)
+   diubah memakai `getUserDb()` sungguhan lewat fixture bersama
+   `lib/db/__tests__/helpers/user-db-fixture.ts` (business + auth user +
+   membership + login asli, pola sama `tenant-isolation.test.ts`) --
+   bukan cuma untuk setup data, tapi untuk operasi yang DIUJI. Kalau
+   suatu tabel kehilangan policy DELETE-nya lagi di masa depan, test
+   akan merah, bukan diam-diam lolos.
+
+   Konsekuensi: cleanup di `afterAll` yang menghapus baris dari tabel
+   append-only (`orders`, `shifts`, `stock_movements` -- semuanya
+   SENGAJA tidak punya policy DELETE, CLAUDE.md §3.2) harus tetap pakai
+   `getAdminDb()` secara eksplisit, karena itu memang operasi sistem
+   (bukan bagian yang diuji), bukan salah kode. Beda peran, beda db --
+   jangan disamakan jadi satu `db` per file lagi.
+
+2. **Aplikasi**: `assertRowsAffected()` (`lib/db/errors.ts`) dipasang
+   di SETIAP `tx.delete(...)` di `lib/*/manage.ts` lewat
+   `.returning({id: table.id})`, melempar Error kalau baris yang
+   terhapus nol. Ini lapisan pertahanan yang menutup SELURUH kelas bug
+   ini secara permanen -- bukan cuma kasus yang kebetulan ketahuan hari
+   ini. Kalau ada tabel lain kehilangan policy DELETE-nya nanti (lupa
+   nambah di migration baru, salah generate, dst), pengguna dapat error
+   jelas, bukan tombol "Hapus" yang terlihat berhasil tapi tidak
+   melakukan apa-apa.

@@ -4,15 +4,16 @@
  * butuh order sungguhan -- pakai payOrderWithDb (T13, sudah teruji sendiri)
  * untuk fixture-nya, bukan insert manual ke order_item_modifiers, supaya
  * skenarionya realistis (jalur yang sama persis dipakai kasir).
+ *
+ * Lewat getUserDb() (via createUserDbFixture), BUKAN getAdminDb() -- lihat
+ * komentar di lib/categories/__tests__/manage.test.ts untuk alasannya.
  */
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { config as loadEnv } from "dotenv";
 import { eq } from "drizzle-orm";
 loadEnv({ path: [".env.local", ".env"], quiet: true });
 
-import { getAdminDb } from "@/lib/db/client";
 import {
-  businesses,
   devices,
   employees,
   modifierGroups,
@@ -30,6 +31,8 @@ import { generateId } from "@/lib/utils/id";
 import { openShiftWithDb } from "@/lib/pos/shift";
 import { payOrderWithDb } from "@/lib/pos/pay-order";
 import { deleteModifierWithDb } from "../manage";
+import { createUserDbFixture, type UserDbFixture } from "@/lib/db/__tests__/helpers/user-db-fixture";
+import { getAdminDb } from "@/lib/db/client";
 
 const hasEnv = Boolean(
   process.env["DATABASE_URL"] &&
@@ -38,12 +41,10 @@ const hasEnv = Boolean(
 );
 
 describe.skipIf(!hasEnv)("modifiers/manage — hapus permanen", () => {
-  const db = getAdminDb();
-  const PREFIX = `TEST_MODIFIERS_${Date.now()}`;
   const PIN = "246810";
   const EMPLOYEE_CODE = "MODKASIR";
 
-  let businessId: string;
+  let fixture: UserDbFixture;
   let outletId: string;
   let deviceId: string;
   let priceTierId: string;
@@ -52,15 +53,12 @@ describe.skipIf(!hasEnv)("modifiers/manage — hapus permanen", () => {
   let modifierGroupId: string;
 
   beforeAll(async () => {
-    const [business] = await db
-      .insert(businesses)
-      .values({ name: `${PREFIX}_business` })
-      .returning({ id: businesses.id });
-    businessId = business!.id;
+    fixture = await createUserDbFixture("TEST_MODIFIERS");
+    const { db, businessId } = fixture;
 
     const [outlet] = await db
       .insert(outlets)
-      .values({ businessId, code: "MOD1", name: `${PREFIX}_outlet` })
+      .values({ businessId, code: "MOD1", name: "outlet" })
       .returning({ id: outlets.id });
     outletId = outlet!.id;
 
@@ -75,7 +73,7 @@ describe.skipIf(!hasEnv)("modifiers/manage — hapus permanen", () => {
       businessId,
       outletId,
       code: EMPLOYEE_CODE,
-      fullName: `${PREFIX}_employee`,
+      fullName: "employee",
       role: "cashier",
       pinHash,
     });
@@ -94,14 +92,14 @@ describe.skipIf(!hasEnv)("modifiers/manage — hapus permanen", () => {
 
     const [product] = await db
       .insert(products)
-      .values({ businessId, name: `${PREFIX}_product`, isTaxable: false })
+      .values({ businessId, name: "product", isTaxable: false })
       .returning({ id: products.id });
     productId = product!.id;
     await db.insert(productPrices).values({ productId, priceTierId, price: "20000" });
 
     const [group] = await db
       .insert(modifierGroups)
-      .values({ businessId, name: `${PREFIX}_group` })
+      .values({ businessId, name: "group" })
       .returning({ id: modifierGroups.id });
     modifierGroupId = group!.id;
   });
@@ -110,23 +108,31 @@ describe.skipIf(!hasEnv)("modifiers/manage — hapus permanen", () => {
     // Urutan hapus (FK, sama pelajaran void-refund.test.ts): orders (cascade
     // order_items -> order_item_modifiers) -> shifts -> businesses (cascade
     // sisanya, termasuk modifier_groups -> modifiers).
-    if (businessId) {
-      await db.delete(orders).where(eq(orders.businessId, businessId));
-      await db.delete(shifts).where(eq(shifts.businessId, businessId));
-      await db.delete(businesses).where(eq(businesses.id, businessId));
+    //
+    // SENGAJA pakai getAdminDb(), bukan fixture.db -- orders/shifts memang
+    // TIDAK PUNYA policy RLS DELETE ("order tidak pernah dihapus", CLAUDE.md
+    // §3.2), jadi lewat fixture.db (getUserDb) baris ini diam-diam 0 baris
+    // terhapus tanpa error, dan businesses gagal dihapus karena FK. Ini
+    // pembersihan data test (operasi sistem), bukan bagian yang sedang diuji.
+    if (fixture) {
+      const adminDb = getAdminDb();
+      await adminDb.delete(orders).where(eq(orders.businessId, fixture.businessId));
+      await adminDb.delete(shifts).where(eq(shifts.businessId, fixture.businessId));
+      await fixture.cleanup();
     }
   });
 
   it("data uji benar-benar terbentuk sebelum diuji (bukan hijau karena kosong)", () => {
-    expect(businessId).toBeTruthy();
+    expect(fixture.businessId).toBeTruthy();
     expect(productId).toBeTruthy();
     expect(modifierGroupId).toBeTruthy();
   });
 
   it("item modifier yang BELUM pernah dipesan -- berhasil dihapus", async () => {
+    const { db, businessId } = fixture;
     const [modifier] = await db
       .insert(modifiers)
-      .values({ modifierGroupId, name: `${PREFIX}_unused`, price: "1000" })
+      .values({ modifierGroupId, name: "unused", price: "1000" })
       .returning({ id: modifiers.id });
     const modifierId = modifier!.id;
 
@@ -142,9 +148,10 @@ describe.skipIf(!hasEnv)("modifiers/manage — hapus permanen", () => {
   });
 
   it("item modifier yang sudah dipesan 2 kali -- DITOLAK, pesan menyebutkan jumlah yang benar, item tetap ada", async () => {
+    const { db, businessId } = fixture;
     const [modifier] = await db
       .insert(modifiers)
-      .values({ modifierGroupId, name: `${PREFIX}_ordered`, price: "2000" })
+      .values({ modifierGroupId, name: "ordered", price: "2000" })
       .returning({ id: modifiers.id });
     const modifierId = modifier!.id;
 

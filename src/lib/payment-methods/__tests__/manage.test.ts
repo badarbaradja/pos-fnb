@@ -4,15 +4,16 @@
  * transaksi) butuh order sungguhan -- pakai payOrderWithDb (T13, sudah
  * teruji sendiri) untuk fixture-nya, sama pola dengan
  * lib/modifiers/__tests__/manage.test.ts.
+ *
+ * Lewat getUserDb() (via createUserDbFixture), BUKAN getAdminDb() -- lihat
+ * komentar di lib/categories/__tests__/manage.test.ts untuk alasannya.
  */
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { config as loadEnv } from "dotenv";
 import { eq } from "drizzle-orm";
 loadEnv({ path: [".env.local", ".env"], quiet: true });
 
-import { getAdminDb } from "@/lib/db/client";
 import {
-  businesses,
   devices,
   employees,
   orders,
@@ -28,6 +29,8 @@ import { generateId } from "@/lib/utils/id";
 import { openShiftWithDb } from "@/lib/pos/shift";
 import { payOrderWithDb } from "@/lib/pos/pay-order";
 import { deletePaymentMethodWithDb } from "../manage";
+import { createUserDbFixture, type UserDbFixture } from "@/lib/db/__tests__/helpers/user-db-fixture";
+import { getAdminDb } from "@/lib/db/client";
 
 const hasEnv = Boolean(
   process.env["DATABASE_URL"] &&
@@ -36,27 +39,22 @@ const hasEnv = Boolean(
 );
 
 describe.skipIf(!hasEnv)("payment-methods/manage — hapus permanen", () => {
-  const db = getAdminDb();
-  const PREFIX = `TEST_PAYMENTMETHODS_${Date.now()}`;
   const PIN = "975310";
   const EMPLOYEE_CODE = "PMKASIR";
 
-  let businessId: string;
+  let fixture: UserDbFixture;
   let outletId: string;
   let deviceId: string;
   let priceTierId: string;
   let productId: string;
 
   beforeAll(async () => {
-    const [business] = await db
-      .insert(businesses)
-      .values({ name: `${PREFIX}_business` })
-      .returning({ id: businesses.id });
-    businessId = business!.id;
+    fixture = await createUserDbFixture("TEST_PAYMENTMETHODS");
+    const { db, businessId } = fixture;
 
     const [outlet] = await db
       .insert(outlets)
-      .values({ businessId, code: "PM1", name: `${PREFIX}_outlet` })
+      .values({ businessId, code: "PM1", name: "outlet" })
       .returning({ id: outlets.id });
     outletId = outlet!.id;
 
@@ -71,7 +69,7 @@ describe.skipIf(!hasEnv)("payment-methods/manage — hapus permanen", () => {
       businessId,
       outletId,
       code: EMPLOYEE_CODE,
-      fullName: `${PREFIX}_employee`,
+      fullName: "employee",
       role: "cashier",
       pinHash,
     });
@@ -84,7 +82,7 @@ describe.skipIf(!hasEnv)("payment-methods/manage — hapus permanen", () => {
 
     const [product] = await db
       .insert(products)
-      .values({ businessId, name: `${PREFIX}_product`, isTaxable: false })
+      .values({ businessId, name: "product", isTaxable: false })
       .returning({ id: products.id });
     productId = product!.id;
     await db.insert(productPrices).values({ productId, priceTierId, price: "15000" });
@@ -103,22 +101,28 @@ describe.skipIf(!hasEnv)("payment-methods/manage — hapus permanen", () => {
   afterAll(async () => {
     // Urutan hapus (FK, sama pelajaran void-refund.test.ts): orders (cascade
     // order_items -> payments) -> shifts -> businesses (cascade sisanya).
-    if (businessId) {
-      await db.delete(orders).where(eq(orders.businessId, businessId));
-      await db.delete(shifts).where(eq(shifts.businessId, businessId));
-      await db.delete(businesses).where(eq(businesses.id, businessId));
+    //
+    // SENGAJA pakai getAdminDb(), bukan fixture.db -- lihat komentar di
+    // lib/modifiers/__tests__/manage.test.ts (orders/shifts memang tidak
+    // punya policy RLS DELETE, append-only by design).
+    if (fixture) {
+      const adminDb = getAdminDb();
+      await adminDb.delete(orders).where(eq(orders.businessId, fixture.businessId));
+      await adminDb.delete(shifts).where(eq(shifts.businessId, fixture.businessId));
+      await fixture.cleanup();
     }
   });
 
   it("data uji benar-benar terbentuk sebelum diuji (bukan hijau karena kosong)", () => {
-    expect(businessId).toBeTruthy();
+    expect(fixture.businessId).toBeTruthy();
     expect(productId).toBeTruthy();
   });
 
   it("metode pembayaran yang BELUM pernah dipakai -- berhasil dihapus", async () => {
+    const { db, businessId } = fixture;
     const [pm] = await db
       .insert(paymentMethods)
-      .values({ businessId, code: "UNUSED", name: `${PREFIX}_unused`, type: "transfer" })
+      .values({ businessId, code: "UNUSED", name: "unused", type: "transfer" })
       .returning({ id: paymentMethods.id });
     const paymentMethodId = pm!.id;
 
@@ -134,9 +138,10 @@ describe.skipIf(!hasEnv)("payment-methods/manage — hapus permanen", () => {
   });
 
   it("metode pembayaran dipakai di 2 transaksi -- DITOLAK, pesan menyebutkan jumlah yang benar, metode tetap ada", async () => {
+    const { db, businessId } = fixture;
     const [pm] = await db
       .insert(paymentMethods)
-      .values({ businessId, code: "USED", name: `${PREFIX}_used`, type: "qris" })
+      .values({ businessId, code: "USED", name: "used", type: "qris" })
       .returning({ id: paymentMethods.id });
     const paymentMethodId = pm!.id;
 

@@ -2,7 +2,7 @@ import { z } from "zod";
 import { and, count, eq } from "drizzle-orm";
 import type { UserDbHandle } from "@/lib/db/client";
 import { paymentMethods, payments } from "@/lib/db/schema";
-import { DeleteBlockedError, isUniqueViolation } from "@/lib/db/errors";
+import { assertRowsAffected, DeleteBlockedError, isUniqueViolation } from "@/lib/db/errors";
 import { generateId } from "@/lib/utils/id";
 import { id as strings } from "@/lib/i18n/id";
 
@@ -150,9 +150,11 @@ export async function deletePaymentMethodWithDb(
         );
       }
 
-      await tx
+      const deleted = await tx
         .delete(paymentMethods)
-        .where(and(eq(paymentMethods.id, id), eq(paymentMethods.businessId, businessId)));
+        .where(and(eq(paymentMethods.id, id), eq(paymentMethods.businessId, businessId)))
+        .returning({ id: paymentMethods.id });
+      assertRowsAffected(deleted, "metode pembayaran");
     });
   } catch (err) {
     if (err instanceof DeleteBlockedError) {

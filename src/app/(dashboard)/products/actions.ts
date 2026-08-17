@@ -15,6 +15,7 @@ import {
   priceTiers,
 } from "@/lib/db/schema";
 import { generateId } from "@/lib/utils/id";
+import { assertRowsAffected } from "@/lib/db/errors";
 import { getProductImagePath, validateProductImage } from "@/lib/products/image";
 import { id as strings } from "@/lib/i18n/id";
 
@@ -289,14 +290,24 @@ export async function saveProduct(
         );
       }
       if (toDelete.length > 0) {
-        await tx
+        const deleted = await tx
           .delete(productModifierGroups)
           .where(
             and(
               eq(productModifierGroups.productId, productId),
               inArray(productModifierGroups.modifierGroupId, toDelete)
             )
+          )
+          .returning({ productId: productModifierGroups.productId });
+        assertRowsAffected(deleted, "penetapan grup modifier produk");
+        if (deleted.length !== toDelete.length) {
+          // Batch delete -- ">0 baris" saja tidak cukup di sini, karena RLS
+          // yang salah bisa saja meloloskan SEBAGIAN baris dan diam-diam
+          // melewatkan sisanya. Harus PERSIS sejumlah yang diminta.
+          throw new Error(
+            `Penetapan grup modifier: diminta hapus ${toDelete.length} baris, yang benar-benar terhapus cuma ${deleted.length}.`
           );
+        }
       }
     });
   } finally {
