@@ -125,10 +125,24 @@ function resolveRecipeCost(
 }
 
 /**
- * calculateNewAvgCost() — CALC-SPEC B.2 (Weighted Average Cost).
- * qtyLama <= 0 -> newAvgCost = costMasuk (jangan pakai rumus rata-rata, TC-11).
- * qtyLama > 0 tapi qtyLama + qtyMasuk = 0 (mis. qtyMasuk negatif) -> lempar
- * error jelas, bukan diam-diam membagi nol.
+ * calculateNewAvgCost() — CALC-SPEC B.2 (Weighted Average Cost), TC-11.
+ *
+ * newAvgCost = costMasuk (BUKAN rumus rata-rata linear) kalau:
+ *  - qtyLama <= 0 (belum ada stok nyata untuk dirata-ratakan), ATAU
+ *  - (qtyLama + qtyMasuk) <= 0 (hasil movement ini nol atau negatif --
+ *    mis. pembatalan penerimaan setelah sebagian bahan terpakai, T22).
+ *    Rumus rata-rata linear tetap valid secara aritmetika di wilayah ini
+ *    (pembilang & penyebut sama-sama bisa negatif), tapi hasilnya BUKAN
+ *    angka biaya yang berarti -- kalau avgCostLama dan costMasuk cukup
+ *    jauh berbeda, hasilnya bisa NEGATIF, mustahil untuk nilai cost.
+ *    Nilai costMasuk yang dipakai di sini TIDAK PERNAH jadi dasar
+ *    kalkulasi lanjutan yang benar: begitu movement berikutnya membuat
+ *    saldo balik ke atas nol, cabang qtyLama<=0 di atas berlaku lagi dan
+ *    me-reset rata-rata dari costMasuk movement ITU -- dibuktikan lewat
+ *    test siklus pemulihan di cogs.test.ts.
+ *
+ * Sebelumnya kasus tepat nol (qtyLama + qtyMasuk = 0) melempar error --
+ * itu keliru, saldo tepat nol adalah hasil sah, bukan kondisi kesalahan.
  */
 export function calculateNewAvgCost(
   qtyLama: Decimal,
@@ -140,10 +154,8 @@ export function calculateNewAvgCost(
     return costMasuk;
   }
   const totalQty = qtyLama.plus(qtyMasuk);
-  if (totalQty.isZero()) {
-    throw new Error(
-      "calculateNewAvgCost: qtyLama + qtyMasuk tidak boleh nol (qtyMasuk kemungkinan terlalu negatif)"
-    );
+  if (totalQty.lessThanOrEqualTo(0)) {
+    return costMasuk;
   }
   return qtyLama.times(avgCostLama).plus(qtyMasuk.times(costMasuk)).dividedBy(totalQty);
 }

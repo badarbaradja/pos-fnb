@@ -276,8 +276,8 @@ Ayam fillet: recipeQty 150 g, avgCost 45/g (45), yieldRate 0.8 (yield 80%)
 
 ```
 newAvgCost = (qtyLama × avgCostLama + qtyMasuk × costMasuk) / (qtyLama + qtyMasuk)
-// qtyLama > 0 TAPI qtyLama + qtyMasuk = 0 (mis. qtyMasuk negatif) tetap
-// wajib melempar error jelas, bukan membagi nol diam-diam.
+// Berlaku HANYA kalau qtyLama > 0 DAN (qtyLama + qtyMasuk) > 0 -- lihat
+// TC-11 untuk kasus nol/negatif di kedua sisi.
 
 costMasuk per base unit =
   (lineTotal − lineDiscount + allocatedShipping) / (qtyPurchaseUnit × purchaseFactor)
@@ -296,9 +296,33 @@ Stok 1000 g @ 145 (145), masuk 1000 g @ 160 (160)
 → newAvgCost = (145.000 + 160.000) / 2000   (145000 + 160000) / 2000   = 152,50 (152.50)
 ```
 
-**TC-11 — Stok nol atau negatif**
+**TC-11 — Stok nol atau negatif (sebelum ATAU sesudah movement)**
 ```
-qtyLama <= 0 → newAvgCost = costMasuk (jangan pakai rumus rata-rata)
+qtyLama <= 0 → newAvgCost = costMasuk (belum ada stok nyata untuk dirata-ratakan)
+
+qtyLama > 0 tapi (qtyLama + qtyMasuk) <= 0 → newAvgCost = costMasuk juga,
+BUKAN dilanjutkan lewat rumus rata-rata linear. Rumus itu tetap valid
+secara ARITMETIKA di sini (pembilang & penyebut sama-sama bisa negatif),
+tapi hasilnya bukan angka biaya yang berarti -- kalau avgCostLama dan
+costMasuk cukup jauh berbeda, hasilnya bisa NEGATIF, yang mustahil untuk
+nilai cost. Termasuk kasus tepat nol (qtyLama + qtyMasuk = 0), yang
+SEBELUMNYA melempar error -- itu keliru, saldo tepat nol adalah hasil
+sah (mis. pembatalan yang menghabiskan persis sisa stok), bukan kondisi
+kesalahan.
+
+Nilai ini TIDAK PERNAH jadi dasar kalkulasi lanjutan yang benar: begitu
+movement berikutnya membuat saldo balik ke atas nol, cabang qtyLama <= 0
+di atas berlaku lagi dan me-reset rata-rata dari costMasuk movement itu.
+Apa pun yang tersimpan selama saldo minus murni untuk kontinuitas
+tampilan/audit (kartu stok tetap menunjukkan angka yang masuk akal),
+bukan sesuatu yang kebenarannya perlu dijaga -- dibuktikan lewat test
+siklus pemulihan (minus → movement masuk berikutnya → avg_cost reset
+bersih dari costMasuk movement itu, bukan sisa perhitungan periode
+minus).
+
+Contoh (T22, pembatalan penerimaan setelah sebagian bahan terpakai):
+qtyLama 30, qtyMasuk -50, costMasuk 10.000 (10000) → totalQty -20
+→ newAvgCost = 10.000 (10000), bukan hasil rumus rata-rata.
 ```
 
 **TC-12 — Alokasi ongkir**

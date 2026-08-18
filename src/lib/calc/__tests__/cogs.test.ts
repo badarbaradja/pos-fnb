@@ -288,7 +288,7 @@ describe("TC-10 — WAC dasar", () => {
   });
 });
 
-describe("TC-11 — stok nol atau negatif", () => {
+describe("TC-11 — stok nol atau negatif (sebelum ATAU sesudah movement)", () => {
   it("qtyLama = 0 -> newAvgCost = costMasuk", () => {
     const result = calculateNewAvgCost(D(0), D(999), D(500), D(200));
     expect(result.toString()).toBe("200");
@@ -299,9 +299,47 @@ describe("TC-11 — stok nol atau negatif", () => {
     expect(result.toString()).toBe("75");
   });
 
-  it("qtyLama > 0 tapi qtyLama + qtyMasuk = 0 -> melempar error, bukan bagi nol", () => {
-    // qtyLama lolos guard "<=0", tapi qtyMasuk negatif membuat penyebutnya nol.
-    expect(() => calculateNewAvgCost(D(100), D(50), D(-100), D(75))).toThrow();
+  it("qtyLama > 0 tapi qtyLama + qtyMasuk = 0 (tepat nol) -> newAvgCost = costMasuk, BUKAN error", () => {
+    // Saldo tepat nol adalah hasil SAH (mis. pembatalan yang menghabiskan
+    // persis sisa stok) -- sebelumnya ini melempar error, itu bug yang
+    // berdiri sendiri, ditemukan lewat perencanaan T22.
+    const result = calculateNewAvgCost(D(100), D(50), D(-100), D(75));
+    expect(result.toString()).toBe("75");
+  });
+
+  it("qtyLama > 0 tapi qtyLama + qtyMasuk < 0 (hasil negatif) -> newAvgCost = costMasuk, BUKAN rumus rata-rata", () => {
+    // Kasus T22: pembatalan penerimaan setelah sebagian bahan terpakai.
+    // qtyLama 30, qtyMasuk -50 (bukan disesuaikan -- ledger mencerminkan
+    // kejadian sesungguhnya), costMasuk = unit_cost PENERIMAAN ASLI.
+    const result = calculateNewAvgCost(D(30), D(999), D(-50), D(10000));
+    expect(result.toString()).toBe("10000");
+  });
+
+  it("qtyLama > 0, qtyMasuk sangat negatif dengan avgCostLama jauh lebih tinggi dari costMasuk -> tetap costMasuk, TIDAK PERNAH negatif", () => {
+    // Ini skenario yang membuktikan kenapa rumus rata-rata linear TIDAK
+    // BOLEH dilanjutkan begitu saja ke wilayah negatif: kalau dipaksa
+    // jalan, (5×1000000 - 50×1) / (5-50) menghasilkan avg_cost NEGATIF
+    // (~-111.110) -- mustahil untuk nilai cost. Guard qtyLama+qtyMasuk<=0
+    // mencegah ini sama sekali, bukan cuma pada kasus "wajar".
+    const result = calculateNewAvgCost(D(5), D(1000000), D(-50), D(1));
+    expect(result.toString()).toBe("1");
+    expect(result.isNegative()).toBe(false);
+  });
+
+  it("siklus pemulihan: saldo minus lalu movement masuk berikutnya -> avg_cost RESET dari costMasuk movement itu, bukan sisa perhitungan periode minus", () => {
+    // Ini membuktikan klaim inti: nilai avg_cost selama saldo minus tidak
+    // pernah jadi dasar kalkulasi lanjutan yang benar. Kalau salah, avg
+    // seharusnya "bocor" dari periode minus ke sini -- test ini akan
+    // menangkapnya.
+    const duringNegative = calculateNewAvgCost(D(30), D(999), D(-50), D(10000));
+    expect(duringNegative.toString()).toBe("10000"); // qtyLama efektif sekarang -20
+
+    // Movement masuk berikutnya, qtyLama SEKARANG -20 (saldo minus dari
+    // langkah sebelumnya), costMasuk baru yang TIDAK ADA hubungannya
+    // dengan 10000 di atas -- kalau reset benar, hasilnya HARUS costMasuk
+    // baru ini persis, tidak terpengaruh sama sekali oleh duringNegative.
+    const afterRecovery = calculateNewAvgCost(D(-20), duringNegative, D(100), D(5000));
+    expect(afterRecovery.toString()).toBe("5000");
   });
 });
 
