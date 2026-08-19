@@ -1,7 +1,12 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
+import { and, eq } from "drizzle-orm";
 import { getCurrentBusiness, getSession } from "@/lib/auth/session";
 import { logout } from "@/lib/auth/actions";
+import { hasPermission } from "@/lib/auth/permissions";
+import { createServerSupabaseClient } from "@/lib/auth/supabase";
+import { getUserDb } from "@/lib/db/client";
+import { stockTransfers } from "@/lib/db/schema";
 import { Button } from "@/components/ui/button";
 import { MobileNavDrawer } from "@/components/dashboard/mobile-nav-drawer";
 import { id } from "@/lib/i18n/id";
@@ -34,6 +39,38 @@ export default async function DashboardLayout({
 
   const business = await getCurrentBusiness();
 
+  // T22 -- badge "permintaan transfer menunggu" di nav, tampil di SETIAP
+  // halaman dashboard (bukan cuma saat sudah membuka /stock-transfers)
+  // supaya gudang punya alasan membuka dashboard sama sekali, sambil
+  // menunggu tahu apakah ini cukup atau perlu notifikasi dorong beneran
+  // (T26b, docs/01-TASK-BOARD.md -- diputuskan setelah lihat pemakaian
+  // nyata). Cuma dihitung untuk yang punya izin approve -- staf lain
+  // tidak perlu tahu angka ini.
+  let pendingTransferCount = 0;
+  if (business && hasPermission(business.role, "stock.transfer_approve")) {
+    const supabase = await createServerSupabaseClient();
+    const { data: sessionData } = await supabase.auth.getSession();
+    const accessToken = sessionData.session?.access_token;
+    if (accessToken) {
+      const { db, close } = await getUserDb(accessToken);
+      try {
+        const rows = await db
+          .select({ id: stockTransfers.id })
+          .from(stockTransfers)
+          .where(and(eq(stockTransfers.businessId, business.businessId), eq(stockTransfers.status, "requested")));
+        pendingTransferCount = rows.length;
+      } finally {
+        await close();
+      }
+    }
+  }
+
+  const navItemsWithBadges = navItems.map((item) =>
+    item.href === "/stock-transfers" && pendingTransferCount > 0
+      ? { ...item, badge: pendingTransferCount }
+      : item
+  );
+
   return (
     <div className="flex flex-1 flex-col lg:flex-row">
       {/* Topbar mobile/tablet (<1024px) -- cuma hamburger, sidebar penuh
@@ -41,7 +78,7 @@ export default async function DashboardLayout({
           sidebar tetap seperti sebelumnya. */}
       <div className="flex items-center gap-2 border-b p-3 lg:hidden">
         <MobileNavDrawer
-          navItems={navItems}
+          navItems={navItemsWithBadges}
           appName={id.nav.appName}
           roleLabel={business?.role ?? null}
           logoutAction={logout}
@@ -59,13 +96,18 @@ export default async function DashboardLayout({
           ) : null}
         </div>
         <nav className="flex flex-col gap-1">
-          {navItems.map((item) => (
+          {navItemsWithBadges.map((item) => (
             <Link
               key={item.href}
               href={item.href}
-              className="rounded px-2 py-1.5 text-sm hover:bg-muted"
+              className="flex items-center justify-between rounded px-2 py-1.5 text-sm hover:bg-muted"
             >
-              {item.label}
+              <span>{item.label}</span>
+              {"badge" in item && item.badge ? (
+                <span className="rounded-full bg-destructive px-1.5 text-xs text-destructive-foreground">
+                  {item.badge}
+                </span>
+              ) : null}
             </Link>
           ))}
         </nav>

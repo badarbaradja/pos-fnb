@@ -61,6 +61,16 @@ export const businesses = pgTable(
     npwp: text("npwp"),
     plan: text("plan").notNull().default("basic"),
     trialEndsAt: timestamp("trial_ends_at", { withTimezone: true }),
+    // T22 -- ambang "menunggu sejak" di daftar transfer stok (status
+    // requested) sebelum ditandai merah. Jam ELAPSED wall-clock sederhana,
+    // BUKAN kalender jam operasional per outlet -- itu jauh lebih rumit
+    // (perlu tahu jam buka/tutup tiap outlet) dan tidak diminta. Default 4
+    // jam mengikuti angka yang diberikan, belum ada UI untuk mengubahnya
+    // (businesses tidak punya halaman pengaturan/policy UPDATE sama
+    // sekali -- gap yang sudah ada sebelum T22, bukan baru).
+    transferRequestAlertHours: integer("transfer_request_alert_hours")
+      .notNull()
+      .default(4),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
@@ -1737,6 +1747,15 @@ export const movementTypeEnum = pgEnum("movement_type", [
   // antar-outlet nanti (kalau dibangun) akan tercemar oleh koreksi yang
   // bukan transfer sungguhan.
   "transfer_cancel",
+  // T22 -- selisih sent_qty vs received_qty (docs/05-RENCANA-FASE-2.md
+  // §8.h). PENTING: movement ini TIDAK PERNAH mengurangi
+  // stock_levels.qty_on_hand siapa pun -- transfer_in (sebesar
+  // received_qty) SUDAH mencatat saldo outlet dengan tepat sendirian;
+  // transfer_loss cuma catatan NILAI RUGI untuk laporan "selisih
+  // pengiriman per pengirim/periode". Kalau suatu saat kelihatan
+  // "aneh" karena tidak mengubah saldo seperti movement lain, itu
+  // DISENGAJA -- baca docs/04-CATATAN-TEKNIS.md sebelum "memperbaikinya".
+  "transfer_loss",
 ]);
 
 /**
@@ -1815,15 +1834,32 @@ export const stockMovements = pgTable(
 ).enableRLS();
 
 /**
- * Penerimaan barang dari gudang pusat — BLUEPRINT §3.3, T22. SENGAJA
- * melewati alur draft→sent→received BLUEPRINT: outlet penerima langsung
- * mencatat apa yang benar-benar datang (status selalu 'received' saat
- * dibuat), bukan menunggu gudang mengonfirmasi "sent" di sistem. Lihat
- * catatan penyimpangan lengkap di BLUEPRINT.md §3.3.
+ * Transfer stok dua sisi (T22, docs/05-RENCANA-FASE-2.md §8):
+ * requested → approved → sent → received, dengan rejected (dari
+ * requested) dan cancelled (dari approved/sent/received) sebagai
+ * terminal alternatif. Menggantikan v1 (T22 versi satu-langkah, yang
+ * SENGAJA melewati handshake sent -- lihat catatan lama di
+ * BLUEPRINT.md §3.3, sudah tidak berlaku sejak field data lapangan
+ * putaran 2 mengonfirmasi gudang akan pakai sistem juga).
  *
- * TIDAK ADA policy UPDATE/DELETE — sekali dicatat, tidak diubah (sama
- * filosofi order/stock_movements, CLAUDE.md §3.2). Koreksi = transfer
- * baru, bukan edit di tempat.
+ * Kolom per tahap: requestedBy (createdBy) + createdAt = kapan/siapa
+ * outlet minta; approvedBy/approvedAt ATAU rejectedBy/rejectedAt/
+ * rejectedReason = keputusan gudang (approve TIDAK menetapkan angka
+ * apa pun -- murni gerbang ya/tidak, angka baru dikunci saat send);
+ * sentBy/sentAt = gudang benar-benar kirim (angka per baris ada di
+ * stock_transfer_items.sent_*); receivedBy/receivedAt = outlet
+ * konfirmasi terima (angka per baris di received_qty).
+ *
+ * number nullable (beda dari v1 NOT NULL) -- surat jalan fisik lazimnya
+ * baru ada saat gudang benar-benar mengemas/kirim, outlet yang cuma
+ * meminta tidak punya nomor apa pun untuk diisi.
+ *
+ * TIDAK ADA policy DELETE -- append-only, koreksi = status baru
+ * (cancelled), bukan edit/hapus baris (CLAUDE.md §3.2). Policy UPDATE +
+ * trigger check_stock_transfer_transition (migration) membatasi state
+ * machine di atas SEKALIGUS kolom mana yang boleh berubah per transisi
+ * -- pola sama check_stock_transfer_cancel_only v1, digeneralisasi
+ * untuk semua transisi, bukan cuma cancel.
  */
 export const stockTransfers = pgTable(
   "stock_transfers",
@@ -1838,20 +1874,38 @@ export const stockTransfers = pgTable(
     toOutletId: uuid("to_outlet_id")
       .notNull()
       .references(() => outlets.id),
-    number: text("number").notNull(), // nomor surat jalan/DO fisik, diketik staf
-    status: text("status").notNull().default("received"), // draft|sent|received|cancelled -- v1 HANYA pernah menulis 'received'
-    sentAt: timestamp("sent_at", { withTimezone: true }), // TIDAK PERNAH diisi v1
-    receivedAt: timestamp("received_at", { withTimezone: true })
-      .notNull()
-      .defaultNow(),
-    note: text("note"),
+    number: text("number"), // nomor surat jalan/DO fisik -- diisi gudang saat kirim, boleh kosong
+    status: text("status").notNull().default("requested"), // requested|approved|rejected|sent|received|cancelled
+    note: text("note"), // catatan opsional dari outlet saat request
+
+    requestedBy: uuid("requested_by").references(() => employees.id),
+    // requestedAt = createdAt (di bawah) -- request ADALAH penciptaan baris ini,
+    // tidak perlu kolom terpisah.
+
+    approvedBy: uuid("approved_by").references(() => employees.id),
+    approvedAt: timestamp("approved_at", { withTimezone: true }),
+
+    rejectedBy: uuid("rejected_by").references(() => employees.id),
+    rejectedAt: timestamp("rejected_at", { withTimezone: true }),
+    rejectedReason: text("rejected_reason"),
+
+    sentBy: uuid("sent_by").references(() => employees.id),
+    sentAt: timestamp("sent_at", { withTimezone: true }),
+
     receivedBy: uuid("received_by").references(() => employees.id),
-    // Pembatalan (T22, ditambah setelah review) -- append-only tanpa jalur
-    // koreksi berarti staf akan "membetulkan" lewat opname tanpa alasan
-    // jelas, persis kebiasaan yang bikin Indokopi kacau. Pembatalan BUKAN
-    // hapus/ubah qty: status pindah ke 'cancelled', kolom-kolom ini terisi,
-    // baris asli (dan stock_transfer_items-nya) tidak pernah berubah. Movement
-    // pembalik ada di stock_movements (movement_type 'transfer_cancel').
+    receivedAt: timestamp("received_at", { withTimezone: true }), // nullable -- beda dari v1, terima tidak lagi terjadi saat baris dibuat
+
+    // Pembatalan (T22 v1) -- append-only tanpa jalur koreksi berarti staf
+    // akan "membetulkan" lewat opname tanpa alasan jelas, persis kebiasaan
+    // yang bikin Indokopi kacau. Diperluas T22: sekarang bisa dari
+    // requested/approved (belum ada dampak stok apa pun, murni batal
+    // administratif) atau received (reversal penuh, mekanisme v1
+    // dipertahankan). SENGAJA TIDAK dari status 'sent' -- "salah kirim
+    // tapi sudah terlanjur sent" ditangani lewat received_qty jauh di
+    // bawah sent_qty + alasan saat terima (jalur yang sudah ada), bukan
+    // jalur cancel terpisah yang semantiknya ambigu (barangnya balik ke
+    // gudang, atau dianggap hilang total?) -- pertanyaan bisnis yang
+    // belum dijawab, jangan ditebak.
     cancelReason: text("cancel_reason"),
     cancelledAt: timestamp("cancelled_at", { withTimezone: true }),
     cancelledBy: uuid("cancelled_by").references(() => employees.id),
@@ -1868,37 +1922,50 @@ export const stockTransfers = pgTable(
       for: "insert",
       withCheck: sql`${t.businessId} = any(auth_business_ids())`,
     }),
-    // USING membatasi baris yang BOLEH disentuh UPDATE ke yang statusnya
-    // masih 'received' -- coba batalkan transfer yang sudah 'cancelled'
-    // (double-cancel) kena 0 baris terpengaruh, ditangkap assertRowsAffected
-    // di lapisan aplikasi (lib/db/errors.ts), bukan diam-diam "berhasil".
-    // Ini TIDAK membatasi kolom apa yang boleh diisi dalam UPDATE-nya --
-    // RLS policy tidak bisa mengekspresikan itu (USING/WITH CHECK melihat
-    // satu baris, bukan perbandingan kolom NEW vs OLD). Pembatasan kolom
-    // (cuma status/cancel_reason/cancelled_at/cancelled_by yang boleh
-    // berubah) ditegakkan trigger check_stock_transfer_cancel_only di
-    // migration, pola sama trigger business_id -- RLS + trigger dua
-    // lapisan berbeda, saling melengkapi bukan saling menggantikan.
-    // WITH CHECK eksplisit, JANGAN dihilangkan -- Postgres memakai USING
-    // sebagai WITH CHECK juga kalau tidak diisi, yang berarti baris HASIL
-    // update juga wajib status='received', menolak pembatalan (yang
-    // justru mengubahnya jadi 'cancelled') sepenuhnya. WITH CHECK di sini
-    // cuma menjaga tenancy, USING yang membatasi baris mana yang eligible.
+    // RLS di sini CUMA menjaga tenancy -- state machine (transisi status
+    // mana yang valid dari status mana) dan kolom mana yang boleh berubah
+    // per transisi ditegakkan trigger check_stock_transfer_transition
+    // (migration), bukan di sini. RLS tidak bisa membandingkan NEW vs OLD
+    // untuk logika sekompleks itu (cuma bisa melihat satu baris per
+    // evaluasi), sama alasan seperti cancel-only v1.
     pgPolicy("stock_transfers_update", {
       for: "update",
-      using: sql`${t.businessId} = any(auth_business_ids()) and ${t.status} = 'received'`,
+      using: sql`${t.businessId} = any(auth_business_ids())`,
       withCheck: sql`${t.businessId} = any(auth_business_ids())`,
     }),
   ]
 ).enableRLS();
 
 /**
- * entered_* = apa yang BENAR-BENAR diketik staf (satuan + qty + cost per
- * satuan itu), SEBELUM konversi -- terpisah dari qty/unit_cost (hasil
- * konversi ke base_unit, yang ditulis ke stock_movements). Tujuannya
- * bukan mencegah salah ketik (tidak bisa), tapi supaya bisa ditelusuri
- * ENAM BULAN KEMUDIAN persis apa yang dimasukkan kalau ada angka yang
- * terlihat janggal -- lihat docs/05-RENCANA-FASE-2.md.
+ * Tiga pasang qty terpisah (T22, docs/05-RENCANA-FASE-2.md §8.c/§8.h) --
+ * masing-masing diisi orang berbeda, di tahap berbeda:
+ * - requested_qty/requested_unit: outlet, saat request (WAJIB, baris
+ *   tidak berarti apa-apa tanpa ini).
+ * - sent_qty/sent_unit/sent_unit_cost: gudang, saat kirim (nullable --
+ *   kosong sampai tahap send). send_diff_reason WAJIB diisi (ditegakkan
+ *   server) kalau sent_qty != requested_qty -- "kirim 15 dari 20 karena
+ *   stok gudang terbatas" beda tindak lanjutnya dari "hilang di jalan",
+ *   outlet penerima perlu tahu mana yang terjadi SEJAK tahap kirim, bukan
+ *   cuma tahu di tahap terima.
+ * - received_qty: outlet, saat terima (nullable -- kosong sampai tahap
+ *   terima), SATUAN SAMA dengan sent_unit (outlet cuma konfirmasi angka,
+ *   tidak perlu pilih satuan lagi -- mengurangi friksi tepat di langkah
+ *   yang paling sensitif waktu). receive_diff_reason WAJIB (ditegakkan
+ *   server) kalau received_qty != sent_qty.
+ * qty/unit_cost = hasil konversi ke base_unit DARI received_qty (bukan
+ * sent_qty) -- ini yang ditulis ke stock_movements outlet tujuan, karena
+ * outlet cuma benar-benar punya apa yang sungguh sampai. Nullable sampai
+ * tahap terima selesai.
+ *
+ * TIDAK ADA policy DELETE. Policy UPDATE + trigger
+ * check_transfer_item_immutable_core (migration) mengunci field inti
+ * (transfer_id/ingredient_id/business_id/requested_qty/requested_unit/
+ * created_by/created_at) SELAMANYA setelah baris dibuat -- field
+ * lain (sent_x, received_x, qty, unit_cost) boleh diisi bertahap oleh
+ * lib/stock-transfers/manage.ts, yang MENEGAKKAN urutan tahap lewat
+ * status stock_transfers induk di dalam transaksi (bukan lewat RLS/
+ * trigger tabel ini) -- sama filosofi dengan sequencing status
+ * stock_transfers sendiri.
  */
 export const stockTransferItems = pgTable(
   "stock_transfer_items",
@@ -1913,11 +1980,21 @@ export const stockTransferItems = pgTable(
     ingredientId: uuid("ingredient_id")
       .notNull()
       .references(() => ingredients.id),
-    enteredUnit: text("entered_unit").notNull(), // kode satuan dipilih staf: purchase_unit ATAU base_unit ingredient ini
-    enteredQty: numeric("entered_qty", { precision: 16, scale: 4 }).notNull(),
-    enteredUnitCost: numeric("entered_unit_cost", { precision: 20, scale: 8 }).notNull(),
-    qty: numeric("qty", { precision: 16, scale: 4 }).notNull(), // hasil konversi ke base_unit
-    unitCost: numeric("unit_cost", { precision: 20, scale: 8 }).notNull(), // hasil konversi cost per base_unit
+
+    requestedUnit: text("requested_unit").notNull(),
+    requestedQty: numeric("requested_qty", { precision: 16, scale: 4 }).notNull(),
+
+    sentUnit: text("sent_unit"),
+    sentQty: numeric("sent_qty", { precision: 16, scale: 4 }),
+    sentUnitCost: numeric("sent_unit_cost", { precision: 20, scale: 8 }),
+    sendDiffReason: text("send_diff_reason"),
+
+    receivedQty: numeric("received_qty", { precision: 16, scale: 4 }),
+    receiveDiffReason: text("receive_diff_reason"),
+
+    qty: numeric("qty", { precision: 16, scale: 4 }), // hasil konversi received_qty ke base_unit
+    unitCost: numeric("unit_cost", { precision: 20, scale: 8 }), // hasil konversi sent_unit_cost ke per-base_unit
+
     createdBy: uuid("created_by").references(() => employees.id),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
@@ -1930,6 +2007,11 @@ export const stockTransferItems = pgTable(
     }),
     pgPolicy("stock_transfer_items_insert", {
       for: "insert",
+      withCheck: sql`${t.businessId} = any(auth_business_ids())`,
+    }),
+    pgPolicy("stock_transfer_items_update", {
+      for: "update",
+      using: sql`${t.businessId} = any(auth_business_ids())`,
       withCheck: sql`${t.businessId} = any(auth_business_ids())`,
     }),
   ]

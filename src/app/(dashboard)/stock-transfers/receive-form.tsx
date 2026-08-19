@@ -3,93 +3,44 @@
 import { useActionState, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { receiveStockTransfer, type ReceiveStockTransferFormState } from "./actions";
+import { receiveStockTransfer, type StockTransferFormState } from "./actions";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { id as strings } from "@/lib/i18n/id";
 
-export type OutletOption = { id: string; name: string };
 export type EmployeeOption = { id: string; fullName: string };
-export type IngredientOption = {
-  id: string;
-  name: string;
-  baseUnit: string;
-  purchaseUnit: string;
-  purchaseFactor: string;
+export type ReceiveItemOption = {
+  itemId: string;
+  ingredientName: string;
+  sentUnit: string;
+  sentQty: string;
 };
 
-type LineState = {
-  key: string;
-  ingredientId: string;
-  enteredUnitChoice: "purchase" | "base";
-  enteredQty: string;
-  enteredUnitCost: string;
-};
+type LineState = { itemId: string; receivedQty: string; diffReason: string };
 
-function newLine(defaultIngredientId: string): LineState {
-  return {
-    key: crypto.randomUUID(),
-    ingredientId: defaultIngredientId,
-    enteredUnitChoice: "purchase",
-    enteredQty: "",
-    enteredUnitCost: "",
-  };
-}
+const initialState: StockTransferFormState = {};
 
-function formatPreviewNumber(value: number): string {
-  if (!Number.isFinite(value)) return "";
-  return value.toFixed(8).replace(/\.?0+$/, "");
-}
-
-function LinePreview({ ingredient, line }: { ingredient: IngredientOption | undefined; line: LineState }) {
-  if (!ingredient) return null;
-
-  const unit = line.enteredUnitChoice === "purchase" ? ingredient.purchaseUnit : ingredient.baseUnit;
-  const factor = line.enteredUnitChoice === "purchase" ? Number(ingredient.purchaseFactor) : 1;
-  const qty = Number(line.enteredQty);
-  const valid = Number.isFinite(qty) && qty > 0 && Number.isFinite(factor) && factor > 0;
-
-  if (!valid) {
-    return <p className="text-xs text-muted-foreground">{strings.ingredients.previewPlaceholder}</p>;
-  }
-
-  const line1 =
-    line.enteredUnitChoice === "purchase"
-      ? strings.stockTransfers.previewLine1Convert
-          .replace("{unit}", unit)
-          .replace("{factor}", formatPreviewNumber(factor))
-          .replace("{baseUnit}", ingredient.baseUnit)
-      : strings.stockTransfers.previewLine1Identity.replace(/\{unit\}/g, unit);
-
-  const line2 = strings.stockTransfers.previewLine2
-    .replace("{qty}", line.enteredQty)
-    .replace("{unit}", unit)
-    .replace("{result}", formatPreviewNumber(qty * factor))
-    .replace("{baseUnit}", ingredient.baseUnit);
-
-  return (
-    <div className="rounded-lg border border-input bg-muted/40 px-3 py-2 text-sm">
-      <p>{line1}</p>
-      <p className="text-muted-foreground">{line2}</p>
-    </div>
-  );
-}
-
-const initialState: ReceiveStockTransferFormState = {};
-
+/**
+ * Halaman terima (outlet) -- setiap baris SUDAH terisi sesuai sent_qty,
+ * SATUAN SAMA (tidak perlu pilih satuan lagi, sudah ditentukan gudang
+ * saat kirim -- outlet cuma konfirmasi angka). Kalau sesuai, langsung
+ * konfirmasi; kalau beda, ubah angka -- alasan wajib muncul otomatis.
+ */
 export function ReceiveStockTransferForm({
-  outlets,
-  ingredients,
+  transferId,
+  items,
   employees,
 }: {
-  outlets: OutletOption[];
-  ingredients: IngredientOption[];
+  transferId: string;
+  items: ReceiveItemOption[];
   employees: EmployeeOption[];
 }) {
   const router = useRouter();
   const [state, formAction, isPending] = useActionState(receiveStockTransfer, initialState);
-  const [lines, setLines] = useState<LineState[]>([newLine(ingredients[0]?.id ?? "")]);
+  const [lines, setLines] = useState<LineState[]>(
+    items.map((item) => ({ itemId: item.itemId, receivedQty: item.sentQty, diffReason: "" }))
+  );
 
   useEffect(() => {
     if (state.error) {
@@ -97,22 +48,17 @@ export function ReceiveStockTransferForm({
     }
   }, [state]);
 
-  const ingredientById = new Map(ingredients.map((i) => [i.id, i]));
+  const itemById = new Map(items.map((i) => [i.itemId, i]));
 
-  function updateLine(key: string, patch: Partial<LineState>) {
-    setLines((prev) => prev.map((l) => (l.key === key ? { ...l, ...patch } : l)));
-  }
-
-  function removeLine(key: string) {
-    setLines((prev) => (prev.length > 1 ? prev.filter((l) => l.key !== key) : prev));
+  function updateLine(itemId: string, patch: Partial<LineState>) {
+    setLines((prev) => prev.map((l) => (l.itemId === itemId ? { ...l, ...patch } : l)));
   }
 
   const linesJson = JSON.stringify(
     lines.map((l) => ({
-      ingredientId: l.ingredientId,
-      enteredUnitChoice: l.enteredUnitChoice,
-      enteredQty: l.enteredQty,
-      enteredUnitCost: l.enteredUnitCost,
+      itemId: l.itemId,
+      receivedQty: l.receivedQty,
+      diffReason: l.diffReason || undefined,
     }))
   );
 
@@ -126,148 +72,72 @@ export function ReceiveStockTransferForm({
       }}
       className="flex flex-col gap-6"
     >
+      <input type="hidden" name="transferId" value={transferId} />
       <input type="hidden" name="linesJson" value={linesJson} />
 
-      <div className="grid gap-4 sm:grid-cols-2">
-        <div className="flex flex-col gap-2">
-          <Label htmlFor="toOutletId">{strings.stockTransfers.outlet}</Label>
-          <select
-            id="toOutletId"
-            name="toOutletId"
-            required
-            defaultValue={outlets[0]?.id ?? ""}
-            className="h-8 rounded-lg border border-input bg-transparent px-2.5 text-sm"
-          >
-            {outlets.map((o) => (
-              <option key={o.id} value={o.id}>
-                {o.name}
-              </option>
-            ))}
-          </select>
-        </div>
-        <div className="flex flex-col gap-2">
-          <Label htmlFor="number">{strings.stockTransfers.number}</Label>
-          <Input id="number" name="number" placeholder={strings.stockTransfers.numberPlaceholder} required />
-        </div>
-        <div className="flex flex-col gap-2">
-          <Label htmlFor="receivedBy">{strings.stockTransfers.receivedByLabel}</Label>
-          <select
-            id="receivedBy"
-            name="receivedBy"
-            required
-            defaultValue={employees[0]?.id ?? ""}
-            className="h-8 rounded-lg border border-input bg-transparent px-2.5 text-sm"
-          >
-            {employees.map((e) => (
-              <option key={e.id} value={e.id}>
-                {e.fullName}
-              </option>
-            ))}
-          </select>
-          <p className="text-xs text-muted-foreground">{strings.stockTransfers.receivedByHint}</p>
-        </div>
-        <div className="flex flex-col gap-2">
-          <Label htmlFor="note">{strings.stockTransfers.note}</Label>
-          <Input id="note" name="note" />
-        </div>
+      <p className="text-sm text-muted-foreground">{strings.stockTransfers.receiveHint}</p>
+
+      <div className="flex flex-col gap-2 sm:max-w-xs">
+        <Label htmlFor="receivedBy">{strings.stockTransfers.receivedByLabel}</Label>
+        <select
+          id="receivedBy"
+          name="receivedBy"
+          required
+          defaultValue={employees[0]?.id ?? ""}
+          className="h-8 rounded-lg border border-input bg-transparent px-2.5 text-sm"
+        >
+          {employees.map((e) => (
+            <option key={e.id} value={e.id}>
+              {e.fullName}
+            </option>
+          ))}
+        </select>
+        <p className="text-xs text-muted-foreground">{strings.stockTransfers.receivedByHint}</p>
       </div>
 
       <div className="flex flex-col gap-4">
         {lines.map((line) => {
-          const ingredient = ingredientById.get(line.ingredientId);
+          const item = itemById.get(line.itemId)!;
+          const differs = Number(line.receivedQty) !== Number(item.sentQty);
           return (
-            <div key={line.key} className="flex flex-col gap-3 rounded-lg border border-border p-4">
-              <div className="grid gap-3 sm:grid-cols-4">
-                <div className="flex flex-col gap-2 sm:col-span-2">
-                  <Label>{strings.stockTransfers.ingredient}</Label>
-                  <select
-                    value={line.ingredientId}
-                    onChange={(e) => updateLine(line.key, { ingredientId: e.target.value })}
-                    className="h-8 rounded-lg border border-input bg-transparent px-2.5 text-sm"
-                  >
-                    {ingredients.map((i) => (
-                      <option key={i.id} value={i.id}>
-                        {i.name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div className="flex flex-col gap-2">
-                  <Label>{strings.stockTransfers.unitChoice}</Label>
-                  <select
-                    value={line.enteredUnitChoice}
-                    onChange={(e) =>
-                      updateLine(line.key, { enteredUnitChoice: e.target.value as "purchase" | "base" })
-                    }
-                    className="h-8 rounded-lg border border-input bg-transparent px-2.5 text-sm"
-                  >
-                    <option value="purchase">
-                      {strings.stockTransfers.unitChoicePurchase.replace(
-                        "{unit}",
-                        ingredient?.purchaseUnit ?? ""
-                      )}
-                    </option>
-                    <option value="base">
-                      {strings.stockTransfers.unitChoiceBase.replace("{unit}", ingredient?.baseUnit ?? "")}
-                    </option>
-                  </select>
-                </div>
-                <div className="flex items-end">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={() => removeLine(line.key)}
-                    disabled={lines.length <= 1}
-                  >
-                    {strings.stockTransfers.removeLineButton}
-                  </Button>
-                </div>
+            <div key={line.itemId} className="flex flex-col gap-3 rounded-lg border border-border p-4">
+              <div className="flex items-center justify-between">
+                <p className="font-medium">{item.ingredientName}</p>
+                <p className="text-xs text-muted-foreground">
+                  {strings.stockTransfers.sentQtyLabel}: {item.sentQty} {item.sentUnit}
+                </p>
               </div>
-              <div className="grid gap-3 sm:grid-cols-2">
+              <div className="flex flex-col gap-2 sm:max-w-xs">
+                <Label>
+                  {strings.stockTransfers.receivedQtyLabel} ({item.sentUnit})
+                </Label>
+                <Input
+                  type="number"
+                  step="0.0001"
+                  min={0}
+                  value={line.receivedQty}
+                  onChange={(e) => updateLine(line.itemId, { receivedQty: e.target.value })}
+                  required
+                />
+              </div>
+              {differs ? (
                 <div className="flex flex-col gap-2">
-                  <Label>{strings.stockTransfers.enteredQty}</Label>
+                  <Label className="text-destructive">{strings.stockTransfers.receiveDiffReasonLabel}</Label>
                   <Input
-                    type="number"
-                    step="0.0001"
-                    min={0}
-                    value={line.enteredQty}
-                    onChange={(e) => updateLine(line.key, { enteredQty: e.target.value })}
+                    value={line.diffReason}
+                    onChange={(e) => updateLine(line.itemId, { diffReason: e.target.value })}
                     required
                   />
                 </div>
-                <div className="flex flex-col gap-2">
-                  <Label>{strings.stockTransfers.enteredUnitCost}</Label>
-                  <Input
-                    type="number"
-                    step="0.00000001"
-                    min={0}
-                    value={line.enteredUnitCost}
-                    onChange={(e) => updateLine(line.key, { enteredUnitCost: e.target.value })}
-                    required
-                  />
-                </div>
-              </div>
-              <LinePreview ingredient={ingredient} line={line} />
+              ) : null}
             </div>
           );
         })}
       </div>
 
       <div>
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          onClick={() => setLines((prev) => [...prev, newLine(ingredients[0]?.id ?? "")])}
-        >
-          {strings.stockTransfers.addLineButton}
-        </Button>
-      </div>
-
-      <div>
         <Button type="submit" disabled={isPending}>
-          {isPending ? strings.common.saving : strings.stockTransfers.submitButton}
+          {isPending ? strings.common.saving : strings.stockTransfers.receiveSubmitButton}
         </Button>
       </div>
     </form>

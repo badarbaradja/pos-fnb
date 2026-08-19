@@ -35,6 +35,7 @@ export type PermissionKey =
   | "stock.opname_approve"
   | "stock.waste"
   | "stock.transfer"
+  | "stock.transfer_approve"
   | "kds.view"
   | "outlet.manage"
   | "employee.manage"
@@ -92,6 +93,14 @@ export const PERMISSIONS: Record<PermissionKey, RoleStates> = {
   "stock.opname_approve": row("on", "on", "na", "na", "na", "na", "na"),
   "stock.waste": row("on", "on", "on", "na", "on", "on", "na"),
   "stock.transfer": row("on", "on", "na", "na", "na", "on", "na"),
+  // T22, key baru -- BELUM ada di tabel BLUEPRINT §7 (alur dua sisi
+  // belum ada saat tabel itu ditulis). Approve MURNI keputusan ya/tidak
+  // (tidak menetapkan angka apa pun, itu terkunci di tahap send oleh
+  // stock.transfer) -- warehouse SENGAJA 'na' (bukan 'off'), sama pola
+  // stock.opname_approve: yang input (stock.transfer, warehouse=on)
+  // TIDAK PERNAH boleh jadi yang menyetujui permintaannya sendiri, bahkan
+  // lewat override per karyawan.
+  "stock.transfer_approve": row("on", "on", "na", "na", "na", "na", "na"),
   "kds.view": row("on", "on", "on", "on", "on", "na", "na"),
   // T22b, key baru -- BELUM ada di tabel BLUEPRINT §7 (halaman kelola outlet
   // belum ada saat tabel itu ditulis). Mengatur lihat+UBAH outlet yang sudah

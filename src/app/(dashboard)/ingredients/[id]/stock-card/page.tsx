@@ -22,6 +22,7 @@ const movementTypeLabels: Record<string, string> = {
   transfer_in: strings.stockCard.movementTransferIn,
   transfer_out: strings.stockCard.movementTransferOut,
   transfer_cancel: strings.stockCard.movementTransferCancel,
+  transfer_loss: strings.stockCard.movementTransferLoss,
   production_in: strings.stockCard.movementProductionIn,
   production_out: strings.stockCard.movementProductionOut,
   refund_in: strings.stockCard.movementRefundIn,
@@ -108,8 +109,23 @@ export default async function IngredientStockCardPage({
                   <TableCell className="whitespace-nowrap text-sm text-muted-foreground">
                     {row.createdAt.toLocaleString("id-ID")}
                   </TableCell>
-                  <TableCell>{movementTypeLabels[row.movementType] ?? row.movementType}</TableCell>
-                  <TableCell className={Number(row.qty) < 0 ? "text-destructive" : undefined}>
+                  <TableCell>
+                    {movementTypeLabels[row.movementType] ?? row.movementType}
+                    {row.movementType === "transfer_loss" ? (
+                      <span title={strings.stockCard.transferLossHint} className="ml-1 cursor-help text-xs">
+                        ⓘ
+                      </span>
+                    ) : null}
+                  </TableCell>
+                  <TableCell
+                    className={
+                      row.movementType === "transfer_loss"
+                        ? "text-muted-foreground italic"
+                        : Number(row.qty) < 0
+                          ? "text-destructive"
+                          : undefined
+                    }
+                  >
                     {row.qty} {ingredient.baseUnit}
                   </TableCell>
                   <TableCell className={isNegative ? "font-semibold text-destructive" : undefined}>

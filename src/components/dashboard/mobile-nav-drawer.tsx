@@ -7,7 +7,7 @@ import { MenuIcon, XIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { id as strings } from "@/lib/i18n/id";
 
-type NavItem = { href: string; label: string };
+type NavItem = { href: string; label: string; badge?: number };
 
 /**
  * Sidebar dashboard jadi drawer hamburger di bawah 1024px (T18b) --
@@ -73,9 +73,14 @@ export function MobileNavDrawer({
                 key={item.href}
                 href={item.href}
                 onClick={() => setOpen(false)}
-                className="rounded px-2 py-3 text-sm hover:bg-muted"
+                className="flex items-center justify-between rounded px-2 py-3 text-sm hover:bg-muted"
               >
-                {item.label}
+                <span>{item.label}</span>
+                {item.badge ? (
+                  <span className="rounded-full bg-destructive px-1.5 text-xs text-destructive-foreground">
+                    {item.badge}
+                  </span>
+                ) : null}
               </Link>
             ))}
           </nav>

@@ -4,29 +4,133 @@ import { revalidatePath } from "next/cache";
 import { createServerSupabaseClient } from "@/lib/auth/supabase";
 import { requirePermissionDb } from "@/lib/auth/permissions";
 import {
+  approveStockTransferWithDb,
   cancelStockTransferWithDb,
+  rejectStockTransferWithDb,
   receiveStockTransferWithDb,
+  requestStockTransferWithDb,
+  sendStockTransferWithDb,
   type CancelStockTransferResult,
+  type ReceiveStockTransferResult,
   type StockTransferActionResult,
 } from "@/lib/stock-transfers/manage";
 
-export type { StockTransferActionResult, CancelStockTransferResult };
+export type { StockTransferActionResult, CancelStockTransferResult, ReceiveStockTransferResult };
 
-export type ReceiveStockTransferFormState = {
+export type StockTransferFormState = {
   error?: string;
 };
 
 /**
  * Pembungkus Server Action tipis -- logika sesungguhnya ada di
- * lib/stock-transfers/manage.ts. Form mengirim `lines` sebagai JSON string
- * (bukan field FormData terpisah per baris) karena jumlah baris dinamis --
- * pola sama dipakai untuk kasus lain di dashboard ini yang punya daftar
- * baris dengan panjang berubah-ubah.
+ * lib/stock-transfers/manage.ts. Form mengirim `linesJson` (bukan field
+ * FormData terpisah per baris) karena jumlah baris dinamis.
  */
-export async function receiveStockTransfer(
-  _prevState: ReceiveStockTransferFormState,
+export async function requestStockTransfer(
+  _prevState: StockTransferFormState,
   formData: FormData
-): Promise<ReceiveStockTransferFormState> {
+): Promise<StockTransferFormState> {
+  const supabase = await createServerSupabaseClient();
+  const { db, closeDb, businessId } = await requirePermissionDb(supabase, "stock.transfer");
+
+  let linesRaw: unknown;
+  try {
+    linesRaw = JSON.parse(String(formData.get("linesJson") ?? "[]"));
+  } catch {
+    return { error: "Data baris tidak valid" };
+  }
+
+  try {
+    const result = await requestStockTransferWithDb(db, businessId, {
+      toOutletId: formData.get("toOutletId"),
+      note: formData.get("note") || undefined,
+      requestedBy: formData.get("requestedBy"),
+      lines: linesRaw,
+    });
+    if (result.error) {
+      return { error: result.error };
+    }
+  } finally {
+    await closeDb();
+  }
+
+  revalidatePath("/stock-transfers");
+  return {};
+}
+
+export async function approveStockTransfer(
+  transferId: string,
+  actorId: string
+): Promise<StockTransferActionResult> {
+  const supabase = await createServerSupabaseClient();
+  const { db, closeDb, businessId } = await requirePermissionDb(supabase, "stock.transfer_approve");
+
+  try {
+    const result = await approveStockTransferWithDb(db, businessId, { transferId, actorId });
+    if (!result.error) {
+      revalidatePath("/stock-transfers");
+    }
+    return result;
+  } finally {
+    await closeDb();
+  }
+}
+
+export async function rejectStockTransfer(
+  transferId: string,
+  actorId: string,
+  reason: string
+): Promise<StockTransferActionResult> {
+  const supabase = await createServerSupabaseClient();
+  const { db, closeDb, businessId } = await requirePermissionDb(supabase, "stock.transfer_approve");
+
+  try {
+    const result = await rejectStockTransferWithDb(db, businessId, { transferId, actorId, reason });
+    if (!result.error) {
+      revalidatePath("/stock-transfers");
+    }
+    return result;
+  } finally {
+    await closeDb();
+  }
+}
+
+export async function sendStockTransfer(
+  _prevState: StockTransferFormState,
+  formData: FormData
+): Promise<StockTransferFormState> {
+  const supabase = await createServerSupabaseClient();
+  const { db, closeDb, businessId } = await requirePermissionDb(supabase, "stock.transfer");
+
+  let linesRaw: unknown;
+  try {
+    linesRaw = JSON.parse(String(formData.get("linesJson") ?? "[]"));
+  } catch {
+    return { error: "Data baris tidak valid" };
+  }
+
+  try {
+    const result = await sendStockTransferWithDb(db, businessId, {
+      transferId: formData.get("transferId"),
+      sentBy: formData.get("sentBy"),
+      number: formData.get("number") || undefined,
+      lines: linesRaw,
+    });
+    if (result.error) {
+      return { error: result.error };
+    }
+  } finally {
+    await closeDb();
+  }
+
+  revalidatePath("/stock-transfers");
+  return {};
+}
+
+export async function receiveStockTransfer(
+  _prevState: StockTransferFormState,
+  formData: FormData
+): Promise<StockTransferFormState> {
   const supabase = await createServerSupabaseClient();
   const { db, closeDb, businessId } = await requirePermissionDb(supabase, "stock.transfer");
 
@@ -39,9 +143,7 @@ export async function receiveStockTransfer(
 
   try {
     const result = await receiveStockTransferWithDb(db, businessId, {
-      toOutletId: formData.get("toOutletId"),
-      number: formData.get("number"),
-      note: formData.get("note") || undefined,
+      transferId: formData.get("transferId"),
       receivedBy: formData.get("receivedBy"),
       lines: linesRaw,
     });

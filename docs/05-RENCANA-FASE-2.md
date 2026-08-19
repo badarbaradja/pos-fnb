@@ -1,12 +1,10 @@
 # 05 — Rencana Fase 2 (revisi setelah data lapangan Indokopi)
 
-> Status: T21, T22b, T22a & T22e selesai. §8 (pivot dua brand + alur dua
+> Status: T21, T22b, T22a, T22e & T22 selesai. §8 (pivot dua brand + alur dua
 > sisi + pengolahan gudang), termasuk koreksi putaran 3 (§8.b
 > ketersediaan produk, §8.c risiko adopsi/UX request) **sudah disetujui
-> penuh** — lihat §8.9 dan §9. **T22 (transfer dua sisi) berikutnya** --
-> sekarang dikerjakan di atas fondasi yang benar (device pairing, lihat
-> `01-TASK-BOARD.md` T22e), bukan di atas asumsi single-outlet yang
-> ditemukan salah saat T22a.
+> penuh** — lihat §8.9 dan §9. **T22d (barang masuk gudang) berikutnya** --
+> prasyarat T22c karena butuh stok gudang untuk diuji.
 
 ---
 
@@ -818,7 +816,8 @@ kemasan beli — dikonfirmasi ke Indokopi saat sampai ke sana).
 [x] T22b — Halaman kelola outlet (dimajukan duluan, lihat 01-TASK-BOARD.md)
 [x] T22a — Brand (label/laporan) + product_outlets (ketersediaan, dikoreksi dari brand_id)
 [x] T22e — POS harus tahu device ini mewakili outlet yang mana (temuan T22a, lihat 01-TASK-BOARD.md -- device pairing lewat cookie+/pos/setup)
-[ ] T22  — Transfer dua sisi: request→approve→kirim→terima (6-7 hari)
+[x] T22  — Transfer dua sisi: request→approve/reject→send→receive (lihat 01-TASK-BOARD.md)
+[ ] T26b — Notifikasi dorong permintaan transfer (backlog, lihat 01-TASK-BOARD.md, diputuskan setelah lihat pemakaian nyata)
 [ ] T22d — Barang masuk gudang (prasyarat T22c)            (2-3 hari)
 [ ] T22c — Pencatatan pengolahan gudang (PALING PENTING)   (4-5 hari)
 [ ] T23  — Kartu stok per bahan (sudah ada di §5, tidak berubah)

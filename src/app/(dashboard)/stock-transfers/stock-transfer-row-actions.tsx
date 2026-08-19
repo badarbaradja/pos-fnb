@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { cancelStockTransfer } from "./actions";
+import { approveStockTransfer, cancelStockTransfer, rejectStockTransfer } from "./actions";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import {
@@ -21,13 +21,9 @@ type Warning = { ingredientName: string; resultingQty: string; baseUnit: string 
 
 function NegativeStockWarning({ warnings }: { warnings: Warning[] }) {
   if (warnings.length === 0) return null;
-  // fixed, BUKAN di dalam alur tabel -- versi awal menaruh ini di dalam
-  // <TableCell> (kolom Aksi, text-right, sempit), jadi terpotong di tepi
-  // kanan tabel (ketahuan lewat verifikasi browser sungguhan, bukan
-  // typecheck). Peringatan yang paling penting justru yang paling gampang
-  // terlewat kalau dipotong begitu. bottom-LEFT, bukan kanan -- toast
-  // sukses (sonner) default muncul di kanan bawah, tumpang tindih sesaat
-  // dengan banner ini kalau posisinya sama (ketahuan di screenshot verifikasi).
+  // fixed, BUKAN di dalam alur tabel -- lihat catatan T22 v1: dalam
+  // <TableCell> sempit jadi terpotong, ketahuan lewat verifikasi
+  // browser. bottom-LEFT (bukan kanan, tumpang tindih toast sonner).
   return (
     <div className="fixed bottom-4 left-4 z-50 w-96 max-w-[calc(100vw-2rem)] rounded-lg border border-destructive/50 bg-background text-left shadow-lg">
       <div className="rounded-lg bg-destructive/10 p-4">
@@ -48,6 +44,106 @@ function NegativeStockWarning({ warnings }: { warnings: Warning[] }) {
   );
 }
 
+/**
+ * Approve = SATU tombol, tanpa dialog -- keputusan ya/tidak murni, tidak
+ * ada angka atau alasan yang perlu diisi (§ keputusan T22: approve tidak
+ * menetapkan apa pun). Reject tetap lewat dialog karena alasan wajib.
+ */
+export function ApproveRejectButtons({
+  transferId,
+  employees,
+}: {
+  transferId: string;
+  employees: EmployeeOption[];
+}) {
+  const router = useRouter();
+  const [actorId, setActorId] = useState(employees[0]?.id ?? "");
+  const [isApproving, setIsApproving] = useState(false);
+  const [rejectOpen, setRejectOpen] = useState(false);
+  const [rejectReason, setRejectReason] = useState("");
+  const [isRejecting, setIsRejecting] = useState(false);
+
+  async function handleApprove() {
+    setIsApproving(true);
+    try {
+      const result = await approveStockTransfer(transferId, actorId);
+      if (result.error) {
+        toast.error(result.error);
+        return;
+      }
+      toast.success(strings.stockTransfers.approveSuccess);
+      router.refresh();
+    } finally {
+      setIsApproving(false);
+    }
+  }
+
+  async function handleReject() {
+    setIsRejecting(true);
+    try {
+      const result = await rejectStockTransfer(transferId, actorId, rejectReason);
+      if (result.error) {
+        toast.error(result.error);
+        return;
+      }
+      toast.success(strings.stockTransfers.rejectSuccess);
+      setRejectOpen(false);
+      router.refresh();
+    } finally {
+      setIsRejecting(false);
+    }
+  }
+
+  return (
+    <div className="flex items-center justify-end gap-1">
+      <select
+        value={actorId}
+        onChange={(e) => setActorId(e.target.value)}
+        className="h-8 rounded-lg border border-input bg-transparent px-1.5 text-xs"
+      >
+        {employees.map((e) => (
+          <option key={e.id} value={e.id}>
+            {e.fullName}
+          </option>
+        ))}
+      </select>
+      <Button size="sm" onClick={handleApprove} disabled={isApproving || !actorId}>
+        {isApproving ? strings.common.saving : strings.stockTransfers.approveButton}
+      </Button>
+      <Dialog open={rejectOpen} onOpenChange={setRejectOpen}>
+        <DialogTrigger render={<Button variant="outline" size="sm">{strings.stockTransfers.rejectButton}</Button>} />
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{strings.stockTransfers.rejectDialogTitle}</DialogTitle>
+          </DialogHeader>
+          <div className="flex flex-col gap-2">
+            <Label htmlFor="rejectReason">{strings.stockTransfers.rejectReasonLabel}</Label>
+            <textarea
+              id="rejectReason"
+              value={rejectReason}
+              onChange={(e) => setRejectReason(e.target.value)}
+              required
+              className="min-h-20 rounded-lg border border-input bg-transparent px-2.5 py-2 text-sm"
+            />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setRejectOpen(false)} disabled={isRejecting}>
+              {strings.common.cancel}
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={handleReject}
+              disabled={isRejecting || rejectReason.trim().length === 0}
+            >
+              {isRejecting ? strings.common.saving : strings.stockTransfers.rejectConfirmButton}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}
+
 export function StockTransferCancelButton({
   transferId,
   status,
@@ -64,12 +160,9 @@ export function StockTransferCancelButton({
   const [cancelledBy, setCancelledBy] = useState(employees[0]?.id ?? "");
   const [warnings, setWarnings] = useState<Warning[]>([]);
 
-  // SENGAJA komponen ini tetap mounted apa pun statusnya (parent tidak
-  // pernah conditional-unmount berdasar status) -- kalau tidak, state
-  // `warnings` hilang PERSIS saat router.refresh() membuat status baris
-  // ini berubah jadi 'cancelled', karena parent akan berhenti me-render
-  // komponen ini sama sekali. Banner peringatan justru paling penting
-  // muncul TEPAT setelah pembatalan berhasil.
+  // SENGAJA komponen ini tetap mounted apa pun statusnya -- lihat catatan
+  // T22 v1: state `warnings` hilang persis saat router.refresh() kalau
+  // parent conditional-unmount berdasar status.
   async function handleConfirm() {
     setIsPending(true);
     try {
@@ -89,7 +182,8 @@ export function StockTransferCancelButton({
     }
   }
 
-  if (status !== "received") {
+  const cancellable = status === "requested" || status === "approved" || status === "received";
+  if (!cancellable) {
     return <NegativeStockWarning warnings={warnings} />;
   }
 

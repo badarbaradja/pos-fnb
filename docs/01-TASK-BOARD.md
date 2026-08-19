@@ -282,6 +282,55 @@ dihapus paksa dan tampil ke user tanpa izin sekalipun. Test unit
 (`lib/pos/__tests__/device-pairing.test.ts`) membuktikan penolakan
 device lintas-bisnis dan peringatan tabrakan shift-terbuka.
 
+**[x] T22 — Transfer stok dua sisi: request → approve/reject → send → receive**
+Menggantikan T22 v1 (satu langkah, langsung 'received' saat dibuat)
+sepenuhnya, sesuai §8 di `docs/05-RENCANA-FASE-2.md`. Approve MURNI
+keputusan ya/tidak (tidak menetapkan angka apa pun -- angka pertama
+dikunci di send). `sent_qty` (gudang, saat kirim) dan `received_qty`
+(outlet, saat terima) dua kolom terpisah -- alasan wajib server-side
+kalau `sent_qty != requested_qty` (kenapa gudang mengirim beda dari
+yang diminta) MAUPUN kalau `received_qty != sent_qty` (selisih di
+jalan), dicatat sebagai movement `transfer_loss` bernilai rupiah yang
+SENGAJA TIDAK mengubah saldo siapa pun -- lihat
+`docs/04-CATATAN-TEKNIS.md` §18 sebelum menyentuh bagian itu.
+
+Tiga syarat adopsi (bukan pelengkap, instruksi eksplisit pemilik --
+mereka pakai WhatsApp sekarang, kalau sistem lebih ribet mereka kembali
+ke WA): halaman request satu layar (pilih bahan, ketik jumlah, kirim,
+tanpa field wajib lain), tombol "Ulangi Permintaan Terakhir" (isi form
+dari request terakhir outlet yang sama), dan approve/send yang
+baris-barisnya SUDAH terisi sesuai permintaan/persetujuan (tinggal
+konfirmasi kalau tidak ada yang berubah, bukan diketik ulang).
+
+Trigger baru menggantikan cancel-only v1: `check_stock_transfer_transition`
+(state machine penuh -- transisi mana yang valid dari status mana, dan
+kolom mana yang boleh berubah per transisi) dan
+`check_transfer_item_immutable_core` (field permintaan awal terkunci
+selamanya). Migration 0023+0024 (dipecah dua supaya `drizzle-kit
+generate` tidak minta prompt rename interaktif yang tidak tersedia di
+lingkungan kerja ini) sudah di prod, termasuk backfill data v1 (anggap
+outlet "minta" dan gudang "kirim" persis sejumlah yang dulu tercatat
+diterima -- satu-satunya angka yang ada dari sistem lama).
+
+Badge jumlah "menunggu persetujuan" di nav dashboard (tampil di semua
+halaman, bukan cuma `/stock-transfers`) + kolom "menunggu sejak" yang
+ditandai merah kalau lewat `businesses.transfer_request_alert_hours`
+(default 4 jam, elapsed wall-clock sederhana bukan kalender jam
+operasional) -- lihat T26b untuk kenapa notifikasi dorong beneran
+belum dibangun sekarang.
+
+**[ ] T26b — Notifikasi dorong permintaan transfer (push browser atau WhatsApp)**
+Ditemukan saat T22: badge in-app + kolom "menunggu sejak" (sudah
+dibangun, lihat T22 di atas) cukup KALAU gudang sudah membuka
+dashboard secara rutin, tapi TIDAK proaktif seperti WhatsApp (HP
+berbunyi tanpa perlu buka apa pun). Solusi yang benar-benar setara WA
+butuh dependency/infrastruktur baru yang belum ada di stack ini (push
+notification browser, atau integrasi WhatsApp Business API) --
+SENGAJA belum dibangun sekarang, keputusan pemilik: lihat dulu apakah
+badge cukup dari pemakaian nyata Indokopi, baru putuskan perlu ini
+atau tidak. Pola sama seperti T26 (notifikasi stok menipis) yang juga
+sengaja MVP-in-app-dulu.
+
 **[ ] T24b — Seed data demo (bahan & resep)**
 30 bahan dengan satuan dan konversi, resep untuk 25 menu dari T10,
 termasuk satu sub-resep semi-finished untuk menguji rekursi.

@@ -3,8 +3,9 @@ import { and, asc, eq } from "drizzle-orm";
 import { createServerSupabaseClient } from "@/lib/auth/supabase";
 import { requirePermissionDb } from "@/lib/auth/permissions";
 import { employees, ingredients, outlets } from "@/lib/db/schema";
+import { getLastRequestForOutlet } from "@/lib/stock-transfers/manage";
 import { id as strings } from "@/lib/i18n/id";
-import { ReceiveStockTransferForm } from "../receive-form";
+import { RequestStockTransferForm, type LastRequestLine } from "../request-form";
 
 export default async function NewStockTransferPage() {
   const supabase = await createServerSupabaseClient();
@@ -14,6 +15,7 @@ export default async function NewStockTransferPage() {
   let ingredientRows;
   let employeeRows;
   let hasCentralKitchen: boolean;
+  const lastRequestByOutlet: Record<string, LastRequestLine[]> = {};
   try {
     outletRows = await db
       .select({ id: outlets.id, name: outlets.name })
@@ -40,6 +42,10 @@ export default async function NewStockTransferPage() {
       .from(employees)
       .where(and(eq(employees.businessId, businessId), eq(employees.isActive, true)))
       .orderBy(asc(employees.fullName));
+
+    for (const outlet of outletRows) {
+      lastRequestByOutlet[outlet.id] = await getLastRequestForOutlet(db, businessId, outlet.id);
+    }
   } finally {
     await closeDb();
   }
@@ -47,7 +53,7 @@ export default async function NewStockTransferPage() {
   if (!hasCentralKitchen) {
     return (
       <div className="flex flex-col gap-4">
-        <h1 className="text-xl font-semibold">{strings.stockTransfers.receiveTitle}</h1>
+        <h1 className="text-xl font-semibold">{strings.stockTransfers.requestTitle}</h1>
         <p className="text-sm text-destructive">{strings.stockTransfers.noCentralKitchenError}</p>
       </div>
     );
@@ -63,7 +69,7 @@ export default async function NewStockTransferPage() {
     const linkHref = ingredientRows.length === 0 ? "/ingredients" : "/employees";
     return (
       <div className="flex flex-col gap-4">
-        <h1 className="text-xl font-semibold">{strings.stockTransfers.receiveTitle}</h1>
+        <h1 className="text-xl font-semibold">{strings.stockTransfers.requestTitle}</h1>
         <p className="text-sm text-muted-foreground">
           {message}{" "}
           {outletRows.length === 0 ? null : (
@@ -87,10 +93,15 @@ export default async function NewStockTransferPage() {
   return (
     <div className="flex flex-col gap-6">
       <div>
-        <h1 className="text-xl font-semibold">{strings.stockTransfers.receiveTitle}</h1>
+        <h1 className="text-xl font-semibold">{strings.stockTransfers.requestTitle}</h1>
         <p className="text-sm text-muted-foreground">{strings.stockTransfers.subtitle}</p>
       </div>
-      <ReceiveStockTransferForm outlets={outletRows} ingredients={ingredientOptions} employees={employeeRows} />
+      <RequestStockTransferForm
+        outlets={outletRows}
+        ingredients={ingredientOptions}
+        employees={employeeRows}
+        lastRequestByOutlet={lastRequestByOutlet}
+      />
     </div>
   );
 }

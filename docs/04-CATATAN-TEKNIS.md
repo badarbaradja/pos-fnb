@@ -710,3 +710,50 @@ tapi menambah `refunds` (dan tabel grandchild lain yang relevan) sebagai
 langkah manual eksplisit di `cleanup()`, mirip pola `void-refund.test.ts`
 -- ditulis di sini supaya keputusan ini tidak hilang bersama riwayat
 chat dan tidak perlu ditemukan ulang dari nol.
+
+## 18. `movement_type = 'transfer_loss'` TIDAK PERNAH mengubah `stock_levels` -- JANGAN "diperbaiki" jadi mengurangi stok (T22)
+
+`stock_movements` di seluruh sistem SELALU mengubah saldo -- itu memang
+maksud tabelnya (ledger append-only, `balance_after` = saldo SETELAH
+movement ini terjadi). `transfer_loss` (docs/05-RENCANA-FASE-2.md §8.h)
+adalah SATU-SATUNYA pengecualian yang disengaja, dan alasannya bukan
+teknis, tapi soal double-counting:
+
+Saat outlet menerima kiriman gudang dan `received_qty != sent_qty`
+(dikirim 20, sampai 15 -- 3 pecah, 2 hilang di jalan), sistem menulis
+DUA movement dalam satu transaksi (`receiveStockTransferWithDb`,
+`lib/stock-transfers/manage.ts`):
+
+1. `transfer_in`, qty = **received_qty** (15) -- ini SATU-SATUNYA yang
+   mengubah `stock_levels.qty_on_hand` outlet. Sudah benar sendirian:
+   outlet memang cuma punya 15 secara fisik.
+2. `transfer_loss`, qty = -(sent_qty − received_qty) = -5, TAPI
+   `balance_after`/`avg_cost_after` yang ditulis SAMA PERSIS dengan yang
+   baru saja dihasilkan `transfer_in` di atas -- TIDAK dihitung ulang,
+   TIDAK memanggil UPDATE `stock_levels` sama sekali.
+
+**Kalau `transfer_loss` IKUT mengurangi `stock_levels` (pola movement
+normal), outlet akan kehilangan 5 unit itu DUA KALI**: sekali karena
+`transfer_in` cuma mencatat 15 dari 20 yang diminta (5 "tidak pernah
+masuk" secara implisit), sekali lagi kalau `transfer_loss` mengurangi 5
+lagi dari saldo yang sudah benar itu. Padahal cuma ada SATU kejadian
+kerugian, bukan dua.
+
+**Fungsi `transfer_loss` murni pelaporan/akuntabilitas**: `qty` dan
+`total_cost`-nya tetap diisi dengan benar (bukan nol) supaya laporan
+"selisih pengiriman per pengirim/per periode" (T28, belum dibangun)
+tinggal `SELECT ... WHERE movement_type = 'transfer_loss'` dan
+menjumlahkan `total_cost` -- **tapi laporan APA PUN yang menjumlahkan
+`stock_movements.qty` untuk merekonstruksi SALDO STOK** (bukan nilai
+rupiah) **wajib mengecualikan `transfer_loss` secara eksplisit**, kalau
+tidak saldo hasil rekonstruksinya akan lebih rendah dari
+`stock_levels.qty_on_hand` yang sesungguhnya. Sampai catatan ini ditulis
+belum ada laporan yang melakukan rekonstruksi saldo dari penjumlahan
+`qty` (kartu stok di `ingredients/[id]/stock-card/page.tsx` menampilkan
+`balance_after` per baris apa adanya, tidak menjumlahkan ulang) -- tapi
+kalau T28 nanti butuh itu, filter `movement_type != 'transfer_loss'`
+WAJIB ada di query itu.
+
+Kartu stok memberi tanda visual (ikon ⓘ + `title` tooltip, kolom qty
+dibuat italic/muted) khusus baris `transfer_loss`, supaya manusia yang
+membaca juga tidak salah menyimpulkan itu pengurangan stok kedua.
