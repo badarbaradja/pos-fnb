@@ -98,6 +98,17 @@ const configSchema = z.object({
     // tetap konsisten.
     deviceSerialNumber: z.string().trim().min(1).optional(),
   }),
+  // Opsional -- T22 (penerimaan barang) butuh SATU outlet dengan
+  // is_central_kitchen=true sebagai from_outlet_id. TIDAK ADA halaman
+  // kelola outlet di dashboard sama sekali (T22b, belum dikerjakan), jadi
+  // ini satu-satunya jalan membuatnya untuk sekarang. Kosongkan blok ini
+  // kalau belum butuh T22.
+  centralKitchen: z
+    .object({
+      name: z.string().trim().min(1),
+      code: z.string().trim().min(1),
+    })
+    .optional(),
 });
 
 type BootstrapConfig = z.infer<typeof configSchema>;
@@ -240,6 +251,31 @@ async function main() {
   }
   if (!outlet) {
     throw new Error("Gagal membuat/menemukan outlet");
+  }
+
+  if (config.centralKitchen) {
+    const [existingCk] = await db
+      .select()
+      .from(outlets)
+      .where(and(eq(outlets.businessId, business.id), eq(outlets.code, config.centralKitchen.code)));
+    if (!existingCk) {
+      await db.insert(outlets).values({
+        id: generateId(),
+        businessId: business.id,
+        code: config.centralKitchen.code,
+        name: config.centralKitchen.name,
+        isCentralKitchen: true,
+        // Gudang tidak jualan -- kas/pajak/service charge tidak relevan,
+        // biarkan default kolom (tidak pernah dibaca untuk outlet ini).
+      });
+      console.log(`[outlets] gudang pusat dibuat: ${config.centralKitchen.name} (${config.centralKitchen.code})`);
+    } else if (!existingCk.isCentralKitchen) {
+      throw new Error(
+        `bootstrap-production.ts: outlet dengan code "${config.centralKitchen.code}" sudah ada tapi BUKAN gudang pusat (is_central_kitchen=false) -- kemungkinan bentrok code dengan outlet retail. Ganti code di config.centralKitchen.`
+      );
+    } else {
+      console.log(`[outlets] gudang pusat sudah ada: ${existingCk.name} (${existingCk.code})`);
+    }
   }
 
   for (const [index, pm] of buildPaymentMethods(config.outlet.cashEnabled).entries()) {

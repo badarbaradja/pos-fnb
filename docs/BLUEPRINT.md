@@ -577,25 +577,52 @@ create table waste_logs (
   created_at    timestamptz not null default now()
 );
 
+-- T22 -- PENYIMPANGAN DISENGAJA dari draft di atas, dicatat di sini supaya
+-- tidak "diperbaiki" balik nanti saat ada yang membandingkan skema dengan
+-- dokumen ini:
+-- 1. qty_sent/qty_received DIGABUNG jadi satu kolom `qty`. T22 v1 sengaja
+--    melewati handshake draft->sent->received: gudang pusat TIDAK mencatat
+--    "sent" di sistem (butuh gudang jadi pengguna sistem juga, yang belum
+--    tentu terjadi) -- outlet penerima langsung mencatat APA YANG BENAR-
+--    BENAR DATANG, status langsung 'received'. qty_sent tidak punya makna
+--    kalau tidak pernah ada langkah "sent" yang tercatat. draft/sent tetap
+--    valid sebagai NILAI status (kolom tidak diubah jadi enum sempit)
+--    supaya alur dua arah bisa dibangun nanti tanpa migrasi ulang, tapi
+--    v1 tidak pernah menulisnya.
+-- 2. stock_transfer_items dapat business_id sendiri (pola trigger di atas)
+--    DAN kolom entered_*/created_by/created_at -- lihat definisi final di
+--    bawah, bukan draft minimal yang tertulis sebelumnya.
 create table stock_transfers (
   id             uuid primary key default gen_random_uuid(),
   business_id    uuid not null references businesses(id),
-  from_outlet_id uuid not null references outlets(id),
+  from_outlet_id uuid not null references outlets(id),  -- outlet dengan is_central_kitchen = true
   to_outlet_id   uuid not null references outlets(id),
-  number         text not null,
-  status         text not null default 'draft',   -- draft|sent|received|cancelled
-  sent_at        timestamptz,
-  received_at    timestamptz,
-  note           text
+  number         text not null,        -- nomor surat jalan/DO fisik, diketik staf, BUKAN digenerate sistem
+  status         text not null default 'received',   -- draft|sent|received|cancelled -- v1 HANYA pernah menulis 'received'
+  sent_at        timestamptz,          -- TIDAK PERNAH diisi v1, disiapkan untuk alur dua arah nanti
+  received_at    timestamptz not null default now(),
+  note           text,
+  received_by    uuid references employees(id),
+  created_at     timestamptz not null default now()
 );
 
 create table stock_transfer_items (
-  id            uuid primary key default gen_random_uuid(),
-  transfer_id   uuid not null references stock_transfers(id) on delete cascade,
-  ingredient_id uuid not null references ingredients(id),
-  qty_sent      numeric(16,4) not null,
-  qty_received  numeric(16,4),
-  unit_cost     numeric(20,8) not null
+  id                uuid primary key default gen_random_uuid(),
+  transfer_id       uuid not null references stock_transfers(id) on delete cascade,
+  business_id       uuid not null references businesses(id),  -- didenormalisasi, pola sama stock_levels (lihat catatan di atas §3.3)
+  ingredient_id     uuid not null references ingredients(id),
+  -- Apa yang BENAR-BENAR diketik staf, sebelum konversi -- terpisah dari
+  -- qty/unit_cost (hasil konversi, yang dipakai ledger). Alasannya bukan
+  -- soal salah/benar (staf sudah tahu itu) tapi soal MENELUSURI di mana
+  -- salahnya, enam bulan kemudian. Kolom ini yang menjawab "5 apa yang
+  -- diketik -- liter atau dus" tanpa harus menebak dari angka base-unit.
+  entered_unit      text not null,           -- kode satuan yang dipilih staf: purchase_unit ATAU base_unit ingredient ini
+  entered_qty       numeric(16,4) not null,  -- qty mentah dalam entered_unit
+  entered_unit_cost numeric(20,8) not null,  -- cost mentah per entered_unit
+  qty               numeric(16,4) not null,  -- HASIL konversi ke base_unit -- ini yang ditulis ke stock_movements
+  unit_cost         numeric(20,8) not null,  -- HASIL konversi cost per base_unit
+  created_by        uuid references employees(id),
+  created_at        timestamptz not null default now()
 );
 ```
 

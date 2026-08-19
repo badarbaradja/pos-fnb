@@ -131,6 +131,11 @@ export default async function IngredientsPage() {
                   </TableCell>
                   <TableCell className="text-right">
                     <div className="flex items-center justify-end gap-1">
+                      <Link href={`/ingredients/${row.id}/stock-card`}>
+                        <Button variant="ghost" size="sm">
+                          {strings.stockCard.viewLink}
+                        </Button>
+                      </Link>
                       <IngredientFormDialog
                         ingredient={formValue}
                         unitOptions={unitOptions}

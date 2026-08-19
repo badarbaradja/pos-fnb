@@ -1618,6 +1618,13 @@ export const movementTypeEnum = pgEnum("movement_type", [
   "refund_in",
   "initial",
   "manual_adjust",
+  // T22 -- SENGAJA bukan 'transfer_out' meski secara sekilas mirip:
+  // transfer_out berarti stok sungguh berpindah ke outlet lain. Ini
+  // membalik entri penerimaan yang salah -- tidak ada perpindahan fisik
+  // apa pun. Kalau dipaksa pakai transfer_out, laporan volume transfer
+  // antar-outlet nanti (kalau dibangun) akan tercemar oleh koreksi yang
+  // bukan transfer sungguhan.
+  "transfer_cancel",
 ]);
 
 /**
@@ -1689,6 +1696,127 @@ export const stockMovements = pgTable(
       using: sql`${t.businessId} = any(auth_business_ids())`,
     }),
     pgPolicy("stock_movements_insert", {
+      for: "insert",
+      withCheck: sql`${t.businessId} = any(auth_business_ids())`,
+    }),
+  ]
+).enableRLS();
+
+/**
+ * Penerimaan barang dari gudang pusat — BLUEPRINT §3.3, T22. SENGAJA
+ * melewati alur draft→sent→received BLUEPRINT: outlet penerima langsung
+ * mencatat apa yang benar-benar datang (status selalu 'received' saat
+ * dibuat), bukan menunggu gudang mengonfirmasi "sent" di sistem. Lihat
+ * catatan penyimpangan lengkap di BLUEPRINT.md §3.3.
+ *
+ * TIDAK ADA policy UPDATE/DELETE — sekali dicatat, tidak diubah (sama
+ * filosofi order/stock_movements, CLAUDE.md §3.2). Koreksi = transfer
+ * baru, bukan edit di tempat.
+ */
+export const stockTransfers = pgTable(
+  "stock_transfers",
+  {
+    id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+    businessId: uuid("business_id")
+      .notNull()
+      .references(() => businesses.id),
+    fromOutletId: uuid("from_outlet_id")
+      .notNull()
+      .references(() => outlets.id), // outlet dengan is_central_kitchen = true
+    toOutletId: uuid("to_outlet_id")
+      .notNull()
+      .references(() => outlets.id),
+    number: text("number").notNull(), // nomor surat jalan/DO fisik, diketik staf
+    status: text("status").notNull().default("received"), // draft|sent|received|cancelled -- v1 HANYA pernah menulis 'received'
+    sentAt: timestamp("sent_at", { withTimezone: true }), // TIDAK PERNAH diisi v1
+    receivedAt: timestamp("received_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    note: text("note"),
+    receivedBy: uuid("received_by").references(() => employees.id),
+    // Pembatalan (T22, ditambah setelah review) -- append-only tanpa jalur
+    // koreksi berarti staf akan "membetulkan" lewat opname tanpa alasan
+    // jelas, persis kebiasaan yang bikin Indokopi kacau. Pembatalan BUKAN
+    // hapus/ubah qty: status pindah ke 'cancelled', kolom-kolom ini terisi,
+    // baris asli (dan stock_transfer_items-nya) tidak pernah berubah. Movement
+    // pembalik ada di stock_movements (movement_type 'transfer_cancel').
+    cancelReason: text("cancel_reason"),
+    cancelledAt: timestamp("cancelled_at", { withTimezone: true }),
+    cancelledBy: uuid("cancelled_by").references(() => employees.id),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    pgPolicy("stock_transfers_select", {
+      for: "select",
+      using: sql`${t.businessId} = any(auth_business_ids())`,
+    }),
+    pgPolicy("stock_transfers_insert", {
+      for: "insert",
+      withCheck: sql`${t.businessId} = any(auth_business_ids())`,
+    }),
+    // USING membatasi baris yang BOLEH disentuh UPDATE ke yang statusnya
+    // masih 'received' -- coba batalkan transfer yang sudah 'cancelled'
+    // (double-cancel) kena 0 baris terpengaruh, ditangkap assertRowsAffected
+    // di lapisan aplikasi (lib/db/errors.ts), bukan diam-diam "berhasil".
+    // Ini TIDAK membatasi kolom apa yang boleh diisi dalam UPDATE-nya --
+    // RLS policy tidak bisa mengekspresikan itu (USING/WITH CHECK melihat
+    // satu baris, bukan perbandingan kolom NEW vs OLD). Pembatasan kolom
+    // (cuma status/cancel_reason/cancelled_at/cancelled_by yang boleh
+    // berubah) ditegakkan trigger check_stock_transfer_cancel_only di
+    // migration, pola sama trigger business_id -- RLS + trigger dua
+    // lapisan berbeda, saling melengkapi bukan saling menggantikan.
+    // WITH CHECK eksplisit, JANGAN dihilangkan -- Postgres memakai USING
+    // sebagai WITH CHECK juga kalau tidak diisi, yang berarti baris HASIL
+    // update juga wajib status='received', menolak pembatalan (yang
+    // justru mengubahnya jadi 'cancelled') sepenuhnya. WITH CHECK di sini
+    // cuma menjaga tenancy, USING yang membatasi baris mana yang eligible.
+    pgPolicy("stock_transfers_update", {
+      for: "update",
+      using: sql`${t.businessId} = any(auth_business_ids()) and ${t.status} = 'received'`,
+      withCheck: sql`${t.businessId} = any(auth_business_ids())`,
+    }),
+  ]
+).enableRLS();
+
+/**
+ * entered_* = apa yang BENAR-BENAR diketik staf (satuan + qty + cost per
+ * satuan itu), SEBELUM konversi -- terpisah dari qty/unit_cost (hasil
+ * konversi ke base_unit, yang ditulis ke stock_movements). Tujuannya
+ * bukan mencegah salah ketik (tidak bisa), tapi supaya bisa ditelusuri
+ * ENAM BULAN KEMUDIAN persis apa yang dimasukkan kalau ada angka yang
+ * terlihat janggal -- lihat docs/05-RENCANA-FASE-2.md.
+ */
+export const stockTransferItems = pgTable(
+  "stock_transfer_items",
+  {
+    id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+    transferId: uuid("transfer_id")
+      .notNull()
+      .references(() => stockTransfers.id, { onDelete: "cascade" }),
+    businessId: uuid("business_id")
+      .notNull()
+      .references(() => businesses.id), // didenormalisasi, pola sama stock_levels
+    ingredientId: uuid("ingredient_id")
+      .notNull()
+      .references(() => ingredients.id),
+    enteredUnit: text("entered_unit").notNull(), // kode satuan dipilih staf: purchase_unit ATAU base_unit ingredient ini
+    enteredQty: numeric("entered_qty", { precision: 16, scale: 4 }).notNull(),
+    enteredUnitCost: numeric("entered_unit_cost", { precision: 20, scale: 8 }).notNull(),
+    qty: numeric("qty", { precision: 16, scale: 4 }).notNull(), // hasil konversi ke base_unit
+    unitCost: numeric("unit_cost", { precision: 20, scale: 8 }).notNull(), // hasil konversi cost per base_unit
+    createdBy: uuid("created_by").references(() => employees.id),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    pgPolicy("stock_transfer_items_select", {
+      for: "select",
+      using: sql`${t.businessId} = any(auth_business_ids())`,
+    }),
+    pgPolicy("stock_transfer_items_insert", {
       for: "insert",
       withCheck: sql`${t.businessId} = any(auth_business_ids())`,
     }),

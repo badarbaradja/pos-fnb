@@ -15,5 +15,9 @@
     "cashEnabled": true,
     "roundingTo": 100,
     "deviceSerialNumber": "KODE-KASIR1"
+  },
+  "centralKitchen": {
+    "name": "Gudang Pusat",
+    "code": "GUDANG"
   }
 }

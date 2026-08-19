@@ -197,6 +197,22 @@ Pasang paralel di cafe pilot selama seminggu, jalan bersama sistem lama mereka. 
 T21 skema inventori · T22 CRUD bahan & satuan · T23 resep/BOM · T24 pembelian & supplier ·
 T25 pemotongan stok otomatis saat bayar · T26 opname · T27 waste · T28 laporan stok & variance
 
+> Urutan detail (beda dari ringkasan satu baris di atas, ditulis setelah
+> data lapangan Indokopi mengubah prioritas) ada di
+> `docs/05-RENCANA-FASE-2.md`: T21 sekarang mencakup CRUD bahan & satuan
+> sekaligus, T22 jadi penerimaan barang dari gudang (bukan resep), resep/
+> HPP mundur ke akhir. Baris ringkasan di atas sengaja tidak ditulis ulang
+> di sini supaya satu dokumen (05) jadi sumber kebenaran urutan, bukan dua
+> tempat yang bisa berbeda.
+
+**[ ] T22b — Halaman kelola outlet**
+Ditemukan saat T22 (penerimaan gudang): outlet gudang pusat sengaja
+dibuat lewat `bootstrap-production.ts` (sekali, saat setup), bukan
+dashboard -- karena belum ada halaman kelola outlet sama sekali. Owner
+yang buka cabang kedua tidak boleh perlu menghubungi developer untuk itu
+-- kekurangan yang sama seperti karyawan (T15b) dan perangkat (T15c)
+dulu sebelum keduanya dapat halaman sendiri.
+
 **[ ] T24b — Seed data demo (bahan & resep)**
 30 bahan dengan satuan dan konversi, resep untuk 25 menu dari T10,
 termasuk satu sub-resep semi-finished untuk menguji rekursi.
