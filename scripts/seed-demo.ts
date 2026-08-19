@@ -6,6 +6,7 @@ import { and, eq } from "drizzle-orm";
 import { getAdminDb } from "../src/lib/db/client";
 import { createSupabaseAdminClient } from "../src/lib/auth/supabase";
 import {
+  brands,
   businesses,
   outlets,
   memberships,
@@ -128,6 +129,19 @@ async function main() {
     throw new Error("Gagal membuat/menemukan business demo");
   }
 
+  let [brand] = await db.select().from(brands).where(eq(brands.businessId, business.id));
+  if (!brand) {
+    const brandId = generateId();
+    await db.insert(brands).values({ id: brandId, businessId: business.id, name: DEMO_BUSINESS_NAME });
+    [brand] = await db.select().from(brands).where(eq(brands.id, brandId));
+    console.log(`[brands] dibuat: ${DEMO_BUSINESS_NAME}`);
+  } else {
+    console.log(`[brands] sudah ada: ${brand.name}`);
+  }
+  if (!brand) {
+    throw new Error("Gagal membuat/menemukan brand demo");
+  }
+
   let [outlet] = await db
     .select()
     .from(outlets)
@@ -139,6 +153,7 @@ async function main() {
     await db.insert(outlets).values({
       id: outletId,
       businessId: business.id,
+      brandId: brand.id,
       code: DEMO_OUTLET_CODE,
       name: DEMO_OUTLET_NAME,
     });

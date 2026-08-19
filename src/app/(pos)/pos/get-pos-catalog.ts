@@ -10,6 +10,7 @@ import {
   paymentMethods,
   priceTiers,
   productModifierGroups,
+  productOutlets,
   productPrices,
   products,
   productVariants,
@@ -143,7 +144,7 @@ export async function getPosCatalog(
     .where(and(eq(categories.businessId, businessId), eq(categories.isActive, true)))
     .orderBy(asc(categories.sortOrder), asc(categories.name));
 
-  const productRows = await db
+  let productRows = await db
     .select({
       id: products.id,
       name: products.name,
@@ -156,6 +157,26 @@ export async function getPosCatalog(
     .leftJoin(categories, eq(products.categoryId, categories.id))
     .where(and(eq(products.businessId, businessId), eq(products.isActive, true)))
     .orderBy(asc(products.sortOrder), asc(products.name));
+
+  // Ketersediaan per outlet (T22a, docs/05-RENCANA-FASE-2.md §8.b -- KOREKSI
+  // dari rencana brand_id semula): produk TANPA baris product_outlets sama
+  // sekali = tersedia di SEMUA outlet (default terbuka). Produk yang PUNYA
+  // baris = HANYA tersedia di outlet yang punya barisnya (whitelist). brand
+  // TIDAK dipakai di sini sama sekali -- itu cuma label/laporan (§8.a).
+  const allProductIds = productRows.map((p) => p.id);
+  const restrictionRows = allProductIds.length
+    ? await db
+        .select({ productId: productOutlets.productId, outletId: productOutlets.outletId })
+        .from(productOutlets)
+        .where(inArray(productOutlets.productId, allProductIds))
+    : [];
+  const restrictedProductIds = new Set(restrictionRows.map((r) => r.productId));
+  const allowedForThisOutlet = new Set(
+    restrictionRows.filter((r) => r.outletId === outlet.id).map((r) => r.productId)
+  );
+  productRows = productRows.filter(
+    (p) => !restrictedProductIds.has(p.id) || allowedForThisOutlet.has(p.id)
+  );
 
   const productIds = productRows.map((p) => p.id);
 

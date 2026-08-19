@@ -43,6 +43,7 @@ import { and, eq } from "drizzle-orm";
 import { getAdminDb } from "../src/lib/db/client";
 import { createSupabaseAdminClient } from "../src/lib/auth/supabase";
 import {
+  brands,
   businesses,
   outlets,
   memberships,
@@ -225,6 +226,24 @@ async function main() {
     throw new Error("Gagal membuat/menemukan business");
   }
 
+  // T22a -- satu brand default per business, dinamai sama seperti nama
+  // bisnisnya (docs/05-RENCANA-FASE-2.md §8.a/§8.b). Outlet WAJIB satu
+  // brand; untuk bisnis satu-brand (kasus umum saat bootstrap), ini bukan
+  // pilihan yang perlu dikonfigurasi -- brand kedua (mis. Indosteak) dibuat
+  // belakangan lewat dashboard /outlets, bukan di sini.
+  let [brand] = await db.select().from(brands).where(eq(brands.businessId, business.id));
+  if (!brand) {
+    const brandId = generateId();
+    await db.insert(brands).values({ id: brandId, businessId: business.id, name: config.business.name });
+    [brand] = await db.select().from(brands).where(eq(brands.id, brandId));
+    console.log(`[brands] dibuat: ${config.business.name}`);
+  } else {
+    console.log(`[brands] sudah ada: ${brand.name}`);
+  }
+  if (!brand) {
+    throw new Error("Gagal membuat/menemukan brand");
+  }
+
   let [outlet] = await db
     .select()
     .from(outlets)
@@ -234,6 +253,7 @@ async function main() {
     await db.insert(outlets).values({
       id: outletId,
       businessId: business.id,
+      brandId: brand.id,
       code: config.outlet.code,
       name: config.outlet.name,
       address: config.outlet.address ?? null,
@@ -262,6 +282,7 @@ async function main() {
       await db.insert(outlets).values({
         id: generateId(),
         businessId: business.id,
+        brandId: brand.id,
         code: config.centralKitchen.code,
         name: config.centralKitchen.name,
         isCentralKitchen: true,

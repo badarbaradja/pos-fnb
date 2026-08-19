@@ -36,6 +36,7 @@ export type PermissionKey =
   | "stock.waste"
   | "stock.transfer"
   | "kds.view"
+  | "outlet.manage"
   | "employee.manage"
   | "payroll.view"
   | "payroll.process"
@@ -92,6 +93,13 @@ export const PERMISSIONS: Record<PermissionKey, RoleStates> = {
   "stock.waste": row("on", "on", "on", "na", "on", "on", "na"),
   "stock.transfer": row("on", "on", "na", "na", "na", "on", "na"),
   "kds.view": row("on", "on", "on", "on", "on", "na", "na"),
+  // T22b, key baru -- BELUM ada di tabel BLUEPRINT §7 (halaman kelola outlet
+  // belum ada saat tabel itu ditulis). Mengatur lihat+UBAH outlet yang sudah
+  // ada (owner & manajer). MEMBUAT outlet baru sengaja digerbang TERPISAH
+  // oleh "settings.business" (owner-only, baris di bawah, TIDAK diubah) --
+  // outlet baru punya konsekuensi biaya/struktur, keputusan pemilik, bukan
+  // operasional harian seperti mengubah jam cutoff outlet yang sudah ada.
+  "outlet.manage": row("on", "on", "na", "na", "na", "na", "na"),
   "employee.manage": row("on", "off", "na", "na", "na", "na", "na"),
   "payroll.view": row("on", "off", "na", "na", "na", "na", "on"),
   "payroll.process": row("on", "na", "na", "na", "na", "na", "on"),

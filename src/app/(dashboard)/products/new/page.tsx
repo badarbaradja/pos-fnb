@@ -2,7 +2,7 @@ import Link from "next/link";
 import { asc, eq } from "drizzle-orm";
 import { createServerSupabaseClient } from "@/lib/auth/supabase";
 import { requirePermissionDb } from "@/lib/auth/permissions";
-import { categories, priceTiers, modifierGroups } from "@/lib/db/schema";
+import { categories, priceTiers, modifierGroups, brands, outlets } from "@/lib/db/schema";
 import { id as strings } from "@/lib/i18n/id";
 import { ProductForm } from "../product-form";
 
@@ -13,9 +13,9 @@ export default async function NewProductPage() {
     "product.manage"
   );
 
-  let categoryRows, priceTierRows, modifierGroupRows;
+  let categoryRows, priceTierRows, modifierGroupRows, brandRows, outletRows;
   try {
-    [categoryRows, priceTierRows, modifierGroupRows] = await Promise.all([
+    [categoryRows, priceTierRows, modifierGroupRows, brandRows, outletRows] = await Promise.all([
       db
         .select({ id: categories.id, name: categories.name })
         .from(categories)
@@ -31,6 +31,16 @@ export default async function NewProductPage() {
         .from(modifierGroups)
         .where(eq(modifierGroups.businessId, businessId))
         .orderBy(asc(modifierGroups.name)),
+      db
+        .select({ id: brands.id, name: brands.name })
+        .from(brands)
+        .where(eq(brands.businessId, businessId))
+        .orderBy(asc(brands.name)),
+      db
+        .select({ id: outlets.id, name: outlets.name })
+        .from(outlets)
+        .where(eq(outlets.businessId, businessId))
+        .orderBy(asc(outlets.createdAt)),
     ]);
   } finally {
     await closeDb();
@@ -53,9 +63,12 @@ export default async function NewProductPage() {
         initialVariants={[]}
         initialPrices={{}}
         assignedModifierGroupIds={[]}
+        assignedOutletIds={[]}
         categories={categoryRows}
         priceTiers={priceTierRows}
         modifierGroups={modifierGroupRows}
+        brands={brandRows}
+        outlets={outletRows}
       />
     </div>
   );

@@ -73,6 +73,40 @@ export const businesses = pgTable(
   ]
 ).enableRLS();
 
+// T22a -- satu pemilik bisa punya lebih dari satu nama dagang (brand)
+// berbagi satu business/gudang yang sama (docs/05-RENCANA-FASE-2.md §8.a,
+// Indokopi + Indosteak). brands CUMA untuk label & pengelompokan laporan
+// (§8.a/§8.b) -- KETERSEDIAAN produk di katalog kasir TIDAK ditentukan
+// brand, itu tanggung jawab product_outlets (di bawah). Tidak ada delete
+// policy -- master data, nonaktifkan lewat isActive (CLAUDE.md §3.2).
+export const brands = pgTable(
+  "brands",
+  {
+    id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+    businessId: uuid("business_id")
+      .notNull()
+      .references(() => businesses.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    isActive: boolean("is_active").notNull().default(true),
+  },
+  (t) => [
+    unique().on(t.businessId, t.name),
+    pgPolicy("brands_select", {
+      for: "select",
+      using: sql`${t.businessId} = any(auth_business_ids())`,
+    }),
+    pgPolicy("brands_insert", {
+      for: "insert",
+      withCheck: sql`${t.businessId} = any(auth_business_ids())`,
+    }),
+    pgPolicy("brands_update", {
+      for: "update",
+      using: sql`${t.businessId} = any(auth_business_ids())`,
+      withCheck: sql`${t.businessId} = any(auth_business_ids())`,
+    }),
+  ]
+).enableRLS();
+
 export const outlets = pgTable(
   "outlets",
   {
@@ -80,6 +114,12 @@ export const outlets = pgTable(
     businessId: uuid("business_id")
       .notNull()
       .references(() => businesses.id, { onDelete: "cascade" }),
+    // NOT NULL -- setiap outlet harus jelas satu brand untuk pelaporan
+    // per brand (§8.a). Data lama di-backfill ke brand default lewat
+    // migration (lihat komentar migration 0021), bukan nullable sementara.
+    brandId: uuid("brand_id")
+      .notNull()
+      .references(() => brands.id),
     code: text("code").notNull(), // 'PST', 'CBG1' -> dipakai di nomor struk
     name: text("name").notNull(),
     address: text("address"),
@@ -143,6 +183,17 @@ export const outlets = pgTable(
     }),
     pgPolicy("outlets_insert", {
       for: "insert",
+      withCheck: sql`${t.businessId} = any(auth_business_ids())`,
+    }),
+    // Gap dari T06 (sama pola dengan employees_update/devices_update) --
+    // tidak ada policy UPDATE berarti tidak ada UPDATE ke outlets yang bisa
+    // lewat koneksi RLS-bound sama sekali. Dibutuhkan T22b untuk halaman
+    // kelola outlet dashboard. withCheck eksplisit (bukan reuse USING) --
+    // pelajaran dari bug stock_transfers_update di migration 0019: tanpa
+    // withCheck eksplisit, Postgres reuse USING utk baris baru juga.
+    pgPolicy("outlets_update", {
+      for: "update",
+      using: sql`${t.businessId} = any(auth_business_ids())`,
       withCheck: sql`${t.businessId} = any(auth_business_ids())`,
     }),
   ]
@@ -361,6 +412,10 @@ export const products = pgTable(
       .notNull()
       .references(() => businesses.id, { onDelete: "cascade" }),
     categoryId: uuid("category_id").references(() => categories.id),
+    // Nullable -- CUMA label/pengelompokan laporan per brand (§8.a/§8.b),
+    // TIDAK menentukan ketersediaan di katalog kasir. Lihat product_outlets
+    // untuk itu. NULL = tidak dilabeli brand tertentu (boleh, bukan error).
+    brandId: uuid("brand_id").references(() => brands.id),
     sku: text("sku"),
     barcode: text("barcode"),
     name: text("name").notNull(),
@@ -684,6 +739,56 @@ export const productModifierGroups = pgTable(
     // append-only di CLAUDE.md §3.2, karena baris ini cuma representasi
     // relasi "aktif sekarang", bukan riwayat transaksi.
     pgPolicy("product_modifier_groups_delete", {
+      for: "delete",
+      using: sql`exists (
+        select 1 from products p
+        where p.id = ${t.productId}
+          and p.business_id = any(auth_business_ids())
+      )`,
+    }),
+  ]
+).enableRLS();
+
+// T22a -- SATU-SATUNYA yang menentukan ketersediaan produk per outlet
+// (docs/05-RENCANA-FASE-2.md §8.b, KOREKSI dari rencana brand_id semula).
+// Aturan baca: produk TANPA baris sama sekali di sini = tersedia di SEMUA
+// outlet (default terbuka, mayoritas menu). Produk yang PUNYA baris di
+// sini = HANYA tersedia di outlet-outlet yang punya barisnya (whitelist).
+// Ini menghindari perlu mengisi ratusan baris untuk kasus umum, sambil
+// tetap presisi untuk pengecualian (menu Indokopi yang sengaja dijual di
+// outlet Indosteak tertentu, snack yang beririsan sebagian).
+export const productOutlets = pgTable(
+  "product_outlets",
+  {
+    productId: uuid("product_id")
+      .notNull()
+      .references(() => products.id, { onDelete: "cascade" }),
+    outletId: uuid("outlet_id")
+      .notNull()
+      .references(() => outlets.id, { onDelete: "cascade" }),
+  },
+  (t) => [
+    primaryKey({ columns: [t.productId, t.outletId] }),
+    pgPolicy("product_outlets_select", {
+      for: "select",
+      using: sql`exists (
+        select 1 from products p
+        where p.id = ${t.productId}
+          and p.business_id = any(auth_business_ids())
+      )`,
+    }),
+    pgPolicy("product_outlets_insert", {
+      for: "insert",
+      withCheck: sql`exists (
+        select 1 from products p
+        where p.id = ${t.productId}
+          and p.business_id = any(auth_business_ids())
+      )`,
+    }),
+    // DELETE dibutuhkan -- form produk melepas outlet lewat toggle
+    // multi-select, baris ini representasi "tersedia sekarang", bukan
+    // riwayat transaksi (sama alasan product_modifier_groups_delete).
+    pgPolicy("product_outlets_delete", {
       for: "delete",
       using: sql`exists (
         select 1 from products p

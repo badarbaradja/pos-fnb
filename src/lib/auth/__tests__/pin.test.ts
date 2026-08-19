@@ -43,9 +43,23 @@ describe.skipIf(!hasEnv)("verifyCashierPin — lockout setelah 5 kali gagal", ()
     }
     businessId = business["id"] as string;
 
+    const { data: brand, error: brandError } = await admin
+      .from("brands")
+      .insert({ business_id: businessId, name: `${PREFIX}_brand` })
+      .select("id")
+      .single();
+    if (brandError || !brand) {
+      throw brandError ?? new Error("gagal membuat brand uji");
+    }
+
     const { data: outlet, error: outletError } = await admin
       .from("outlets")
-      .insert({ business_id: businessId, code: "PIN01", name: `${PREFIX}_outlet` })
+      .insert({
+        business_id: businessId,
+        brand_id: brand["id"] as string,
+        code: "PIN01",
+        name: `${PREFIX}_outlet`,
+      })
       .select("id")
       .single();
     if (outletError || !outlet) {

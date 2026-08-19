@@ -18,7 +18,7 @@ import { eq } from "drizzle-orm";
 loadEnv({ path: [".env.local", ".env"], quiet: true });
 
 import { getAdminDb } from "@/lib/db/client";
-import { businesses, devices, employees, outlets, shifts } from "@/lib/db/schema";
+import { brands, businesses, devices, employees, outlets, shifts } from "@/lib/db/schema";
 import { generateId } from "@/lib/utils/id";
 import { hashPin, verifyCashierPin } from "@/lib/auth/pin";
 import { openShiftWithDb } from "@/lib/pos/shift";
@@ -65,9 +65,14 @@ describe.skipIf(!hasEnv)("T15b — CRUD karyawan", () => {
       .returning({ id: businesses.id });
     businessId = business!.id;
 
+    const [brand] = await db
+      .insert(brands)
+      .values({ businessId, name: `${PREFIX}_brand` })
+      .returning({ id: brands.id });
+
     const [outlet] = await db
       .insert(outlets)
-      .values({ businessId, code: "EMP1", name: `${PREFIX}_outlet` })
+      .values({ businessId, brandId: brand!.id, code: "EMP1", name: `${PREFIX}_outlet` })
       .returning({ id: outlets.id });
     outletId = outlet!.id;
 

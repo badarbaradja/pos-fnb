@@ -12,7 +12,7 @@ import { eq } from "drizzle-orm";
 loadEnv({ path: [".env.local", ".env"], quiet: true });
 
 import { getAdminDb } from "@/lib/db/client";
-import { businesses, devices, outlets } from "@/lib/db/schema";
+import { brands, businesses, devices, outlets } from "@/lib/db/schema";
 import { createDeviceWithDb, updateDeviceWithDb } from "../manage";
 
 const hasEnv = Boolean(
@@ -36,15 +36,21 @@ describe.skipIf(!hasEnv)("T15c — CRUD perangkat", () => {
       .returning({ id: businesses.id });
     businessId = business!.id;
 
+    const [brand] = await db
+      .insert(brands)
+      .values({ businessId, name: `${PREFIX}_brand` })
+      .returning({ id: brands.id });
+    const brandId = brand!.id;
+
     const [outlet] = await db
       .insert(outlets)
-      .values({ businessId, code: "DEV1", name: `${PREFIX}_outlet_1` })
+      .values({ businessId, brandId, code: "DEV1", name: `${PREFIX}_outlet_1` })
       .returning({ id: outlets.id });
     outletId = outlet!.id;
 
     const [otherOutlet] = await db
       .insert(outlets)
-      .values({ businessId, code: "DEV2", name: `${PREFIX}_outlet_2` })
+      .values({ businessId, brandId, code: "DEV2", name: `${PREFIX}_outlet_2` })
       .returning({ id: outlets.id });
     otherOutletId = otherOutlet!.id;
   });

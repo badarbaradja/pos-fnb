@@ -11,6 +11,9 @@ import {
   productVariants,
   productPrices,
   productModifierGroups,
+  productOutlets,
+  brands,
+  outlets,
 } from "@/lib/db/schema";
 import { id as strings } from "@/lib/i18n/id";
 import { ProductForm, type VariantValue } from "../product-form";
@@ -34,6 +37,9 @@ export default async function EditProductPage({
     variantRows,
     priceRows,
     assignmentRows,
+    brandRows,
+    outletRows,
+    outletAssignmentRows,
     currentImageUrl: string | null;
   try {
     [product] = await db
@@ -61,6 +67,9 @@ export default async function EditProductPage({
       variantRows,
       priceRows,
       assignmentRows,
+      brandRows,
+      outletRows,
+      outletAssignmentRows,
     ] = await Promise.all([
       db
         .select({ id: categories.id, name: categories.name })
@@ -98,6 +107,20 @@ export default async function EditProductPage({
         .select({ modifierGroupId: productModifierGroups.modifierGroupId })
         .from(productModifierGroups)
         .where(eq(productModifierGroups.productId, productId)),
+      db
+        .select({ id: brands.id, name: brands.name })
+        .from(brands)
+        .where(eq(brands.businessId, businessId))
+        .orderBy(asc(brands.name)),
+      db
+        .select({ id: outlets.id, name: outlets.name })
+        .from(outlets)
+        .where(eq(outlets.businessId, businessId))
+        .orderBy(asc(outlets.createdAt)),
+      db
+        .select({ outletId: productOutlets.outletId })
+        .from(productOutlets)
+        .where(eq(productOutlets.productId, productId)),
     ]);
   } finally {
     await closeDb();
@@ -136,9 +159,12 @@ export default async function EditProductPage({
         initialVariants={initialVariants}
         initialPrices={initialPrices}
         assignedModifierGroupIds={assignmentRows.map((a) => a.modifierGroupId)}
+        assignedOutletIds={outletAssignmentRows.map((a) => a.outletId)}
         categories={categoryRows}
         priceTiers={priceTierRows}
         modifierGroups={modifierGroupRows}
+        brands={brandRows}
+        outlets={outletRows}
       />
     </div>
   );

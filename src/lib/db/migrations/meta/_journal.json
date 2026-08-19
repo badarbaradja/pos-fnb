@@ -141,6 +141,20 @@
       "when": 1787023103521,
       "tag": "0019_low_wendigo",
       "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1787130702616,
+      "tag": "0020_flowery_bastion",
+      "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1787143064072,
+      "tag": "0021_aberrant_venom",
+      "breakpoints": true
     }
   ]
 }

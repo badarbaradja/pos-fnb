@@ -22,6 +22,8 @@ import { id as strings } from "@/lib/i18n/id";
 type CategoryOption = { id: string; name: string };
 type PriceTierOption = { id: string; code: string; name: string };
 type ModifierGroupOption = { id: string; name: string };
+type BrandOption = { id: string; name: string };
+type OutletOption = { id: string; name: string };
 
 export type VariantValue = {
   key: string;
@@ -36,6 +38,7 @@ export type VariantValue = {
 export type ProductFormValue = {
   id: string;
   categoryId: string | null;
+  brandId: string | null;
   sku: string | null;
   barcode: string | null;
   name: string;
@@ -87,18 +90,24 @@ export function ProductForm({
   initialVariants,
   initialPrices,
   assignedModifierGroupIds,
+  assignedOutletIds,
   categories,
   priceTiers,
   modifierGroups,
+  brands,
+  outlets,
 }: {
   product?: ProductFormValue;
   currentImageUrl: string | null;
   initialVariants: VariantValue[];
   initialPrices: Record<string, string>;
   assignedModifierGroupIds: string[];
+  assignedOutletIds: string[];
   categories: CategoryOption[];
   priceTiers: PriceTierOption[];
   modifierGroups: ModifierGroupOption[];
+  brands: BrandOption[];
+  outlets: OutletOption[];
 }) {
   const [state, formAction, isPending] = useActionState(
     saveProduct,
@@ -107,6 +116,9 @@ export function ProductForm({
   const [variants, setVariants] = useState<VariantValue[]>(initialVariants);
   const categoryItems: Record<string, ReactNode> = Object.fromEntries(
     categories.map((category) => [category.id, category.name])
+  );
+  const brandItems: Record<string, ReactNode> = Object.fromEntries(
+    brands.map((brand) => [brand.id, brand.name])
   );
 
   useEffect(() => {
@@ -147,6 +159,26 @@ export function ProductForm({
               ))}
             </SelectContent>
           </Select>
+        </div>
+        <div className="flex flex-col gap-2">
+          <Label htmlFor="brandId">{strings.products.brand}</Label>
+          <Select
+            name="brandId"
+            defaultValue={product?.brandId ?? undefined}
+            items={brandItems}
+          >
+            <SelectTrigger id="brandId" className="w-full">
+              <SelectValue placeholder={strings.products.brandNone} />
+            </SelectTrigger>
+            <SelectContent>
+              {brands.map((brand) => (
+                <SelectItem key={brand.id} value={brand.id}>
+                  {brand.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <p className="text-xs text-muted-foreground">{strings.products.brandHint}</p>
         </div>
         <div className="flex flex-col gap-2">
           <Label htmlFor="productType">{strings.products.productType}</Label>
@@ -393,6 +425,37 @@ export function ProductForm({
                   defaultChecked={assignedModifierGroupIds.includes(group.id)}
                 />
                 <Label htmlFor={`modifierGroup.${group.id}`}>{group.name}</Label>
+              </div>
+            ))}
+          </div>
+        )}
+      </section>
+
+      <Separator />
+
+      <section className="flex flex-col gap-4">
+        <div>
+          <h2 className="text-sm font-semibold text-muted-foreground">
+            {strings.products.outletAvailabilitySection}
+          </h2>
+          <p className="text-xs text-muted-foreground">
+            {strings.products.outletAvailabilityHint}
+          </p>
+        </div>
+        {outlets.length === 0 ? (
+          <p className="text-sm text-muted-foreground">
+            {strings.products.outletAvailabilityEmpty}
+          </p>
+        ) : (
+          <div className="flex flex-col gap-2">
+            {outlets.map((outlet) => (
+              <div key={outlet.id} className="flex items-center gap-2">
+                <Checkbox
+                  id={`outlet.${outlet.id}`}
+                  name={`outlet.${outlet.id}`}
+                  defaultChecked={assignedOutletIds.includes(outlet.id)}
+                />
+                <Label htmlFor={`outlet.${outlet.id}`}>{outlet.name}</Label>
               </div>
             ))}
           </div>

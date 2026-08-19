@@ -11,8 +11,11 @@ import {
   productVariants,
   productPrices,
   productModifierGroups,
+  productOutlets,
   modifierGroups,
   priceTiers,
+  brands,
+  outlets,
 } from "@/lib/db/schema";
 import { generateId } from "@/lib/utils/id";
 import { assertRowsAffected } from "@/lib/db/errors";
@@ -30,6 +33,7 @@ const productTypeValues = [
 const productSchema = z.object({
   id: z.string().uuid().optional(),
   categoryId: z.string().uuid().optional(),
+  brandId: z.string().uuid().optional(),
   sku: z.string().trim().optional(),
   barcode: z.string().trim().optional(),
   name: z.string().trim().min(1, strings.common.requiredField),
@@ -64,6 +68,7 @@ export async function saveProduct(
   const parsed = productSchema.safeParse({
     id: formData.get("id") || undefined,
     categoryId: formData.get("categoryId") || undefined,
+    brandId: formData.get("brandId") || undefined,
     sku: formData.get("sku") || undefined,
     barcode: formData.get("barcode") || undefined,
     name: formData.get("name"),
@@ -110,10 +115,10 @@ export async function saveProduct(
   const productId = parsed.data.id ?? generateId();
 
   try {
-    // Grup modifier & tingkat harga milik bisnis lain tidak boleh ter-assign
-    // ke produk ini -- diverifikasi eksplisit di sini, bukan cuma
-    // mengandalkan RLS (CLAUDE.md §3.4).
-    const [ownModifierGroups, ownPriceTiers] = await Promise.all([
+    // Grup modifier, tingkat harga, brand & outlet milik bisnis lain tidak
+    // boleh ter-assign ke produk ini -- diverifikasi eksplisit di sini,
+    // bukan cuma mengandalkan RLS (CLAUDE.md §3.4).
+    const [ownModifierGroups, ownPriceTiers, ownBrands, ownOutlets] = await Promise.all([
       db
         .select({ id: modifierGroups.id })
         .from(modifierGroups)
@@ -122,11 +127,21 @@ export async function saveProduct(
         .select({ id: priceTiers.id })
         .from(priceTiers)
         .where(eq(priceTiers.businessId, businessId)),
+      db.select({ id: brands.id }).from(brands).where(eq(brands.businessId, businessId)),
+      db.select({ id: outlets.id }).from(outlets).where(eq(outlets.businessId, businessId)),
     ]);
+
+    if (parsed.data.brandId && !ownBrands.some((b) => b.id === parsed.data.brandId)) {
+      return { error: strings.outlets.brandNotFound };
+    }
 
     const selectedModifierGroupIds = ownModifierGroups
       .map((g) => g.id)
       .filter((groupId) => formData.get(`modifierGroup.${groupId}`) === "on");
+
+    const selectedOutletIds = ownOutlets
+      .map((o) => o.id)
+      .filter((outletId) => formData.get(`outlet.${outletId}`) === "on");
 
     const priceEntries = ownPriceTiers
       .map((tier) => ({
@@ -180,6 +195,7 @@ export async function saveProduct(
           .update(products)
           .set({
             categoryId: parsed.data.categoryId ?? null,
+            brandId: parsed.data.brandId ?? null,
             sku: parsed.data.sku ?? null,
             barcode: parsed.data.barcode ?? null,
             name: parsed.data.name,
@@ -202,6 +218,7 @@ export async function saveProduct(
           id: productId,
           businessId,
           categoryId: parsed.data.categoryId ?? null,
+          brandId: parsed.data.brandId ?? null,
           sku: parsed.data.sku ?? null,
           barcode: parsed.data.barcode ?? null,
           name: parsed.data.name,
@@ -310,6 +327,51 @@ export async function saveProduct(
           // melewatkan sisanya. Harus PERSIS sejumlah yang diminta.
           throw new Error(
             `Penetapan grup modifier: diminta hapus ${toDelete.length} baris, yang benar-benar terhapus cuma ${deleted.length}.`
+          );
+        }
+      }
+
+      // Ketersediaan outlet (T22a, docs/05-RENCANA-FASE-2.md §8.b) -- pola
+      // diff insert/delete PERSIS sama seperti product_modifier_groups di
+      // atas. TIDAK ADA baris = tersedia di semua outlet (default), jadi
+      // toDelete di sini bisa mengosongkan tabel sepenuhnya untuk produk
+      // ini -- itu keadaan valid ("kembali ke semua outlet"), bukan error.
+      const existingOutletAssignments = await tx
+        .select({ outletId: productOutlets.outletId })
+        .from(productOutlets)
+        .where(eq(productOutlets.productId, productId));
+      const existingOutletIds = new Set(existingOutletAssignments.map((a) => a.outletId));
+      const selectedOutletIdSet = new Set(selectedOutletIds);
+
+      const outletsToInsert = [...selectedOutletIdSet].filter(
+        (oid) => !existingOutletIds.has(oid)
+      );
+      const outletsToDelete = [...existingOutletIds].filter(
+        (oid) => !selectedOutletIdSet.has(oid)
+      );
+
+      if (outletsToInsert.length > 0) {
+        await tx.insert(productOutlets).values(
+          outletsToInsert.map((outletId) => ({
+            productId: productId,
+            outletId,
+          }))
+        );
+      }
+      if (outletsToDelete.length > 0) {
+        const deleted = await tx
+          .delete(productOutlets)
+          .where(
+            and(
+              eq(productOutlets.productId, productId),
+              inArray(productOutlets.outletId, outletsToDelete)
+            )
+          )
+          .returning({ productId: productOutlets.productId });
+        assertRowsAffected(deleted, "ketersediaan outlet produk");
+        if (deleted.length !== outletsToDelete.length) {
+          throw new Error(
+            `Ketersediaan outlet: diminta hapus ${outletsToDelete.length} baris, yang benar-benar terhapus cuma ${deleted.length}.`
           );
         }
       }

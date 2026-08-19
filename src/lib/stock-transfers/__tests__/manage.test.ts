@@ -12,6 +12,7 @@ import { and, eq } from "drizzle-orm";
 loadEnv({ path: [".env.local", ".env"], quiet: true });
 
 import {
+  brands,
   employees,
   ingredients,
   outlets,
@@ -41,15 +42,21 @@ describe.skipIf(!hasEnv)("stock-transfers/manage", () => {
     fixture = await createUserDbFixture("TEST_STOCKTRANSFERS");
     const { db, businessId } = fixture;
 
+    const [brand] = await db
+      .insert(brands)
+      .values({ businessId, name: "brand" })
+      .returning({ id: brands.id });
+    const brandId = brand!.id;
+
     const [ck] = await db
       .insert(outlets)
-      .values({ businessId, code: "CK1", name: "Gudang", isCentralKitchen: true })
+      .values({ businessId, brandId, code: "CK1", name: "Gudang", isCentralKitchen: true })
       .returning({ id: outlets.id });
     centralKitchenId = ck!.id;
 
     const [retail] = await db
       .insert(outlets)
-      .values({ businessId, code: "R1", name: "Outlet Retail" })
+      .values({ businessId, brandId, code: "R1", name: "Outlet Retail" })
       .returning({ id: outlets.id });
     retailOutletId = retail!.id;
 
@@ -159,9 +166,13 @@ describe.skipIf(!hasEnv)("stock-transfers/manage", () => {
     const noWarehouseFixture = await createUserDbFixture("TEST_STOCKTRANSFERS_NOCK");
     try {
       const { db, businessId } = noWarehouseFixture;
+      const [brand] = await db
+        .insert(brands)
+        .values({ businessId, name: "brand" })
+        .returning({ id: brands.id });
       const [retail] = await db
         .insert(outlets)
-        .values({ businessId, code: "R1", name: "Outlet" })
+        .values({ businessId, brandId: brand!.id, code: "R1", name: "Outlet" })
         .returning({ id: outlets.id });
       const [emp] = await db
         .insert(employees)

@@ -64,10 +64,20 @@ describe.skipIf(!hasEnv)("Isolasi tenant — bisnis A tidak boleh bocor ke bisni
     }
     businessAId = businessA["id"] as string;
 
+    const { data: brandA, error: brandAError } = await admin
+      .from("brands")
+      .insert({ business_id: businessAId, name: `TEST_ISOLATION_A_brand_${RUN_ID}` })
+      .select("id")
+      .single();
+    if (brandAError || !brandA) {
+      throw brandAError ?? new Error("gagal membuat brand A uji");
+    }
+
     const { data: outletA, error: outletAError } = await admin
       .from("outlets")
       .insert({
         business_id: businessAId,
+        brand_id: brandA["id"] as string,
         code: "ISOA",
         name: `TEST_ISOLATION_A_outlet_${RUN_ID}`,
       })
@@ -89,10 +99,20 @@ describe.skipIf(!hasEnv)("Isolasi tenant — bisnis A tidak boleh bocor ke bisni
     }
     businessBId = businessB["id"] as string;
 
+    const { data: brandB, error: brandBError } = await admin
+      .from("brands")
+      .insert({ business_id: businessBId, name: `TEST_ISOLATION_B_brand_${RUN_ID}` })
+      .select("id")
+      .single();
+    if (brandBError || !brandB) {
+      throw brandBError ?? new Error("gagal membuat brand B uji");
+    }
+
     const { data: outletB, error: outletBError } = await admin
       .from("outlets")
       .insert({
         business_id: businessBId,
+        brand_id: brandB["id"] as string,
         code: "ISOB",
         name: `TEST_ISOLATION_B_outlet_${RUN_ID}`,
       })

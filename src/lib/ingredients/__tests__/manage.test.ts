@@ -19,7 +19,7 @@ import { config as loadEnv } from "dotenv";
 import { eq } from "drizzle-orm";
 loadEnv({ path: [".env.local", ".env"], quiet: true });
 
-import { outlets, ingredients, stockLevels, stockMovements, units } from "@/lib/db/schema";
+import { brands, outlets, ingredients, stockLevels, stockMovements, units } from "@/lib/db/schema";
 import {
   createIngredientWithDb,
   deleteIngredientWithDb,
@@ -41,9 +41,14 @@ describe.skipIf(!hasEnv)("ingredients/manage", () => {
     fixture = await createUserDbFixture("TEST_INGREDIENTS");
     const { db, businessId } = fixture;
 
+    const [brand] = await db
+      .insert(brands)
+      .values({ businessId, name: "brand" })
+      .returning({ id: brands.id });
+
     const [outlet] = await db
       .insert(outlets)
-      .values({ businessId, code: "T1", name: "outlet" })
+      .values({ businessId, brandId: brand!.id, code: "T1", name: "outlet" })
       .returning({ id: outlets.id });
     outletId = outlet!.id;
 

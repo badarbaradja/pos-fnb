@@ -1,7 +1,9 @@
 import { toZonedTime } from "date-fns-tz";
 import { format, subDays } from "date-fns";
 
-const CUTOFF_PATTERN = /^([01]\d|2[0-3]):([0-5]\d)(?::([0-5]\d))?$/;
+// Diekspor supaya form outlet (T22b) bisa validasi format yang sama persis
+// sebelum tersimpan, bukan cuma menduplikasi regex di tempat terpisah.
+export const CUTOFF_PATTERN = /^([01]\d|2[0-3]):([0-5]\d)(?::([0-5]\d))?$/;
 
 /**
  * businessDate() — CALC-SPEC bagian F.

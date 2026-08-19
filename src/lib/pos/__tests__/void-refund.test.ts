@@ -28,6 +28,7 @@ loadEnv({ path: [".env.local", ".env"], quiet: true });
 import { getAdminDb } from "@/lib/db/client";
 import {
   auditLogs,
+  brands,
   businesses,
   devices,
   employees,
@@ -118,9 +119,20 @@ describe.skipIf(!hasEnv)("T16 — void & refund", () => {
       .returning({ id: businesses.id });
     businessId = business!.id;
 
+    const [brand] = await db
+      .insert(brands)
+      .values({ businessId, name: `${PREFIX}_brand` })
+      .returning({ id: brands.id });
+
     const [outlet] = await db
       .insert(outlets)
-      .values({ businessId, code: "VR1", name: `${PREFIX}_outlet`, cashEnabled: false })
+      .values({
+        businessId,
+        brandId: brand!.id,
+        code: "VR1",
+        name: `${PREFIX}_outlet`,
+        cashEnabled: false,
+      })
       .returning({ id: outlets.id });
     outletId = outlet!.id;
 

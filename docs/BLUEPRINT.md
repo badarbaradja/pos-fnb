@@ -1491,6 +1491,7 @@ Counter di-generate lokal per device, bukan dari server. Ini menghindari duplika
 | `stock.waste` | ✓ | ✓ | ✓ | — | ✓ | ✓ | — |
 | `stock.transfer` | ✓ | ✓ | — | — | — | ✓ | — |
 | `kds.view` | ✓ | ✓ | ✓ | ✓ | ✓ | — | — |
+| `outlet.manage` ¹ | ✓ | ✓ | — | — | — | — | — |
 | `employee.manage` | ✓ | ⚠ | — | — | — | — | — |
 | `payroll.view` | ✓ | ⚠ | — | — | — | — | ✓ |
 | `payroll.process` | ✓ | — | — | — | — | — | ✓ |
@@ -1502,6 +1503,13 @@ Counter di-generate lokal per device, bukan dari server. Ini menghindari duplika
 | `settings.tax` | ✓ | — | — | — | — | — | ✓ |
 
 ✓ = default aktif  ⚠ = default nonaktif, bisa diaktifkan per karyawan  — = tidak tersedia
+
+¹ `outlet.manage` (T22b) cuma untuk MELIHAT dan MENGUBAH outlet yang sudah
+ada. MEMBUAT outlet baru digerbang terpisah oleh `settings.business`
+(owner-only, baris di atas) -- konsekuensi biaya/struktur outlet baru
+adalah keputusan pemilik, bukan operasional harian seperti mengubah jam
+cutoff atau service charge outlet yang sudah berjalan. Manajer yang punya
+`outlet.manage` TIDAK otomatis bisa membuat outlet baru.
 
 Implementasi: simpan default per role di konstanta kode, override per karyawan di `permissions_override`. Cek di **tiga lapis**: UI (sembunyikan tombol), server action (validasi), RLS (proteksi data).
 

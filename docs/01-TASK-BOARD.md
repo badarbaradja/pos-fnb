@@ -205,13 +205,69 @@ T25 pemotongan stok otomatis saat bayar · T26 opname · T27 waste · T28 lapora
 > di sini supaya satu dokumen (05) jadi sumber kebenaran urutan, bukan dua
 > tempat yang bisa berbeda.
 
-**[ ] T22b — Halaman kelola outlet**
+**[x] T22b — Halaman kelola outlet**
 Ditemukan saat T22 (penerimaan gudang): outlet gudang pusat sengaja
 dibuat lewat `bootstrap-production.ts` (sekali, saat setup), bukan
 dashboard -- karena belum ada halaman kelola outlet sama sekali. Owner
 yang buka cabang kedua tidak boleh perlu menghubungi developer untuk itu
 -- kekurangan yang sama seperti karyawan (T15b) dan perangkat (T15c)
 dulu sebelum keduanya dapat halaman sendiri.
+
+Dikerjakan lebih awal dari urutan §8.g (T22a-T22-T22d-T22c-T22b) di
+`docs/05-RENCANA-FASE-2.md` -- sengaja dimajukan sambil menunggu
+konfirmasi owner soal alur dua sisi (§8), karena outlet gudang tetap
+perlu dibuat lewat dashboard apa pun jawabannya. Cakupan: daftar,
+tambah (owner-only, permission `settings.business`), ubah (owner+
+manajer, permission BARU `outlet.manage` -- belum ada di tabel
+BLUEPRINT §7, ditambahkan T22b), nonaktifkan (ditolak kalau outlet
+sedang punya shift terbuka). Tidak ada hapus permanen. Peringatan
+eksplisit di form untuk field berdampak struk/legal (pajak, service
+charge), field yang mengubah perilaku sistem (is_central_kitchen), dan
+perubahan day_cutoff_time pada outlet yang sudah punya transaksi.
+
+**[x] T22a — Brand (label/laporan) + product_outlets (ketersediaan katalog kasir)**
+Prasyarat sebelum Indosteak bisa digabung ke business yang sama
+(`docs/05-RENCANA-FASE-2.md` §8.a/§8.b). Tabel `brands` (cuma label +
+pengelompokan laporan per brand) DAN tabel terpisah `product_outlets`
+(SATU-SATUNYA yang menentukan ketersediaan produk per outlet -- KOREKSI
+dari rencana awal yang salah memakai `brand_id` untuk ini, dibatalkan
+setelah field data: menu Indokopi sengaja dijual di outlet Indosteak
+untuk promosi, ada snack yang beririsan antar brand). Aturan baca
+`product_outlets`: produk TANPA baris = tersedia di SEMUA outlet
+(default), produk yang PUNYA baris = HANYA outlet yang punya barisnya
+(whitelist). `outlets.brand_id` wajib diisi (di-backfill dari nama
+bisnis untuk data yang sudah ada, tidak perlu migrasi data manual);
+`products.brand_id` nullable. Trigger cross-tenant baru:
+`check_outlet_brand_business_id`, `check_product_brand_business_id`,
+`check_product_outlet_business_id` (migration 0021, pola sama T21/T22).
+Katalog kasir (`get-pos-catalog.ts`) dan form produk (brand + checklist
+outlet) sudah disambungkan.
+
+**[ ] T22e — POS harus tahu device ini mewakili outlet yang mana**
+Ditemukan saat mengerjakan T22a: `getPosCatalog()`
+(`src/app/(pos)/pos/get-pos-catalog.ts`) TIDAK menerima outlet ID atau
+device ID apa pun sebagai input -- dipanggil cuma dengan `businessId`.
+Alurnya: pilih outlet AKTIF PERTAMA untuk business ini
+(`orderBy(asc(outlets.createdAt))`, ambil satu tanpa syarat lain), lalu
+pilih device AKTIF PERTAMA milik outlet itu. Tidak ada konsep "device/
+sesi browser ini mewakili yang mana" sama sekali -- setiap `/pos` yang
+dibuka untuk business yang sama akan SELALU diarahkan ke pasangan
+outlet+device yang SAMA PERSIS, siapa pun dan di mana pun. Ini sudah
+benar secara kebetulan selama business cuma punya satu outlet aktif
+(kondisi Indokopi sekarang), tapi begitu Indosteak dapat outlet kedua
+dalam business yang sama, device fisik di outlet kedua akan ikut
+diarahkan ke outlet PERTAMA (kalau device-nya kebetulan terdaftar di
+outlet pertama juga) atau gagal total dengan pesan "belum ada device
+aktif" (kalau tidak) -- bukan salah baca data, tapi salah target sama
+sekali. **HARUS beres sebelum outlet kedua manapun diaktifkan dalam
+satu business** -- bukan blocker untuk T22a atau T22 (transfer dua
+sisi), keduanya tidak butuh dua outlet AKTIF sekaligus untuk diuji.
+Kemungkinan solusi (belum diputuskan, perlu dibahas): identitas device
+disimpan di sisi client (localStorage/cookie per perangkat, diisi sekali
+saat setup) dan dikirim sebagai parameter ke `getPosCatalog()`, bukan
+ditebak dari businessId semata -- `devices.outletId` sudah ada di
+skema, tinggal `getPosCatalog()` yang perlu menerimanya sebagai input,
+bukan mengasumsikan.
 
 **[ ] T24b — Seed data demo (bahan & resep)**
 30 bahan dengan satuan dan konversi, resep untuk 25 menu dari T10,
@@ -221,6 +277,21 @@ termasuk satu sub-resep semi-finished untuk menguji rekursi.
 
 T29 karyawan & absensi · T30 payroll · T31 beban operasional & aset ·
 T32 laporan Laba Rugi · T33 dashboard KPI
+
+**[ ] T34 — Export laporan ke Excel (.xlsx)**
+Permintaan eksplisit owner (temuan lapangan putaran 3,
+`docs/05-RENCANA-FASE-2.md` §8 poin 10). Semua laporan penjualan, stok,
+dan keuangan bisa diunduh sebagai `.xlsx` yang rapi (format, bukan CSV
+mentah) -- bukan cuma laporan yang sudah ada saat tugas ini dikerjakan,
+tapi pola yang dipakai ulang untuk laporan baru berikutnya juga.
+Ditaruh di AKHIR Fase 3 (bukan Fase 2) karena baru masuk akal setelah
+seluruh jenis laporan (penjualan, stok/variance, Laba Rugi, KPI) sudah
+ada untuk diekspor -- mengerjakannya lebih awal berarti mengekspor
+laporan yang belum lengkap. **Belum dikerjakan, jangan mulai sebelum
+diminta eksplisit.**
+
+> Penomoran: T30 sudah dipakai untuk payroll di Fase 3 -- tugas ini diberi
+> nomor T34 (lanjutan T29-T33), bukan T30, supaya tidak tabrakan.
 
 ---
 

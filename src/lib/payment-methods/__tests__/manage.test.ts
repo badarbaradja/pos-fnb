@@ -14,6 +14,7 @@ import { eq } from "drizzle-orm";
 loadEnv({ path: [".env.local", ".env"], quiet: true });
 
 import {
+  brands,
   devices,
   employees,
   outlets,
@@ -49,9 +50,14 @@ describe.skipIf(!hasEnv)("payment-methods/manage — hapus permanen", () => {
     fixture = await createUserDbFixture("TEST_PAYMENTMETHODS");
     const { db, businessId } = fixture;
 
+    const [brand] = await db
+      .insert(brands)
+      .values({ businessId, name: "brand" })
+      .returning({ id: brands.id });
+
     const [outlet] = await db
       .insert(outlets)
-      .values({ businessId, code: "PM1", name: "outlet" })
+      .values({ businessId, brandId: brand!.id, code: "PM1", name: "outlet" })
       .returning({ id: outlets.id });
     outletId = outlet!.id;
 

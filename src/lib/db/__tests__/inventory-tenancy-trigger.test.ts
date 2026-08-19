@@ -16,6 +16,7 @@ loadEnv({ path: [".env.local", ".env"], quiet: true });
 
 import { getAdminDb } from "@/lib/db/client";
 import {
+  brands,
   businesses,
   ingredients,
   outlets,
@@ -37,6 +38,8 @@ describe.skipIf(!hasEnv)(
 
     let businessAId: string;
     let businessBId: string;
+    let brandAId: string;
+    let brandBId: string;
     let outletAId: string;
     let ingredientAId: string;
 
@@ -53,9 +56,21 @@ describe.skipIf(!hasEnv)(
         .returning({ id: businesses.id });
       businessBId = businessB!.id;
 
+      const [brandA] = await db
+        .insert(brands)
+        .values({ businessId: businessAId, name: `${PREFIX}_brand_A` })
+        .returning({ id: brands.id });
+      brandAId = brandA!.id;
+
+      const [brandB] = await db
+        .insert(brands)
+        .values({ businessId: businessBId, name: `${PREFIX}_brand_B` })
+        .returning({ id: brands.id });
+      brandBId = brandB!.id;
+
       const [outletA] = await db
         .insert(outlets)
-        .values({ businessId: businessAId, code: "A1", name: `${PREFIX}_outlet_A` })
+        .values({ businessId: businessAId, brandId: brandAId, code: "A1", name: `${PREFIX}_outlet_A` })
         .returning({ id: outlets.id });
       outletAId = outletA!.id;
 
@@ -97,7 +112,7 @@ describe.skipIf(!hasEnv)(
       it("ingredient bisnis A + outlet bisnis B (business_id = A, cocok ingredient tapi bukan outlet) -- DITOLAK", async () => {
         const [outletB] = await db
           .insert(outlets)
-          .values({ businessId: businessBId, code: "B1", name: `${PREFIX}_outlet_B_sl1` })
+          .values({ businessId: businessBId, brandId: brandBId, code: "B1", name: `${PREFIX}_outlet_B_sl1` })
           .returning({ id: outlets.id });
 
         await expect(
@@ -157,7 +172,7 @@ describe.skipIf(!hasEnv)(
       it("ingredient bisnis A + outlet bisnis B (business_id = A, cocok ingredient tapi bukan outlet) -- DITOLAK", async () => {
         const [outletB] = await db
           .insert(outlets)
-          .values({ businessId: businessBId, code: "B2", name: `${PREFIX}_outlet_B_sm1` })
+          .values({ businessId: businessBId, brandId: brandBId, code: "B2", name: `${PREFIX}_outlet_B_sm1` })
           .returning({ id: outlets.id });
 
         await expect(

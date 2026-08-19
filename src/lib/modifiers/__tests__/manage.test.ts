@@ -14,6 +14,7 @@ import { eq } from "drizzle-orm";
 loadEnv({ path: [".env.local", ".env"], quiet: true });
 
 import {
+  brands,
   devices,
   employees,
   modifierGroups,
@@ -53,9 +54,14 @@ describe.skipIf(!hasEnv)("modifiers/manage — hapus permanen", () => {
     fixture = await createUserDbFixture("TEST_MODIFIERS");
     const { db, businessId } = fixture;
 
+    const [brand] = await db
+      .insert(brands)
+      .values({ businessId, name: "brand" })
+      .returning({ id: brands.id });
+
     const [outlet] = await db
       .insert(outlets)
-      .values({ businessId, code: "MOD1", name: "outlet" })
+      .values({ businessId, brandId: brand!.id, code: "MOD1", name: "outlet" })
       .returning({ id: outlets.id });
     outletId = outlet!.id;
 

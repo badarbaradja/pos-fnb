@@ -15,6 +15,7 @@ const navItems = [
   { href: "/modifier-groups", label: id.nav.modifierGroups },
   { href: "/employees", label: id.nav.employees },
   { href: "/devices", label: id.nav.devices },
+  { href: "/outlets", label: id.nav.outlets },
   { href: "/units", label: id.nav.units },
   { href: "/ingredients", label: id.nav.ingredients },
   { href: "/stock-transfers", label: id.nav.stockTransfers },

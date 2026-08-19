@@ -150,6 +150,16 @@ export async function hasOpenShiftForEmployee(db: Db, employeeId: string): Promi
   return row !== undefined;
 }
 
+/** Dipakai T22b untuk menolak menonaktifkan outlet yang sedang punya shift terbuka. */
+export async function hasOpenShiftForOutlet(db: Db, outletId: string): Promise<boolean> {
+  const [row] = await db
+    .select({ id: shifts.id })
+    .from(shifts)
+    .where(and(eq(shifts.outletId, outletId), eq(shifts.status, "open")))
+    .limit(1);
+  return row !== undefined;
+}
+
 // ---------------------------------------------------------------------
 // Buka shift
 // ---------------------------------------------------------------------

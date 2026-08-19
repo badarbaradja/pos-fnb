@@ -22,6 +22,7 @@ loadEnv({ path: [".env.local", ".env"], quiet: true });
 
 import { getAdminDb } from "@/lib/db/client";
 import {
+  brands,
   businesses,
   devices,
   employees,
@@ -63,6 +64,7 @@ describe.skipIf(!hasEnv)("T17 — laporan penjualan", () => {
   const EMPLOYEE_CODE = "SRKASIR";
 
   let businessId: string;
+  let brandId: string;
   let outletId: string;
   let deviceId: string;
   let qrisMethodId: string;
@@ -108,9 +110,15 @@ describe.skipIf(!hasEnv)("T17 — laporan penjualan", () => {
       .returning({ id: businesses.id, timezone: businesses.timezone });
     businessId = business!.id;
 
+    const [brand] = await db
+      .insert(brands)
+      .values({ businessId, name: `${PREFIX}_brand` })
+      .returning({ id: brands.id });
+    brandId = brand!.id;
+
     const [outlet] = await db
       .insert(outlets)
-      .values({ businessId, code: "SR1", name: `${PREFIX}_outlet` })
+      .values({ businessId, brandId, code: "SR1", name: `${PREFIX}_outlet` })
       .returning({ id: outlets.id, dayCutoffTime: outlets.dayCutoffTime });
     outletId = outlet!.id;
 
@@ -357,7 +365,7 @@ describe.skipIf(!hasEnv)("T17 — laporan penjualan", () => {
   it("getSalesByOutlet memisahkan angka per outlet dengan benar (T18)", async () => {
     const [secondOutlet] = await db
       .insert(outlets)
-      .values({ businessId, code: "SR2", name: `${PREFIX}_outlet2` })
+      .values({ businessId, brandId, code: "SR2", name: `${PREFIX}_outlet2` })
       .returning({ id: outlets.id });
     const secondOutletId = secondOutlet!.id;
     // Tidak perlu cleanup manual -- outlet ini ikut kehapus oleh cascade
@@ -401,9 +409,18 @@ describe.skipIf(!hasEnv)("T17 — laporan penjualan", () => {
       .values({ name: `${PREFIX}_wita_business`, timezone: "Asia/Makassar" })
       .returning({ id: businesses.id });
     const witaBusinessId = witaBusiness!.id;
+    const [witaBrand] = await db
+      .insert(brands)
+      .values({ businessId: witaBusinessId, name: `${PREFIX}_wita_brand` })
+      .returning({ id: brands.id });
     const [witaOutlet] = await db
       .insert(outlets)
-      .values({ businessId: witaBusinessId, code: "WITA1", name: `${PREFIX}_wita_outlet` })
+      .values({
+        businessId: witaBusinessId,
+        brandId: witaBrand!.id,
+        code: "WITA1",
+        name: `${PREFIX}_wita_outlet`,
+      })
       .returning({ id: outlets.id });
     const witaOutletId = witaOutlet!.id;
 

@@ -19,6 +19,7 @@ loadEnv({ path: [".env.local", ".env"], quiet: true });
 
 import { getAdminDb } from "@/lib/db/client";
 import {
+  brands,
   businesses,
   devices,
   employees,
@@ -75,10 +76,16 @@ describe.skipIf(!hasEnv)("T15 — siklus shift", () => {
       .returning({ id: businesses.id });
     businessId = business!.id;
 
+    const [brand] = await db
+      .insert(brands)
+      .values({ businessId, name: `${PREFIX}_brand` })
+      .returning({ id: brands.id });
+
     const [outlet] = await db
       .insert(outlets)
       .values({
         businessId,
+        brandId: brand!.id,
         code: "SHF1",
         name: `${PREFIX}_outlet`,
         cashVarianceTolerance: "20000",
