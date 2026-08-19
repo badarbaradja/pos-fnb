@@ -3,10 +3,8 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { UserDbHandle } from "@/lib/db/client";
 import {
   categories,
-  devices,
   modifierGroups,
   modifiers,
-  outlets,
   paymentMethods,
   priceTiers,
   productModifierGroups,
@@ -15,6 +13,7 @@ import {
   products,
   productVariants,
 } from "@/lib/db/schema";
+import type { PairedDevice, PairedOutlet } from "@/lib/pos/device-pairing";
 
 export type PosModifier = { id: string; name: string; price: string };
 export type PosModifierGroup = {
@@ -50,6 +49,7 @@ export type PosCategory = {
 };
 export type PosOutlet = {
   id: string;
+  name: string;
   code: string;
   taxPercent: string;
   taxInclusive: boolean;
@@ -81,11 +81,18 @@ export type PosDevice = {
  * atau ganti tingkat harga di klien tidak boleh memicu query baru
  * (kesepakatan T12). Harga SEMUA tingkat harga diambil sekaligus supaya
  * selector tier di klien bisa switch murni dari data yang sudah di memori.
+ *
+ * `outlet`/`device` WAJIB sudah diresolusi pemanggil lewat
+ * lib/pos/device-pairing.ts#getPairedDevice (T22e) -- fungsi ini TIDAK
+ * lagi menebak sendiri "outlet aktif pertama", supaya benar begitu satu
+ * business punya lebih dari satu outlet aktif sekaligus.
  */
 export async function getPosCatalog(
   db: UserDbHandle["db"],
   businessId: string,
-  supabase: SupabaseClient
+  supabase: SupabaseClient,
+  outlet: PairedOutlet,
+  device: PairedDevice
 ): Promise<{
   outlet: PosOutlet;
   device: PosDevice;
@@ -95,24 +102,6 @@ export async function getPosCatalog(
   categories: PosCategory[];
   products: PosProduct[];
 }> {
-  const [outlet] = await db
-    .select()
-    .from(outlets)
-    .where(and(eq(outlets.businessId, businessId), eq(outlets.isActive, true)))
-    .orderBy(asc(outlets.createdAt));
-  if (!outlet) {
-    throw new Error("Belum ada outlet aktif untuk bisnis ini.");
-  }
-
-  const [device] = await db
-    .select()
-    .from(devices)
-    .where(and(eq(devices.outletId, outlet.id), eq(devices.isActive, true)))
-    .orderBy(asc(devices.serialNumber));
-  if (!device) {
-    throw new Error("Belum ada device aktif untuk outlet ini.");
-  }
-
   let paymentMethodRows = await db
     .select()
     .from(paymentMethods)
@@ -317,6 +306,7 @@ export async function getPosCatalog(
   return {
     outlet: {
       id: outlet.id,
+      name: outlet.name,
       code: outlet.code,
       taxPercent: outlet.taxPercent,
       taxInclusive: outlet.taxInclusive,

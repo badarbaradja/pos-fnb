@@ -243,31 +243,44 @@ bisnis untuk data yang sudah ada, tidak perlu migrasi data manual);
 Katalog kasir (`get-pos-catalog.ts`) dan form produk (brand + checklist
 outlet) sudah disambungkan.
 
-**[ ] T22e — POS harus tahu device ini mewakili outlet yang mana**
-Ditemukan saat mengerjakan T22a: `getPosCatalog()`
-(`src/app/(pos)/pos/get-pos-catalog.ts`) TIDAK menerima outlet ID atau
-device ID apa pun sebagai input -- dipanggil cuma dengan `businessId`.
-Alurnya: pilih outlet AKTIF PERTAMA untuk business ini
-(`orderBy(asc(outlets.createdAt))`, ambil satu tanpa syarat lain), lalu
-pilih device AKTIF PERTAMA milik outlet itu. Tidak ada konsep "device/
-sesi browser ini mewakili yang mana" sama sekali -- setiap `/pos` yang
-dibuka untuk business yang sama akan SELALU diarahkan ke pasangan
-outlet+device yang SAMA PERSIS, siapa pun dan di mana pun. Ini sudah
-benar secara kebetulan selama business cuma punya satu outlet aktif
-(kondisi Indokopi sekarang), tapi begitu Indosteak dapat outlet kedua
-dalam business yang sama, device fisik di outlet kedua akan ikut
-diarahkan ke outlet PERTAMA (kalau device-nya kebetulan terdaftar di
-outlet pertama juga) atau gagal total dengan pesan "belum ada device
-aktif" (kalau tidak) -- bukan salah baca data, tapi salah target sama
-sekali. **HARUS beres sebelum outlet kedua manapun diaktifkan dalam
-satu business** -- bukan blocker untuk T22a atau T22 (transfer dua
-sisi), keduanya tidak butuh dua outlet AKTIF sekaligus untuk diuji.
-Kemungkinan solusi (belum diputuskan, perlu dibahas): identitas device
-disimpan di sisi client (localStorage/cookie per perangkat, diisi sekali
-saat setup) dan dikirim sebagai parameter ke `getPosCatalog()`, bukan
-ditebak dari businessId semata -- `devices.outletId` sudah ada di
-skema, tinggal `getPosCatalog()` yang perlu menerimanya sebagai input,
-bukan mengasumsikan.
+**[x] T22e — POS harus tahu device ini mewakili outlet yang mana**
+Ditemukan saat mengerjakan T22a: `getPosCatalog()` dan 4 halaman lain
+(`shift/open`, `shift/close`, `receipt/page`, `receipt/list-orders`)
+masing-masing menebak sendiri "outlet aktif pertama business ini" --
+benar secara kebetulan dengan satu outlet, salah total begitu ada dua.
+
+Diselesaikan lewat `lib/pos/device-pairing.ts` -- pairing SEKALI per
+tablet, tersimpan cookie httpOnly (`pos_device_id`, TIDAK PERNAH
+ditebak/dipilih ulang tiap shift), divalidasi ulang ke tabel `devices`
+di SETIAP request (device dinonaktifkan/dihapus/pindah bisnis otomatis
+dianggap belum ter-pairing). Halaman baru `/pos/setup` (gerbang
+`employee.manage`, sama seperti `/devices`) untuk memasangkan; kelima
+tempat yang dulu menebak sekarang satu sumber kebenaran ini.
+
+Tiga penyempurnaan dari diskusi sebelum eksekusi:
+1. **Pemulihan kalau cookie hilang** (cache dibersihkan/tablet
+   di-reset/incognito): localStorage menyimpan PETUNJUK (bukan sumber
+   kebenaran, server selalu validasi ulang lewat cookie) -- siapa pun
+   yang duduk di kasir (termasuk tanpa `employee.manage`) tetap melihat
+   "sebelumnya terhubung sebagai X di outlet Y, hubungi manajer", bukan
+   halaman kosong.
+2. **Deteksi tabrakan**: kolom baru `devices.last_paired_at` (migration
+   0022) + peringatan (non-blocking) kalau device yang sedang
+   dipasangkan SAAT INI punya shift terbuka -- indikasi kuat ada tablet
+   lain yang masih memakainya, nomor struk (`last_seq`) dan stok bisa
+   bentrok.
+3. **Label permanen di layar kasir**: "{outlet} · {device}" kecil di
+   header `/pos` dan subtitle `shift/open`/`shift/close` -- kasir sadar
+   tabletnya salah pasang SEBELUM transaksi, bukan setelah stok
+   terpotong dari outlet keliru.
+
+Dibuktikan lewat Playwright sungguhan (bukan cuma typecheck): device
+dipasangkan ke outlet KEDUA (bukan outlet pertama yang dibuat) resolve
+benar; kasir tanpa izin yang membuka `/pos` tanpa pairing melihat pesan
+jelas, bukan crash; localStorage hint bertahan lewat cookie yang
+dihapus paksa dan tampil ke user tanpa izin sekalipun. Test unit
+(`lib/pos/__tests__/device-pairing.test.ts`) membuktikan penolakan
+device lintas-bisnis dan peringatan tabrakan shift-terbuka.
 
 **[ ] T24b — Seed data demo (bahan & resep)**
 30 bahan dengan satuan dan konversi, resep untuk 25 menu dari T10,

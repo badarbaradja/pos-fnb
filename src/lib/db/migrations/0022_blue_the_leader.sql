@@ -1,0 +1,1 @@
+ALTER TABLE "devices" ADD COLUMN "last_paired_at" timestamp with time zone;

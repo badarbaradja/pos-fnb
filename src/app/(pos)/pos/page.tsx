@@ -4,6 +4,7 @@ import { requirePermissionDb } from "@/lib/auth/permissions";
 import { PosScreen } from "@/components/pos/pos-screen";
 import { getPosCatalog } from "./get-pos-catalog";
 import { getOpenShiftForDevice, isShiftSellable } from "@/lib/pos/shift";
+import { getPairedDevice } from "@/lib/pos/device-pairing";
 
 export default async function PosPage() {
   const supabase = await createServerSupabaseClient();
@@ -14,10 +15,17 @@ export default async function PosPage() {
 
   let catalog;
   try {
+    // T22e -- outlet+device tablet ini WAJIB sudah ter-pairing, bukan
+    // ditebak. Belum ter-pairing -> /pos/setup, bukan error.
+    const paired = await getPairedDevice(db, businessId);
+    if (!paired) {
+      redirect("/pos/setup");
+    }
+
     // Katalog di-fetch SEKALI di sini saat halaman dibuka -- interaksi di
     // klien (tap produk, filter kategori, cari, ganti tingkat harga) murni
     // di memori, tidak memicu query baru (kesepakatan T12).
-    catalog = await getPosCatalog(db, businessId, supabase);
+    catalog = await getPosCatalog(db, businessId, supabase, paired.outlet, paired.device);
 
     // Gate T15: layar kasir tidak boleh dipakai kalau belum ada shift
     // terbuka untuk device ini -- tanpa shift tidak ada rekonsiliasi kas.

@@ -94,6 +94,15 @@ export function PosScreen({
         onChange={setPriceTierId}
         trailing={
           <div className="flex items-center gap-2">
+            {/* T22e -- begitu ada >1 outlet, ini satu-satunya cara kasir
+                lihat tabletnya tersambung ke outlet yang benar SEBELUM
+                transaksi (bukan ketahuan setelah stok terpotong dari
+                outlet keliru). Permanen di layar, sengaja kecil. */}
+            <span className="whitespace-nowrap text-xs font-medium text-muted-foreground">
+              {strings.pos.outletDeviceLabel
+                .replace("{outlet}", outlet.name)
+                .replace("{device}", device.name)}
+            </span>
             <span className="whitespace-nowrap text-xs text-muted-foreground">
               {strings.shift.activeShiftLabel}: {shift.employeeName}
             </span>

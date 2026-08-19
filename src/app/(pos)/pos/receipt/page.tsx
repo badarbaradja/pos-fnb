@@ -2,10 +2,9 @@ import Link from "next/link";
 import { toZonedTime } from "date-fns-tz";
 import { format } from "date-fns";
 import { Decimal } from "decimal.js";
-import { and, asc, eq } from "drizzle-orm";
+import { redirect } from "next/navigation";
 import { createServerSupabaseClient } from "@/lib/auth/supabase";
 import { hasPermission, requirePermissionDb } from "@/lib/auth/permissions";
-import { outlets } from "@/lib/db/schema";
 import {
   getBusinessTimezone,
   listTodaysOrders,
@@ -13,6 +12,7 @@ import {
   type OrderListRow,
 } from "./list-orders";
 import { getRefundPaymentMethods, type RefundPaymentMethod } from "@/lib/pos/void-refund";
+import { getPairedDevice } from "@/lib/pos/device-pairing";
 import { formatIDR } from "@/lib/utils/money";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -109,10 +109,17 @@ export default async function ReceiptListPage({
   let timezone: string;
   let paymentMethods: RefundPaymentMethod[] = [];
   try {
+    // T22e -- lihat catatan di shift/open/page.tsx.
+    const paired = await getPairedDevice(db, businessId);
+    if (!paired) {
+      redirect("/pos/setup");
+    }
+    const { outlet } = paired;
+
+    timezone = await getBusinessTimezone(db, businessId);
     rows = query
       ? await searchOrdersByNumber(db, businessId, query)
-      : await listTodaysOrders(db, businessId);
-    timezone = await getBusinessTimezone(db, businessId);
+      : await listTodaysOrders(db, businessId, outlet.id, outlet.dayCutoffTime, timezone);
 
     // Halaman ini dijaga pos.reprint_receipt, tapi dialog refund butuh
     // pos.refund -- role yang tidak punya izin itu (mis. kasir default)
@@ -122,14 +129,7 @@ export default async function ReceiptListPage({
     // kosong -- server (refundOrderWithDb) tetap yang menegakkan izin
     // sesungguhnya lewat requirePermissionDb di actions.ts.
     if (hasPermission(role, "pos.refund")) {
-      const [outlet] = await db
-        .select({ id: outlets.id })
-        .from(outlets)
-        .where(and(eq(outlets.businessId, businessId), eq(outlets.isActive, true)))
-        .orderBy(asc(outlets.createdAt));
-      if (outlet) {
-        paymentMethods = await getRefundPaymentMethods(db, businessId, outlet.id);
-      }
+      paymentMethods = await getRefundPaymentMethods(db, businessId, outlet.id);
     }
   } finally {
     await closeDb();

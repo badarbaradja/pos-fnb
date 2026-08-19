@@ -1,35 +1,9 @@
-import { and, asc, desc, eq, ilike, inArray } from "drizzle-orm";
+import { and, desc, eq, ilike, inArray } from "drizzle-orm";
 import type { UserDbHandle } from "@/lib/db/client";
-import { businesses, orders, outlets, payments } from "@/lib/db/schema";
+import { businesses, orders, payments } from "@/lib/db/schema";
 import { businessDate } from "@/lib/utils/business-date";
 
 type Db = UserDbHandle["db"];
-
-/**
- * Resolusi outlet sama seperti get-pos-catalog.ts: outlet aktif pertama
- * milik bisnis (asumsi single-outlet untuk MVP). Diulang di sini (bukan
- * di-share) supaya modul ini tetap bisa dipanggil berdiri sendiri tanpa
- * bergantung pada catalog fetch layar kasir.
- */
-async function resolveOutlet(
-  db: Db,
-  businessId: string
-): Promise<{ id: string; dayCutoffTime: string; timezone: string } | null> {
-  const [business] = await db
-    .select({ timezone: businesses.timezone })
-    .from(businesses)
-    .where(eq(businesses.id, businessId));
-  if (!business) return null;
-
-  const [outlet] = await db
-    .select({ id: outlets.id, dayCutoffTime: outlets.dayCutoffTime })
-    .from(outlets)
-    .where(and(eq(outlets.businessId, businessId), eq(outlets.isActive, true)))
-    .orderBy(asc(outlets.createdAt));
-  if (!outlet) return null;
-
-  return { id: outlet.id, dayCutoffTime: outlet.dayCutoffTime, timezone: business.timezone };
-}
 
 export type OrderListRow = {
   id: string;
@@ -86,17 +60,18 @@ export async function getBusinessTimezone(db: Db, businessId: string): Promise<s
  * (business_date, bukan tanggal kalender server -- CLAUDE.md §3.3), supaya
  * daftarnya tetap pendek dan relevan buat kasir yang sedang kerja, bukan
  * daftar semua transaksi sepanjang masa.
+ *
+ * `outletId`/`dayCutoffTime` WAJIB dari lib/pos/device-pairing.ts#getPairedDevice
+ * (T22e) -- fungsi ini tidak lagi menebak outlet sendiri.
  */
 export async function listTodaysOrders(
   db: Db,
-  businessId: string
+  businessId: string,
+  outletId: string,
+  dayCutoffTime: string,
+  timezone: string
 ): Promise<OrderListRow[]> {
-  const outlet = await resolveOutlet(db, businessId);
-  if (!outlet) {
-    return [];
-  }
-
-  const today = businessDate(new Date(), outlet.timezone, outlet.dayCutoffTime);
+  const today = businessDate(new Date(), timezone, dayCutoffTime);
 
   const orderRows = await db
     .select()
@@ -104,7 +79,7 @@ export async function listTodaysOrders(
     .where(
       and(
         eq(orders.businessId, businessId),
-        eq(orders.outletId, outlet.id),
+        eq(orders.outletId, outletId),
         eq(orders.businessDate, today),
         // Order void tetap DITAMPILKAN (ditandai jelas di UI, T16) --
         // cuma tidak lagi ikut ke agregasi manapun, karena setiap

@@ -1,12 +1,12 @@
 # 05 — Rencana Fase 2 (revisi setelah data lapangan Indokopi)
 
-> Status: T21, T22b & T22a selesai. §8 (pivot dua brand + alur dua sisi +
-> pengolahan gudang), termasuk koreksi putaran 3 (§8.b ketersediaan
-> produk, §8.c risiko adopsi/UX request) **sudah disetujui penuh** —
-> lihat §8.9 dan §9. **T22 (transfer dua sisi) berikutnya.** Temuan baru
-> selama T22a: T22e (POS belum tahu device mewakili outlet yang mana --
-> lihat `01-TASK-BOARD.md`) HARUS beres sebelum outlet kedua aktif dalam
-> satu bisnis (Indosteak), bukan blocker untuk T22a/T22 sendiri.
+> Status: T21, T22b, T22a & T22e selesai. §8 (pivot dua brand + alur dua
+> sisi + pengolahan gudang), termasuk koreksi putaran 3 (§8.b
+> ketersediaan produk, §8.c risiko adopsi/UX request) **sudah disetujui
+> penuh** — lihat §8.9 dan §9. **T22 (transfer dua sisi) berikutnya** --
+> sekarang dikerjakan di atas fondasi yang benar (device pairing, lihat
+> `01-TASK-BOARD.md` T22e), bukan di atas asumsi single-outlet yang
+> ditemukan salah saat T22a.
 
 ---
 
@@ -180,6 +180,25 @@ blokir penjualan kalau stok kurang — §4). HPP per produk tinggal memanggil
 "kalkulator" dari tugas ini sebenarnya sudah selesai sejak T04, yang
 dikerjakan di sini murni menyambungkannya ke data resep + ledger yang baru
 dipercaya.
+
+**T27b (BARU, ditemukan saat T22a) — Peringatan stok menipis di layar
+kasir** *(1-2 hari)*
+Dikonfirmasi saat T22a: layar kasir SAMA SEKALI tidak menampilkan stok
+hari ini -- `PosProduct` (`get-pos-catalog.ts`) tidak punya field stok
+apa pun, `product-card.tsx`/`product-grid.tsx` tidak merender apa pun
+terkait stok. Kasir baru tahu bahan habis SETELAH menerima pesanan yang
+ternyata tidak bisa dibuat. Diletakkan SETELAH T27 (bukan lebih awal)
+karena baru bisa akurat begitu `recipe_items` menghubungkan produk ke
+bahan -- sebelum itu tidak ada cara tahu "produk X butuh bahan apa saja"
+untuk dicek. Desain: badge/indikator visual di kartu produk kalau SALAH
+SATU bahan resepnya (dari `stock_levels.qty_on_hand`) di bawah/sama
+dengan `min_stock`, atau sudah negatif -- **TIDAK memblokir tap/pesan**
+(keputusan §4 berlaku sama persis di sini: stok minus tidak pernah
+memblokir penjualan, cuma peringatan). Kasir tetap bisa memesan produk
+yang stoknya menipis/habis; keputusan lanjut-atau-tidak tetap di tangan
+kasir/manajer di lapangan (mis. cek fisik dulu), sistem cuma memberi
+info lebih awal dari sebelumnya (sebelumnya: tidak ada info sama
+sekali).
 
 **T28 — Laporan stok & variance teoritis vs aktual** *(3-4 hari)*
 Pemakaian teoretis (resep × qty terjual) vs aktual (ledger: stok awal +
@@ -798,7 +817,7 @@ kemasan beli — dikonfirmasi ke Indokopi saat sampai ke sana).
 ```
 [x] T22b — Halaman kelola outlet (dimajukan duluan, lihat 01-TASK-BOARD.md)
 [x] T22a — Brand (label/laporan) + product_outlets (ketersediaan, dikoreksi dari brand_id)
-[ ] T22e — POS harus tahu device ini mewakili outlet yang mana (temuan T22a, lihat 01-TASK-BOARD.md -- HARUS beres sebelum outlet kedua aktif)
+[x] T22e — POS harus tahu device ini mewakili outlet yang mana (temuan T22a, lihat 01-TASK-BOARD.md -- device pairing lewat cookie+/pos/setup)
 [ ] T22  — Transfer dua sisi: request→approve→kirim→terima (6-7 hari)
 [ ] T22d — Barang masuk gudang (prasyarat T22c)            (2-3 hari)
 [ ] T22c — Pencatatan pengolahan gudang (PALING PENTING)   (4-5 hari)

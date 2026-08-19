@@ -301,6 +301,13 @@ export const devices = pgTable(
     deviceType: text("device_type").notNull().default("pos"), // pos|waiter|kds|display
     lastSyncAt: timestamp("last_sync_at", { withTimezone: true }),
     lastSeq: bigint("last_seq", { mode: "number" }).notNull().default(0), // counter nomor struk lokal
+    // T22e -- diisi setiap kali device ini dipasangkan ke satu tablet
+    // (lib/pos/device-pairing.ts). Dipakai untuk memperingatkan manajer
+    // kalau device yang sama dipasangkan ke tablet lain SAAT device itu
+    // sedang punya shift terbuka -- last_seq (counter struk) dan stok
+    // yang berpindah lewat device ini akan bentrok kalau dua tablet
+    // sungguhan memakainya bersamaan.
+    lastPairedAt: timestamp("last_paired_at", { withTimezone: true }),
     isActive: boolean("is_active").notNull().default(true),
   },
   (t) => [
