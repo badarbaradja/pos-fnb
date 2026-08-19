@@ -1,7 +1,84 @@
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { getAdminDb, getUserDb, type UserDbHandle } from "@/lib/db/client";
 import { createSupabaseAdminClient, createSupabaseAnonClient } from "@/lib/auth/supabase";
 import { businesses, memberships, profiles } from "@/lib/db/schema";
+
+type BlockingRef = { table: string; column: string };
+
+/**
+ * Tabel apa pun yang punya FK ON DELETE NO ACTION ke businesses(id) --
+ * ditemukan LEWAT information_schema saat cleanup jalan, BUKAN daftar
+ * hardcoded. Ini kedua kalinya cleanup test ketinggalan skema (stock_
+ * movements/orders/shifts pertama kali, lalu stock_transfers/stock_
+ * transfer_items menyusul T22) -- dengan query ini, tabel BARU yang
+ * mengikuti pola business_id-denormalized+NO ACTION (T21/T22, dipakai
+ * lagi untuk tabel append-only berikutnya) otomatis ikut terhapus tanpa
+ * perlu ada yang ingat memperbarui daftar di sini.
+ */
+async function findTablesBlockingBusinessDelete(
+  adminDb: ReturnType<typeof getAdminDb>
+): Promise<BlockingRef[]> {
+  const rows = await adminDb.execute<{ table_name: string; column_name: string }>(sql`
+    select tc.table_name, kcu.column_name
+    from information_schema.table_constraints tc
+    join information_schema.key_column_usage kcu
+      on tc.constraint_name = kcu.constraint_name and tc.table_schema = kcu.table_schema
+    join information_schema.constraint_column_usage ccu
+      on tc.constraint_name = ccu.constraint_name and tc.table_schema = ccu.table_schema
+    join information_schema.referential_constraints rc
+      on tc.constraint_name = rc.constraint_name and tc.table_schema = rc.constraint_schema
+    where tc.constraint_type = 'FOREIGN KEY'
+      and tc.table_schema = 'public'
+      and ccu.table_name = 'businesses'
+      and rc.delete_rule = 'NO ACTION'
+  `);
+  return Array.from(rows as unknown as { table_name: string; column_name: string }[]).map((r) => ({
+    table: r.table_name,
+    column: r.column_name,
+  }));
+}
+
+/**
+ * Hapus baris untuk businessId ini dari setiap tabel yang ditemukan di
+ * atas. Urutan antar tabel-tabel itu TIDAK PERLU diketahui di muka --
+ * kalau satu tabel masih diblokir tabel lain di daftar yang sama (mis.
+ * orders vs shifts), percobaannya gagal di putaran ini dan otomatis
+ * berhasil di putaran berikutnya setelah tabel pemblokirnya kosong.
+ * Retry sampai konvergen (maksimal N putaran, N = jumlah tabel) --
+ * kalau masih ada yang gagal setelah itu, itu genuinely bukan soal
+ * urutan (kemungkinan FK ke tabel LAIN yang tidak ada di daftar ini),
+ * jadi dilempar sebagai error jelas, bukan ditelan diam-diam.
+ */
+async function deleteBlockingRowsForBusiness(
+  adminDb: ReturnType<typeof getAdminDb>,
+  businessId: string
+): Promise<void> {
+  let remaining = await findTablesBlockingBusinessDelete(adminDb);
+  let lastError: unknown;
+
+  for (let pass = 0; pass < remaining.length + 1 && remaining.length > 0; pass++) {
+    const stillBlocked: BlockingRef[] = [];
+    for (const ref of remaining) {
+      try {
+        await adminDb.execute(
+          sql`delete from ${sql.identifier(ref.table)} where ${sql.identifier(ref.column)} = ${businessId}`
+        );
+      } catch (err) {
+        lastError = err;
+        stillBlocked.push(ref);
+      }
+    }
+    remaining = stillBlocked;
+  }
+
+  if (remaining.length > 0) {
+    throw new Error(
+      `deleteBlockingRowsForBusiness: gagal menghapus baris dari ${remaining.map((r) => r.table).join(", ")} ` +
+        `sebelum businesses -- kemungkinan ada FK NO ACTION ke tabel lain di luar daftar ini. ` +
+        `Error terakhir: ${lastError instanceof Error ? lastError.message : String(lastError)}`
+    );
+  }
+}
 
 /**
  * Fixture bersama untuk test safe-delete (dan test lain yang butuh
@@ -73,6 +150,7 @@ export async function createUserDbFixture(namePrefix: string): Promise<UserDbFix
     db,
     cleanup: async () => {
       await close();
+      await deleteBlockingRowsForBusiness(adminDb, businessId);
       await adminDb.delete(businesses).where(eq(businesses.id, businessId));
       await admin.auth.admin.deleteUser(userId);
     },

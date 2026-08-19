@@ -18,13 +18,11 @@ import {
   employees,
   modifierGroups,
   modifiers,
-  orders,
   outlets,
   paymentMethods,
   priceTiers,
   productPrices,
   products,
-  shifts,
 } from "@/lib/db/schema";
 import { hashPin } from "@/lib/auth/pin";
 import { generateId } from "@/lib/utils/id";
@@ -32,7 +30,6 @@ import { openShiftWithDb } from "@/lib/pos/shift";
 import { payOrderWithDb } from "@/lib/pos/pay-order";
 import { deleteModifierWithDb } from "../manage";
 import { createUserDbFixture, type UserDbFixture } from "@/lib/db/__tests__/helpers/user-db-fixture";
-import { getAdminDb } from "@/lib/db/client";
 
 const hasEnv = Boolean(
   process.env["DATABASE_URL"] &&
@@ -105,19 +102,11 @@ describe.skipIf(!hasEnv)("modifiers/manage — hapus permanen", () => {
   });
 
   afterAll(async () => {
-    // Urutan hapus (FK, sama pelajaran void-refund.test.ts): orders (cascade
-    // order_items -> order_item_modifiers) -> shifts -> businesses (cascade
-    // sisanya, termasuk modifier_groups -> modifiers).
-    //
-    // SENGAJA pakai getAdminDb(), bukan fixture.db -- orders/shifts memang
-    // TIDAK PUNYA policy RLS DELETE ("order tidak pernah dihapus", CLAUDE.md
-    // §3.2), jadi lewat fixture.db (getUserDb) baris ini diam-diam 0 baris
-    // terhapus tanpa error, dan businesses gagal dihapus karena FK. Ini
-    // pembersihan data test (operasi sistem), bukan bagian yang sedang diuji.
+    // fixture.cleanup() sekarang menemukan & menghapus tabel penghalang
+    // (orders, shifts, dkk, FK ON DELETE NO ACTION ke businesses) secara
+    // otomatis lewat information_schema -- lihat lib/db/__tests__/helpers/
+    // user-db-fixture.ts. Tidak perlu lagi daftar manual di sini.
     if (fixture) {
-      const adminDb = getAdminDb();
-      await adminDb.delete(orders).where(eq(orders.businessId, fixture.businessId));
-      await adminDb.delete(shifts).where(eq(shifts.businessId, fixture.businessId));
       await fixture.cleanup();
     }
   });

@@ -26,7 +26,6 @@ import {
   updateIngredientWithDb,
 } from "../manage";
 import { createUserDbFixture, type UserDbFixture } from "@/lib/db/__tests__/helpers/user-db-fixture";
-import { getAdminDb } from "@/lib/db/client";
 
 const hasEnv = Boolean(
   process.env["DATABASE_URL"] &&
@@ -56,22 +55,11 @@ describe.skipIf(!hasEnv)("ingredients/manage", () => {
   });
 
   afterAll(async () => {
-    // stock_movements FK ke businesses ON DELETE NO ACTION (append-only,
-    // migration 0017) -- harus dihapus manual dulu sebelum fixture.cleanup()
-    // menghapus businesses. stock_levels/ingredients/outlets/units ikut
-    // cascade.
-    //
-    // SENGAJA pakai getAdminDb() di sini, bukan fixture.db -- stock_movements
-    // memang TIDAK PUNYA policy RLS DELETE (append-only, CLAUDE.md §3.2),
-    // jadi lewat fixture.db (getUserDb) baris ini diam-diam tidak terhapus
-    // (0 baris, tanpa error), dan businesses gagal dihapus karena FK. Ini
-    // pembersihan data test, operasi sistem, bukan atas nama user (CLAUDE.md
-    // §3.4) -- beda dari deleteIngredientWithDb yang justru SEHARUSNYA lewat
-    // RLS karena itu yang sedang diuji.
+    // fixture.cleanup() sekarang menemukan & menghapus tabel penghalang
+    // (stock_movements dkk, FK ON DELETE NO ACTION ke businesses) secara
+    // otomatis lewat information_schema -- lihat lib/db/__tests__/helpers/
+    // user-db-fixture.ts. Tidak perlu lagi daftar manual di sini.
     if (fixture) {
-      await getAdminDb()
-        .delete(stockMovements)
-        .where(eq(stockMovements.businessId, fixture.businessId));
       await fixture.cleanup();
     }
   });
