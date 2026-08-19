@@ -319,6 +319,17 @@ ditandai merah kalau lewat `businesses.transfer_request_alert_hours`
 operasional) -- lihat T26b untuk kenapa notifikasi dorong beneran
 belum dibangun sekarang.
 
+**Keterbatasan diketahui (jam dinding, bukan jam kerja):** permintaan
+yang masuk Sabtu sore akan tampil merah "terlambat" Minggu pagi walau
+gudang libur -- `hoursSince()` (`app/(dashboard)/stock-transfers/page.tsx`)
+tidak tahu jam operasional/hari libur outlet mana pun. Risikonya: badge
+merah yang sering salah alarm di akhir pekan akan mulai diabaikan
+begitu saja (persis masalah yang notifikasi ini coba cegah). **Keputusan
+sengaja: JANGAN diperbaiki sekarang** -- perlu tahu jam operasional per
+outlet dulu (belum ada datanya di sistem sama sekali) untuk menghitung
+"jam kerja" yang benar, dan itu spekulatif tanpa keluhan nyata.
+**Perbaiki kalau owner mengeluh soal ini, bukan sebelum itu.**
+
 **[ ] T26b — Notifikasi dorong permintaan transfer (push browser atau WhatsApp)**
 Ditemukan saat T22: badge in-app + kolom "menunggu sejak" (sudah
 dibangun, lihat T22 di atas) cukup KALAU gudang sudah membuka
