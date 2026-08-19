@@ -671,3 +671,42 @@ membuktikan itu.
    nambah di migration baru, salah generate, dst), pengguna dapat error
    jelas, bukan tombol "Hapus" yang terlihat berhasil tapi tidak
    melakukan apa-apa.
+
+## 17. Batasan yang diketahui: cleanup fixture test tidak menjangkau `refunds` (dan tabel grandchild sejenis)
+
+`lib/db/__tests__/helpers/user-db-fixture.ts` (bagian 16 di atas)
+menghapus tabel penghalang secara dinamis lewat `information_schema` --
+tapi HANYA satu langkah (1-hop): tabel dengan foreign key **langsung**
+ke `businesses(id)` yang `ON DELETE NO ACTION`. Ini cukup untuk seluruh
+pola T21/T22 (`business_id` didenormalisasi ke setiap tabel), tapi
+`refunds` tidak mengikuti pola itu -- `refunds.order_id` menunjuk ke
+`orders(id)` **tanpa** `business_id` sendiri, dan FK itu juga
+`ON DELETE NO ACTION` (tidak eksplisit di schema.ts, jadi default
+Postgres). Akibatnya `refunds` tidak pernah muncul di query
+`findTablesBlockingBusinessDelete` (yang cuma mencari `ccu.table_name =
+'businesses'`), padahal baris `refunds` bisa memblokir penghapusan
+`orders`, yang pada gilirannya memblokir penghapusan `businesses`.
+
+**Kapan ini jadi masalah:** hanya kalau ada test yang (a) memakai
+`createUserDbFixture` DAN (b) membuat baris `refunds` sungguhan (lewat
+`refundOrderWithDb`/alur serupa) sebagai bagian datanya. Sampai catatan
+ini ditulis, tidak ada test seperti itu -- test yang membuat refunds
+(`lib/pos/__tests__/void-refund.test.ts`) memakai `getAdminDb()`
+langsung dengan cleanup manualnya sendiri (urutan `refunds` -> `orders`
+-> `shifts` -> `businesses`, lihat `afterAll` di file itu), bukan
+`createUserDbFixture`. Jadi ini BUKAN bug yang sedang aktif -- murni
+batasan desain yang perlu diingat kalau kombinasi (a)+(b) di atas
+pernah terjadi nanti.
+
+**Kenapa sengaja tidak diperbaiki sekarang:** memperbaikinya dengan
+benar untuk kasus umum (N-hop, bukan cuma `refunds`) berarti membangun
+graph FK penuh + topological sort di seluruh schema `public`, bukan
+lagi "cari tabel yang langsung menunjuk businesses". Itu jauh lebih
+kompleks daripada manfaatnya sekarang, mengingat cakupan 1-hop yang ada
+sudah menutup SEMUA tabel yang benar-benar dipakai lewat
+`createUserDbFixture` hari ini. Kalau nanti kombinasi (a)+(b) di atas
+terjadi, perbaikan paling murah BUKAN membangun solusi N-hop umum,
+tapi menambah `refunds` (dan tabel grandchild lain yang relevan) sebagai
+langkah manual eksplisit di `cleanup()`, mirip pola `void-refund.test.ts`
+-- ditulis di sini supaya keputusan ini tidak hilang bersama riwayat
+chat dan tidak perlu ditemukan ulang dari nol.

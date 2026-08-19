@@ -21,20 +21,29 @@ type Warning = { ingredientName: string; resultingQty: string; baseUnit: string 
 
 function NegativeStockWarning({ warnings }: { warnings: Warning[] }) {
   if (warnings.length === 0) return null;
+  // fixed, BUKAN di dalam alur tabel -- versi awal menaruh ini di dalam
+  // <TableCell> (kolom Aksi, text-right, sempit), jadi terpotong di tepi
+  // kanan tabel (ketahuan lewat verifikasi browser sungguhan, bukan
+  // typecheck). Peringatan yang paling penting justru yang paling gampang
+  // terlewat kalau dipotong begitu. bottom-LEFT, bukan kanan -- toast
+  // sukses (sonner) default muncul di kanan bawah, tumpang tindih sesaat
+  // dengan banner ini kalau posisinya sama (ketahuan di screenshot verifikasi).
   return (
-    <div className="mt-4 rounded-lg border border-destructive/50 bg-destructive/10 p-4 text-left">
-      <p className="font-semibold text-destructive">{strings.stockTransfers.negativeWarningTitle}</p>
-      <p className="mt-1 text-sm text-muted-foreground">{strings.stockTransfers.negativeWarningHint}</p>
-      <ul className="mt-2 list-disc pl-5 text-sm">
-        {warnings.map((w) => (
-          <li key={w.ingredientName}>
-            {strings.stockTransfers.negativeWarningLine
-              .replace("{ingredient}", w.ingredientName)
-              .replace("{qty}", w.resultingQty)
-              .replace("{unit}", w.baseUnit)}
-          </li>
-        ))}
-      </ul>
+    <div className="fixed bottom-4 left-4 z-50 w-96 max-w-[calc(100vw-2rem)] rounded-lg border border-destructive/50 bg-background text-left shadow-lg">
+      <div className="rounded-lg bg-destructive/10 p-4">
+        <p className="font-semibold text-destructive">{strings.stockTransfers.negativeWarningTitle}</p>
+        <p className="mt-1 text-sm text-muted-foreground">{strings.stockTransfers.negativeWarningHint}</p>
+        <ul className="mt-2 list-disc pl-5 text-sm">
+          {warnings.map((w) => (
+            <li key={w.ingredientName}>
+              {strings.stockTransfers.negativeWarningLine
+                .replace("{ingredient}", w.ingredientName)
+                .replace("{qty}", w.resultingQty)
+                .replace("{unit}", w.baseUnit)}
+            </li>
+          ))}
+        </ul>
+      </div>
     </div>
   );
 }
