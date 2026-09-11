@@ -9,6 +9,7 @@ import {
   outlets,
   payments,
   refunds,
+  shifts,
 } from "@/lib/db/schema";
 import { averageCheck } from "@/lib/calc/kpi";
 
@@ -183,17 +184,25 @@ export async function getSalesByCashier(
   db: Db,
   filter: SalesReportFilter
 ): Promise<SalesByCashierRow[]> {
+  // Akun tamu bersama (TT09b): cashierName mengutamakan shifts.servedByName
+  // kalau order ini berasal dari shift yang dibuka akun bersama -- tanpa
+  // ini SEMUA transaksi lewat akun tamu (Rani pagi, Dimas malam, dst)
+  // akan bertumpuk jadi SATU baris "Akun Tamu -- Bestie Thrift", padahal
+  // laporan harus bisa membedakan siapa sungguhan bertugas. Grup per
+  // (cashierId, nama-tampilan) -- karyawan bernama biasa (servedByName
+  // selalu null) tidak berubah perilakunya sama sekali.
   const rows = await db
     .select({
       cashierId: orders.cashierId,
-      cashierName: employees.fullName,
+      cashierName: sql<string | null>`coalesce(${shifts.servedByName}, ${employees.fullName})`,
       orderCount: sql<string>`count(*)`,
       netAmount: sql<string>`coalesce(sum(${orders.netSales}), '0')`,
     })
     .from(orders)
     .leftJoin(employees, eq(orders.cashierId, employees.id))
+    .leftJoin(shifts, eq(orders.shiftId, shifts.id))
     .where(buildOrderFilter(filter))
-    .groupBy(orders.cashierId, employees.fullName)
+    .groupBy(orders.cashierId, sql`coalesce(${shifts.servedByName}, ${employees.fullName})`)
     .orderBy(desc(sql`sum(${orders.netSales})`));
 
   return rows.map((r) => ({ ...r, orderCount: Number(r.orderCount) }));

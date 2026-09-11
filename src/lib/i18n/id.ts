@@ -759,6 +759,9 @@ export const id = {
     opening: "Membuka...",
     alreadyOpenError: "Sudah ada shift terbuka untuk perangkat ini.",
     noOpeningCashNote: "Outlet ini tidak memakai kas fisik -- modal awal otomatis Rp 0.",
+    servedByNameLabel: "Nama Pelayan",
+    servedByNameHint: "Wajib diisi kalau login pakai akun bersama (mis. 'Akun Tamu') -- kosongkan kalau kode karyawan di atas adalah akun pribadimu.",
+    servedByNameRequiredError: "Akun ini akun bersama -- isi nama siapa yang bertugas sebelum membuka shift.",
 
     closeTitle: "Tutup Shift",
     countedCashHint:

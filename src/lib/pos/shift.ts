@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { and, eq, isNull, desc } from "drizzle-orm";
+import { and, eq, isNull, desc, sql } from "drizzle-orm";
 import { Decimal } from "decimal.js";
 import type { UserDbHandle } from "@/lib/db/client";
 import {
@@ -50,6 +50,14 @@ export type OpenShiftRow = {
   deviceId: string | null;
   employeeId: string;
   employeeName: string;
+  // Akun tamu bersama (TT09b) -- terisi HANYA kalau shift ini dibuka akun
+  // employees.isSharedAccount=true (lihat openShiftWithDb di bawah), null
+  // selamanya untuk karyawan bernama biasa. Pemanggil yang menampilkan
+  // "siapa bertugas" WAJIB pakai `servedByName ?? employeeName`, bukan
+  // employeeName mentah -- kalau tidak, laporan akan selalu bilang "Akun
+  // Tamu -- Bestie Thrift" untuk setiap orang berbeda yang pernah pakai
+  // akun itu.
+  servedByName: string | null;
   status: "open" | "closed" | "reconciled";
   openedAt: Date;
   businessDate: string;
@@ -77,6 +85,7 @@ export async function getOpenShiftForDevice(
       deviceId: shifts.deviceId,
       employeeId: shifts.employeeId,
       employeeName: employees.fullName,
+      servedByName: shifts.servedByName,
       status: shifts.status,
       openedAt: shifts.openedAt,
       businessDate: shifts.businessDate,
@@ -130,7 +139,11 @@ export async function getOpenShiftsForBusiness(
       outletId: shifts.outletId,
       outletName: outlets.name,
       employeeId: shifts.employeeId,
-      employeeName: employees.fullName,
+      // Akun tamu bersama (TT09b) -- coalesce ke servedByName kalau terisi,
+      // supaya dashboard "siapa bertugas" bilang "Rani"/"Dimas", bukan
+      // literal nama akun tamu. Karyawan bernama biasa (servedByName selalu
+      // null): tidak berubah sama sekali, tetap employees.fullName.
+      employeeName: sql<string>`coalesce(${shifts.servedByName}, ${employees.fullName})`,
       openedAt: shifts.openedAt,
     })
     .from(shifts)
@@ -171,6 +184,12 @@ export const openShiftSchema = z.object({
   employeeCode: z.string().min(1),
   pin: z.string().min(1),
   openingCash: z.string(),
+  // Akun tamu bersama (TT09b) -- opsional di SCHEMA (form selalu menampilkan
+  // field ini, employeeCode belum diketahui isSharedAccount-nya sebelum PIN
+  // diverifikasi di bawah), tapi WAJIB diisi non-kosong kalau employee yang
+  // terverifikasi ternyata isSharedAccount=true -- ditegakkan di bawah,
+  // bukan lewat zod (keputusannya baru bisa diambil setelah tahu employeeId).
+  servedByName: z.string().optional(),
 });
 
 export type OpenShiftResult = {
@@ -228,6 +247,20 @@ export async function openShiftWithDb(
       return { error: strings.common.unexpectedError };
     }
 
+    // Akun tamu bersama (TT09b) -- WAJIB isi nama pelayan kalau employee
+    // yang barusan terverifikasi PIN-nya isSharedAccount=true. Ditegakkan
+    // DI SINI (server), bukan cuma disembunyikan/diwajibkan di form --
+    // "Selesai kalau" TT09b eksplisit: tombol disabled di UI tidak cukup.
+    const [employeeRow] = await db
+      .select({ isSharedAccount: employees.isSharedAccount })
+      .from(employees)
+      .where(eq(employees.id, identity.employeeId));
+    const servedByNameTrimmed = data.servedByName?.trim() || "";
+    if (employeeRow?.isSharedAccount && servedByNameTrimmed === "") {
+      return { error: strings.shift.servedByNameRequiredError };
+    }
+    const servedByName = employeeRow?.isSharedAccount ? servedByNameTrimmed : null;
+
     const now = new Date();
     const bDate = businessDate(now, business.timezone, outlet.dayCutoffTime);
     // Outlet cashless: opening_cash dipaksa "0" di server, tidak percaya
@@ -240,6 +273,7 @@ export async function openShiftWithDb(
       outletId: data.outletId,
       deviceId: data.deviceId,
       employeeId: identity.employeeId,
+      servedByName,
       status: "open",
       openedAt: now,
       businessDate: bDate,
@@ -247,7 +281,11 @@ export async function openShiftWithDb(
     });
 
     return {
-      success: { shiftId: data.id, employeeName: identity.fullName, openedAt: now.toISOString() },
+      success: {
+        shiftId: data.id,
+        employeeName: servedByName ?? identity.fullName,
+        openedAt: now.toISOString(),
+      },
     };
   } catch (err) {
     console.error("openShiftWithDb gagal:", err);

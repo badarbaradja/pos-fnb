@@ -23,6 +23,7 @@ export function OpenShiftForm({
   const [employeeCode, setEmployeeCode] = useState("");
   const [pin, setPin] = useState("");
   const [openingCash, setOpeningCash] = useState("0");
+  const [servedByName, setServedByName] = useState("");
   const [isPending, setIsPending] = useState(false);
 
   async function handleSubmit(e: React.FormEvent) {
@@ -38,6 +39,11 @@ export function OpenShiftForm({
         // Server tetap memaksa "0" untuk outlet cashless walau field ini
         // dikirim -- lihat komentar di openShiftWithDb (lib/pos/shift.ts).
         openingCash: cashEnabled ? openingCash : "0",
+        // Server yang memutuskan apakah ini wajib (tergantung
+        // employees.isSharedAccount, tidak diketahui di klien SEBELUM PIN
+        // diverifikasi) -- field ini SELALU dikirim, kosong kalau memang
+        // tidak relevan (TT09b).
+        servedByName,
       });
       if (result.error) {
         toast.error(result.error);
@@ -76,6 +82,16 @@ export function OpenShiftForm({
           autoComplete="off"
           required
         />
+      </div>
+      <div className="flex flex-col gap-2">
+        <Label htmlFor="servedByName">{strings.shift.servedByNameLabel}</Label>
+        <Input
+          id="servedByName"
+          value={servedByName}
+          onChange={(e) => setServedByName(e.target.value)}
+          autoComplete="off"
+        />
+        <p className="text-xs text-muted-foreground">{strings.shift.servedByNameHint}</p>
       </div>
       {cashEnabled ? (
         <div className="flex flex-col gap-2">

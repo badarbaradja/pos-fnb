@@ -94,8 +94,12 @@ export function SalesByCashierTable({ rows }: { rows: SalesByCashierRow[] }) {
           </tr>
         </thead>
         <tbody>
-          {rows.map((row) => (
-            <tr key={row.cashierId ?? "__none__"} className="border-t">
+          {rows.map((row, index) => (
+            // Kunci gabungan cashierId+cashierName+index, BUKAN cashierId
+            // saja -- akun tamu bersama (TT09b) bisa menghasilkan beberapa
+            // baris dengan cashierId SAMA (satu akun) tapi cashierName
+            // berbeda (Rani, Dimas, dst dari shift berbeda hari yang sama).
+            <tr key={`${row.cashierId ?? "none"}-${row.cashierName ?? "none"}-${index}`} className="border-t">
               <td className="p-2">{row.cashierName ?? strings.reports.unknownCashier}</td>
               <td className="p-2 text-right">{row.orderCount}</td>
               <td className="p-2 text-right">{formatIDR(new Decimal(row.netAmount))}</td>

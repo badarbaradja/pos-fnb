@@ -8,6 +8,7 @@ import {
   orders,
   outlets,
   payments,
+  shifts,
 } from "@/lib/db/schema";
 import type { OrderForReceipt } from "@/lib/printing/receipt-template";
 
@@ -34,6 +35,19 @@ async function assemble(
       .from(employees)
       .where(eq(employees.id, orderRow.cashierId));
     cashierName = cashier?.fullName ?? null;
+  }
+  // Akun tamu bersama (TT09b) -- kalau order ini lahir dari shift yang
+  // dibuka akun bersama, struk menyebut nama pelayan sungguhan
+  // (shifts.servedByName), bukan literal nama akun tamu. Shift F&B biasa
+  // (servedByName selalu null): tidak berubah sama sekali.
+  if (orderRow.shiftId) {
+    const [shift] = await db
+      .select({ servedByName: shifts.servedByName })
+      .from(shifts)
+      .where(eq(shifts.id, orderRow.shiftId));
+    if (shift?.servedByName) {
+      cashierName = shift.servedByName;
+    }
   }
 
   const itemRows = await db
