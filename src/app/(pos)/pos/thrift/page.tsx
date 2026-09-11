@@ -1,10 +1,12 @@
 import { redirect } from "next/navigation";
+import { and, eq } from "drizzle-orm";
 import { createServerSupabaseClient } from "@/lib/auth/supabase";
 import { requirePermissionDb } from "@/lib/auth/permissions";
 import { ThriftPosScreen } from "@/components/pos/thrift/thrift-pos-screen";
 import { getThriftCatalog } from "./get-thrift-catalog";
 import { getOpenShiftForDevice, isShiftSellable } from "@/lib/pos/shift";
 import { getPairedDevice } from "@/lib/pos/device-pairing";
+import { categories, pemilik } from "@/lib/db/schema";
 
 /**
  * app/(pos)/pos/thrift/page.tsx — TT06. Padanan app/(pos)/pos/page.tsx
@@ -41,12 +43,43 @@ export default async function ThriftPosPage() {
       redirect("/pos/shift/close");
     }
 
+    // "Ita super kasir" (11 September 2026) -- tombol tambah barang cuma
+    // ditampilkan kalau shift ini dibuka EMPLOYEE manager/owner (PIN),
+    // bukan akun tamu/cashier biasa. Kategori+pemilik thrifting diambil
+    // di sini juga, HANYA kalau tombolnya akan ditampilkan -- percuma
+    // dua query tambahan untuk shift kasir biasa yang tidak akan
+    // memakainya sama sekali.
+    const canAddBarang = shift.employeeRole === "manager" || shift.employeeRole === "owner";
+    let categoryOptions: { id: string; name: string }[] = [];
+    let pemilikOptions: { id: string; nama: string }[] = [];
+    if (canAddBarang) {
+      [categoryOptions, pemilikOptions] = await Promise.all([
+        db
+          .select({ id: categories.id, name: categories.name })
+          .from(categories)
+          .where(
+            and(
+              eq(categories.businessId, businessId),
+              eq(categories.scope, "thrifting"),
+              eq(categories.isActive, true)
+            )
+          ),
+        db
+          .select({ id: pemilik.id, nama: pemilik.nama })
+          .from(pemilik)
+          .where(and(eq(pemilik.businessId, businessId), eq(pemilik.isActive, true))),
+      ]);
+    }
+
     return (
       <ThriftPosScreen
         outlet={catalog.outlet}
         device={catalog.device}
         paymentMethods={catalog.paymentMethods}
         shift={{ id: shift.id, employeeName: shift.servedByName ?? shift.employeeName }}
+        canAddBarang={canAddBarang}
+        categories={categoryOptions}
+        pemilikList={pemilikOptions}
       />
     );
   } finally {

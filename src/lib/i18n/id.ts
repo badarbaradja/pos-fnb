@@ -713,6 +713,8 @@ export const id = {
     scanButton: "Cari",
     thriftCartEmpty: "Keranjang kosong. Pindai atau ketik kode barang di atas.",
     removeFromCart: "Keluarkan",
+    addBarangFromPosButton: "+ Tambah Barang",
+    tambahBarangAksesDitolakError: "Cuma manager yang bisa menambah barang dari kasir. Akun tamu tidak bisa.",
 
     paymentDialogTitle: "Pembayaran",
     paymentMethodLabel: "Metode",

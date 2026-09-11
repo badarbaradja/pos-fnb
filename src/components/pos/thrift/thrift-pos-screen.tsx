@@ -12,7 +12,11 @@ import { formatIDR } from "@/lib/utils/money";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ThriftPaymentDialog } from "./thrift-payment-dialog";
+import { ThriftAddBarangDialog } from "./thrift-add-barang-dialog";
 import { id as strings } from "@/lib/i18n/id";
+
+type CategoryOption = { id: string; name: string };
+type PemilikOption = { id: string; nama: string };
 
 /**
  * components/pos/thrift/thrift-pos-screen.tsx — TT06. SATU LAYAR, bukan dua
@@ -27,11 +31,17 @@ export function ThriftPosScreen({
   device,
   paymentMethods,
   shift,
+  canAddBarang,
+  categories,
+  pemilikList,
 }: {
   outlet: ThriftOutlet;
   device: { id: string; name: string };
   paymentMethods: ThriftPaymentMethod[];
   shift: { id: string; employeeName: string };
+  canAddBarang: boolean;
+  categories: CategoryOption[];
+  pemilikList: PemilikOption[];
 }) {
   const lines = useThriftCartStore((s) => s.lines);
   const addLine = useThriftCartStore((s) => s.addLine);
@@ -64,12 +74,11 @@ export function ThriftPosScreen({
     });
   }, [lines, outlet]);
 
-  async function handleScan(e: React.FormEvent) {
-    e.preventDefault();
-    if (!kode.trim() || isLooking) return;
+  async function performLookup(kodeToLookup: string) {
+    if (!kodeToLookup.trim() || isLooking) return;
     setIsLooking(true);
     try {
-      const result = await lookupBarangByKode(kode);
+      const result = await lookupBarangByKode(kodeToLookup);
       if (result.error) {
         toast.error(result.error);
         return;
@@ -96,6 +105,19 @@ export function ThriftPosScreen({
     }
   }
 
+  function handleScan(e: React.FormEvent) {
+    e.preventDefault();
+    void performLookup(kode);
+  }
+
+  // "Ita super kasir" -- barang baru dari ThriftAddBarangDialog SELALU
+  // siap_jual (lib/pos/pos-add-barang.ts), jadi bisa langsung "dipindai"
+  // pakai kode yang baru saja dibuat -- Ita tidak perlu mengetik ulang
+  // atau keluar dari kasir sama sekali untuk menjualnya.
+  function handleBarangAdded(kodeBaru: string) {
+    void performLookup(kodeBaru);
+  }
+
   return (
     <div className="flex min-h-dvh flex-col">
       <div className="flex flex-wrap items-center justify-between gap-2 border-b p-3">
@@ -106,6 +128,15 @@ export function ThriftPosScreen({
           <span className="text-xs text-muted-foreground">
             {strings.shift.activeShiftLabel}: {shift.employeeName}
           </span>
+          {canAddBarang ? (
+            <ThriftAddBarangDialog
+              outletId={outlet.id}
+              shiftId={shift.id}
+              categories={categories}
+              pemilikList={pemilikList}
+              onAdded={handleBarangAdded}
+            />
+          ) : null}
           <Button
             variant="outline"
             size="sm"

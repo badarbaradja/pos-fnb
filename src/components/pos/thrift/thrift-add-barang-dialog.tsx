@@ -1,0 +1,255 @@
+"use client";
+
+import { useRef, useState, useTransition } from "react";
+import { toast } from "sonner";
+import { addBarangFromPos } from "@/app/(pos)/pos/thrift/actions";
+import {
+  BarangImageField,
+  type BarangImageFieldHandle,
+} from "@/components/dashboard/barang/barang-image-field";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
+import { cn } from "@/lib/utils";
+import { id as strings } from "@/lib/i18n/id";
+
+type CategoryOption = { id: string; name: string };
+type PemilikOption = { id: string; nama: string };
+
+const UKURAN_PRESETS = ["XS", "S", "M", "L", "XL", "XXL"];
+const KONDISI_PRESETS = ["Sangat baik", "Baik", "Cukup"];
+
+function Chip({
+  selected,
+  onClick,
+  children,
+}: {
+  selected: boolean;
+  onClick: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={cn(
+        "h-9 min-w-11 rounded-lg border px-3 text-sm transition-colors",
+        selected
+          ? "border-primary bg-primary text-primary-foreground"
+          : "border-input bg-transparent hover:bg-accent"
+      )}
+    >
+      {children}
+    </button>
+  );
+}
+
+/**
+ * thrift-add-barang-dialog.tsx — "Ita super kasir" (11 September 2026).
+ * Versi RINGKAS layar /barang, dipanggil LANGSUNG dari /pos/thrift --
+ * dirender HANYA kalau ThriftPosScreen tahu shift ini manager/owner
+ * (lihat page.tsx). Sesudah tersimpan, kode barang baru diteruskan ke
+ * `onAdded` supaya kasir bisa langsung memindainya (barang baru selalu
+ * siap_jual, lihat lib/pos/pos-add-barang.ts) -- tanpa keluar dari kasir
+ * sama sekali.
+ */
+export function ThriftAddBarangDialog({
+  outletId,
+  shiftId,
+  categories,
+  pemilikList,
+  onAdded,
+}: {
+  outletId: string;
+  shiftId: string;
+  categories: CategoryOption[];
+  pemilikList: PemilikOption[];
+  onAdded: (kode: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [isPending, startTransition] = useTransition();
+  const [categoryId, setCategoryId] = useState("");
+  const [pemilikId, setPemilikId] = useState("");
+  const [ukuran, setUkuran] = useState("");
+  const [kondisi, setKondisi] = useState("");
+  const [hargaModal, setHargaModal] = useState("0");
+  const [hargaJual, setHargaJual] = useState("");
+  const [hargaJualEdited, setHargaJualEdited] = useState(false);
+  const imageFieldRef = useRef<BarangImageFieldHandle>(null);
+
+  function resetFields() {
+    setCategoryId("");
+    setPemilikId("");
+    setUkuran("");
+    setKondisi("");
+    setHargaModal("0");
+    setHargaJual("");
+    setHargaJualEdited(false);
+  }
+
+  function handleHargaModalChange(value: string) {
+    setHargaModal(value);
+    if (!hargaJualEdited) {
+      const modal = Number(value);
+      setHargaJual(Number.isFinite(modal) && modal > 0 ? String(modal * 2) : "");
+    }
+  }
+
+  function handleSubmit(formData: FormData) {
+    startTransition(async () => {
+      const result = await addBarangFromPos(shiftId, {
+        outletId,
+        categoryId: categoryId || undefined,
+        nama: formData.get("nama"),
+        merek: formData.get("merek") || undefined,
+        ukuran: ukuran || undefined,
+        warna: formData.get("warna") || undefined,
+        kondisi: kondisi || undefined,
+        hargaModal: hargaModal || 0,
+        hargaJual: hargaJual,
+        pemilikId: pemilikId || undefined,
+      });
+      if (result.error || !result.success) {
+        toast.error(result.error ?? strings.common.unexpectedError);
+        return;
+      }
+      toast.success(strings.barang.intakeSavedToast.replace("{kode}", result.success.kode));
+      setOpen(false);
+      resetFields();
+      imageFieldRef.current?.reset();
+      onAdded(result.success.kode);
+    });
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogTrigger
+        render={
+          <Button type="button" variant="outline" size="sm">
+            {strings.pos.addBarangFromPosButton}
+          </Button>
+        }
+      />
+      <DialogContent className="max-h-[90vh] overflow-y-auto">
+        <form action={handleSubmit} className="flex flex-col gap-4">
+          <DialogHeader>
+            <DialogTitle>{strings.barang.intakeTitle}</DialogTitle>
+          </DialogHeader>
+
+          <div className="flex flex-col gap-2">
+            <Label>{strings.barang.category}</Label>
+            <div className="flex flex-wrap gap-2">
+              <Chip selected={categoryId === ""} onClick={() => setCategoryId("")}>
+                {strings.barang.noCategoryOption}
+              </Chip>
+              {categories.map((c) => (
+                <Chip key={c.id} selected={categoryId === c.id} onClick={() => setCategoryId(c.id)}>
+                  {c.name}
+                </Chip>
+              ))}
+            </div>
+          </div>
+
+          <div className="flex flex-col gap-2">
+            <Label>{strings.barang.pemilik}</Label>
+            <div className="flex flex-wrap gap-2">
+              <Chip selected={pemilikId === ""} onClick={() => setPemilikId("")}>
+                {strings.barang.pemilikTokoSendiri}
+              </Chip>
+              {pemilikList.map((p) => (
+                <Chip key={p.id} selected={pemilikId === p.id} onClick={() => setPemilikId(p.id)}>
+                  {p.nama}
+                </Chip>
+              ))}
+            </div>
+          </div>
+
+          <BarangImageField ref={imageFieldRef} barangName="" />
+
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <div className="flex flex-col gap-2">
+              <Label htmlFor="pos-add-nama">{strings.barang.nama}</Label>
+              <Input id="pos-add-nama" name="nama" required autoFocus />
+            </div>
+            <div className="flex flex-col gap-2">
+              <Label htmlFor="pos-add-merek">{strings.barang.merek}</Label>
+              <Input id="pos-add-merek" name="merek" />
+            </div>
+            <div className="flex flex-col gap-2">
+              <Label htmlFor="pos-add-warna">{strings.barang.warna}</Label>
+              <Input id="pos-add-warna" name="warna" />
+            </div>
+          </div>
+
+          <div className="flex flex-col gap-2">
+            <Label>{strings.barang.ukuran}</Label>
+            <div className="flex flex-wrap gap-2">
+              {UKURAN_PRESETS.map((u) => (
+                <Chip key={u} selected={ukuran === u} onClick={() => setUkuran(u)}>
+                  {u}
+                </Chip>
+              ))}
+            </div>
+            <Input value={ukuran} onChange={(e) => setUkuran(e.target.value)} placeholder={strings.barang.ukuranPlaceholder} />
+          </div>
+
+          <div className="flex flex-col gap-2">
+            <Label>{strings.barang.kondisi}</Label>
+            <div className="flex flex-wrap gap-2">
+              {KONDISI_PRESETS.map((k) => (
+                <Chip key={k} selected={kondisi === k} onClick={() => setKondisi(k)}>
+                  {k}
+                </Chip>
+              ))}
+            </div>
+            <Input value={kondisi} onChange={(e) => setKondisi(e.target.value)} placeholder={strings.barang.kondisiPlaceholder} />
+          </div>
+
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <div className="flex flex-col gap-2">
+              <Label htmlFor="pos-add-modal">{strings.barang.hargaModal}</Label>
+              <Input
+                id="pos-add-modal"
+                type="number"
+                min={0}
+                step="1"
+                value={hargaModal}
+                onChange={(e) => handleHargaModalChange(e.target.value)}
+              />
+            </div>
+            <div className="flex flex-col gap-2">
+              <Label htmlFor="pos-add-jual">{strings.barang.hargaJual}</Label>
+              <Input
+                id="pos-add-jual"
+                type="number"
+                min={0}
+                step="1"
+                required
+                value={hargaJual}
+                onChange={(e) => {
+                  setHargaJual(e.target.value);
+                  setHargaJualEdited(true);
+                }}
+              />
+              <p className="text-xs text-muted-foreground">{strings.barang.hargaJualAutoHint}</p>
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button type="submit" disabled={isPending}>
+              {isPending ? strings.common.saving : strings.barang.intakeSaveButton}
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
+  );
+}

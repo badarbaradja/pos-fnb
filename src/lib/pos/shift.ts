@@ -50,6 +50,13 @@ export type OpenShiftRow = {
   deviceId: string | null;
   employeeId: string;
   employeeName: string;
+  // TT06 lanjutan (11 September 2026) -- role EMPLOYEE (dari PIN/shift),
+  // BUKAN role dashboard/Supabase Auth perangkat ini. Dipakai untuk gerbang
+  // "tambah barang dari kasir" (Ita, manager, bisa; akun tamu/cashier,
+  // tidak) -- dua identitas ini SENGAJA terpisah (lihat lib/pos/pos-add-
+  // barang.ts), jadi role yang benar untuk keputusan ini WAJIB diambil
+  // dari sini, bukan dari requirePermission() biasa.
+  employeeRole: "owner" | "manager" | "cashier" | "waiter" | "kitchen" | "warehouse" | "accountant";
   // Akun tamu bersama (TT09b) -- terisi HANYA kalau shift ini dibuka akun
   // employees.isSharedAccount=true (lihat openShiftWithDb di bawah), null
   // selamanya untuk karyawan bernama biasa. Pemanggil yang menampilkan
@@ -85,6 +92,7 @@ export async function getOpenShiftForDevice(
       deviceId: shifts.deviceId,
       employeeId: shifts.employeeId,
       employeeName: employees.fullName,
+      employeeRole: employees.role,
       servedByName: shifts.servedByName,
       status: shifts.status,
       openedAt: shifts.openedAt,
