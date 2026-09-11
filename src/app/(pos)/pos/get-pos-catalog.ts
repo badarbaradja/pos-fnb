@@ -127,10 +127,21 @@ export async function getPosCatalog(
   const defaultPriceTierId =
     priceTierRows.find((t) => t.isDefault)?.id ?? priceTierRows[0]!.id;
 
+  // TT01 (10 September 2026) -- categories sekarang dipakai bersama F&B
+  // dan thrifting (categories.scope). Layar kasir F&B ini TIDAK BOLEH
+  // menampilkan chip kategori thrifting ("Pakaian", dst) sama sekali --
+  // /pos/thrift punya alurnya sendiri (barcode-first, tidak memakai
+  // categories untuk filter apa pun).
   const categoryRows = await db
     .select()
     .from(categories)
-    .where(and(eq(categories.businessId, businessId), eq(categories.isActive, true)))
+    .where(
+      and(
+        eq(categories.businessId, businessId),
+        eq(categories.isActive, true),
+        eq(categories.scope, "fnb")
+      )
+    )
     .orderBy(asc(categories.sortOrder), asc(categories.name));
 
   let productRows = await db

@@ -74,7 +74,8 @@ export default async function EditProductPage({
       db
         .select({ id: categories.id, name: categories.name })
         .from(categories)
-        .where(eq(categories.businessId, businessId))
+        // TT01 -- lihat komentar sama di products/new/page.tsx.
+        .where(and(eq(categories.businessId, businessId), eq(categories.scope, "fnb")))
         .orderBy(asc(categories.sortOrder), asc(categories.name)),
       db
         .select({ id: priceTiers.id, code: priceTiers.code, name: priceTiers.name })

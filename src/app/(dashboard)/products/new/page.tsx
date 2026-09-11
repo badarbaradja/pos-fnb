@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { asc, eq } from "drizzle-orm";
+import { and, asc, eq } from "drizzle-orm";
 import { createServerSupabaseClient } from "@/lib/auth/supabase";
 import { requirePermissionDb } from "@/lib/auth/permissions";
 import { categories, priceTiers, modifierGroups, brands, outlets } from "@/lib/db/schema";
@@ -19,7 +19,12 @@ export default async function NewProductPage() {
       db
         .select({ id: categories.id, name: categories.name })
         .from(categories)
-        .where(eq(categories.businessId, businessId))
+        // TT01 (10 September 2026) -- categories sekarang dipakai bersama
+        // F&B dan thrifting (categories.scope). Form produk F&B TIDAK
+        // BOLEH menampilkan kategori thrifting ("Pakaian", "Sepatu", dst)
+        // sebagai pilihan, dan sebaliknya (lihat risiko yang dicatat di
+        // RENCANA-PEMBANGUNAN-KASIR-THRIFTING.md §1).
+        .where(and(eq(categories.businessId, businessId), eq(categories.scope, "fnb")))
         .orderBy(asc(categories.sortOrder), asc(categories.name)),
       db
         .select({ id: priceTiers.id, code: priceTiers.code, name: priceTiers.name })

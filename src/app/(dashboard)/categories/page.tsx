@@ -58,6 +58,7 @@ export default async function CategoriesPage() {
           <TableHeader>
             <TableRow>
               <TableHead>{strings.categories.name}</TableHead>
+              <TableHead>{strings.categories.scope}</TableHead>
               <TableHead>{strings.categories.sortOrder}</TableHead>
               <TableHead>{strings.categories.colStatus}</TableHead>
               <TableHead className="text-right">
@@ -74,6 +75,13 @@ export default async function CategoriesPage() {
                     style={{ backgroundColor: row.color ?? undefined }}
                   />
                   {row.name}
+                </TableCell>
+                <TableCell>
+                  <Badge variant="outline">
+                    {row.scope === "thrifting"
+                      ? strings.categories.scopeThrifting
+                      : strings.categories.scopeFnb}
+                  </Badge>
                 </TableCell>
                 <TableCell>{row.sortOrder}</TableCell>
                 <TableCell>

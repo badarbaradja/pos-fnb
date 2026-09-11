@@ -23,6 +23,11 @@ const saveCategorySchema = z.object({
   name: z.string().trim().min(1, strings.common.requiredField),
   color: z.string().trim().optional(),
   sortOrder: z.coerce.number().int(),
+  // TT01 (10 September 2026) -- kategori dipakai bersama F&B (default) dan
+  // thrifting, dibedakan lewat kolom ini supaya dropdown/filter di kedua
+  // sisi tidak tercampur. Default 'fnb' menjaga form lama tetap jalan tanpa
+  // perubahan perilaku kalau field ini tidak dikirim (mis. test lama).
+  scope: z.enum(["fnb", "thrifting"]).default("fnb"),
 });
 
 export type CategoryActionResult = {
@@ -46,7 +51,12 @@ export async function saveCategoryWithDb(
     // satu-satunya (CLAUDE.md §3.4).
     const updated = await db
       .update(categories)
-      .set({ name: data.name, color: data.color ?? null, sortOrder: data.sortOrder })
+      .set({
+        name: data.name,
+        color: data.color ?? null,
+        sortOrder: data.sortOrder,
+        scope: data.scope,
+      })
       .where(and(eq(categories.id, data.id), eq(categories.businessId, businessId)))
       .returning({ id: categories.id });
     assertRowsAffected(updated, "kategori");
@@ -60,6 +70,7 @@ export async function saveCategoryWithDb(
     name: data.name,
     color: data.color ?? null,
     sortOrder: data.sortOrder,
+    scope: data.scope,
   });
   return { success: { categoryId } };
 }

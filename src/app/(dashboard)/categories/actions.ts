@@ -37,6 +37,7 @@ export async function saveCategory(
       name: formData.get("name"),
       color: formData.get("color") || undefined,
       sortOrder: formData.get("sortOrder") || 0,
+      scope: formData.get("scope") || "fnb",
     });
     if (result.error) {
       return { error: result.error };

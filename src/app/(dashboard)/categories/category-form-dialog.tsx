@@ -21,6 +21,7 @@ export type CategoryFormValue = {
   name: string;
   color: string | null;
   sortOrder: number;
+  scope: "fnb" | "thrifting";
 };
 
 const initialState: CategoryFormState = {};
@@ -88,6 +89,19 @@ export function CategoryFormDialog({
                 type="number"
                 defaultValue={category?.sortOrder ?? 0}
               />
+            </div>
+            <div className="flex flex-col gap-2">
+              <Label htmlFor="scope">{strings.categories.scope}</Label>
+              <select
+                id="scope"
+                name="scope"
+                defaultValue={category?.scope ?? "fnb"}
+                className="h-8 rounded-lg border border-input bg-transparent px-2.5 text-sm"
+              >
+                <option value="fnb">{strings.categories.scopeFnb}</option>
+                <option value="thrifting">{strings.categories.scopeThrifting}</option>
+              </select>
+              <p className="text-xs text-muted-foreground">{strings.categories.scopeHint}</p>
             </div>
           </div>
           <DialogFooter>
