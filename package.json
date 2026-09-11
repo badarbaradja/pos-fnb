@@ -17,6 +17,8 @@
     "seed:catalog": "tsx scripts/seed-catalog.ts",
     "seed:indokopi-catalog": "tsx scripts/seed-indokopi-catalog.ts",
     "bootstrap:production": "tsx scripts/bootstrap-production.ts",
+    "demo:thrift-checkpoint": "tsx scripts/demo-thrift-checkpoint.ts",
+    "demo:thrift-race": "tsx scripts/demo-thrift-race.ts",
     "demo:thrift-guest-account": "tsx scripts/demo-thrift-guest-account.ts",
     "preview": "opennextjs-cloudflare build && opennextjs-cloudflare preview",
     "deploy": "opennextjs-cloudflare build && opennextjs-cloudflare deploy",
