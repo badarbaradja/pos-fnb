@@ -14,6 +14,7 @@ const channelLabels: Record<string, string> = {
   shopeefood: strings.receipt.channelShopeefood,
   online_store: strings.receipt.channelOnlineStore,
   reservation: strings.receipt.channelReservation,
+  retail: strings.receipt.channelRetail,
 };
 
 export function getChannelLabel(channel: string): string {

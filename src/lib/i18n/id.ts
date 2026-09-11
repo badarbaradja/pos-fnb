@@ -705,6 +705,11 @@ export const id = {
 
     payButton: "Bayar",
 
+    scanPlaceholder: "Ketik atau pindai kode barang...",
+    scanButton: "Cari",
+    thriftCartEmpty: "Keranjang kosong. Pindai atau ketik kode barang di atas.",
+    removeFromCart: "Keluarkan",
+
     paymentDialogTitle: "Pembayaran",
     paymentMethodLabel: "Metode",
     paymentAmountLabel: "Nominal",
@@ -717,6 +722,11 @@ export const id = {
     changeDue: "Kembalian",
     insufficientPayment: "Pembayaran kurang dari total tagihan",
     noActiveShiftError: "Tidak ada shift terbuka untuk perangkat ini. Buka shift dulu.",
+    barangDuplikatDiKeranjangError: "Barang yang sama tidak bisa ada dua kali di satu keranjang -- ini barang unik satu potong.",
+    barangTidakSiapJualError: "Barang {kode} sudah terjual atau belum ditandai siap jual -- tidak bisa dijual lagi.",
+    barangSudahTerjualSaatBayarError: "Salah satu barang di keranjang baru saja terjual duluan (kemungkinan kasir lain memindainya bersamaan). Keluarkan dari keranjang lalu coba lagi.",
+    kodeKosongError: "Ketik atau pindai kode barang dulu.",
+    barangTidakDitemukanError: "Kode {kode} tidak ditemukan.",
     confirmPayment: "Konfirmasi Bayar",
     processingPayment: "Memproses...",
     paymentSuccess: "Pembayaran berhasil",
@@ -857,6 +867,7 @@ export const id = {
     channelShopeefood: "ShopeeFood",
     channelOnlineStore: "Toko Online",
     channelReservation: "Reservasi",
+    channelRetail: "Barang Titipan",
   },
   voidRefund: {
     voidBadge: "Dibatalkan",

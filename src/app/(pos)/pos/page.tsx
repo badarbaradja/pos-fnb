@@ -22,6 +22,13 @@ export default async function PosPage() {
       redirect("/pos/setup");
     }
 
+    // TT06 -- outlet thrifting (posMode='thrifting') dilayani layar kasir
+    // yang SAMA SEKALI berbeda (barcode-first, bukan grid produk). Device
+    // yang di-pairing ke outlet thrifting TIDAK PERNAH melihat halaman ini.
+    if (paired.outlet.posMode === "thrifting") {
+      redirect("/pos/thrift");
+    }
+
     // Katalog di-fetch SEKALI di sini saat halaman dibuka -- interaksi di
     // klien (tap produk, filter kategori, cari, ganti tingkat harga) murni
     // di memori, tidak memicu query baru (kesepakatan T12).

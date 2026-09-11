@@ -117,6 +117,15 @@ export const brands = pgTable(
   ]
 ).enableRLS();
 
+// Thrifting (TT06, 10 September 2026) -- membedakan outlet mana yang
+// dilayani layar kasir F&B (/pos) vs layar kasir barang titipan
+// (/pos/thrift). SATU-SATUNYA pembeda routing -- tanpa ini "outlet baru,
+// bisnis yang sama" (keputusan arsitektur RENCANA-PEMBANGUNAN §1) tidak
+// punya cara memberi tahu /pos/page.tsx harus redirect ke layar mana.
+// Default 'fnb' supaya SEMUA outlet yang sudah ada (Indosteak, Indokopi)
+// tidak berubah perilaku sama sekali.
+export const posModeEnum = pgEnum("pos_mode", ["fnb", "thrifting"]);
+
 export const outlets = pgTable(
   "outlets",
   {
@@ -180,6 +189,7 @@ export const outlets = pgTable(
     })
       .notNull()
       .default("100000"), // Rp 100.000 per bahan per opname
+    posMode: posModeEnum("pos_mode").notNull().default("fnb"),
     isActive: boolean("is_active").notNull().default(true),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
@@ -1096,6 +1106,12 @@ export const orderChannelEnum = pgEnum("order_channel", [
   "shopeefood",
   "online_store",
   "reservation",
+  // Thrifting (TT06, 10 September 2026) -- jual barang titipan walk-in,
+  // bukan salah satu channel F&B di atas. Tanpa ini transaksi thrifting
+  // akan salah tercatat 'dine_in' (default lama), mencemari laporan
+  // getSalesByChannel dengan angka dine_in yang sebetulnya bukan makan di
+  // tempat.
+  "retail",
 ]);
 
 export const orders = pgTable(
