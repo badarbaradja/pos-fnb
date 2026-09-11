@@ -21,6 +21,7 @@ const navItems = [
   { href: "/employees", label: id.nav.employees },
   { href: "/devices", label: id.nav.devices },
   { href: "/outlets", label: id.nav.outlets },
+  { href: "/pemilik", label: id.nav.pemilik },
   { href: "/units", label: id.nav.units },
   { href: "/ingredients", label: id.nav.ingredients },
   { href: "/stock-transfers", label: id.nav.stockTransfers },
