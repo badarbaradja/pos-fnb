@@ -14,6 +14,7 @@ export type { CategoryActionResult };
 
 export type CategoryFormState = {
   error?: string;
+  success?: { categoryId: string };
 };
 
 /**
@@ -42,12 +43,11 @@ export async function saveCategory(
     if (result.error) {
       return { error: result.error };
     }
+    revalidatePath("/categories");
+    return { success: result.success };
   } finally {
     await closeDb();
   }
-
-  revalidatePath("/categories");
-  return {};
 }
 
 export async function setCategoryActive(

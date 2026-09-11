@@ -7,6 +7,8 @@ import {
   BarangImageField,
   type BarangImageFieldHandle,
 } from "@/components/dashboard/barang/barang-image-field";
+import { QuickAddCategoryDialog } from "./quick-add-category-dialog";
+import { QuickAddPemilikDialog } from "./quick-add-pemilik-dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -180,8 +182,8 @@ function ChipButton({
  */
 export function BarangIntakeForm({
   outlets,
-  categories,
-  pemilikList,
+  categories: initialCategories,
+  pemilikList: initialPemilikList,
 }: {
   outlets: OutletOption[];
   categories: CategoryOption[];
@@ -193,6 +195,13 @@ export function BarangIntakeForm({
   const namaInputRef = useRef<HTMLInputElement>(null);
 
   const [outletId, setOutletId] = useState(outlets[0]?.id ?? "");
+  // Kategori/pemilik BARU yang ditambah lewat "+ Kategori/Pemilik baru"
+  // (instruksi CEO 11 September 2026) ditambahkan ke daftar LOKAL ini
+  // langsung dari callback dialog (event handler, bukan efek) supaya
+  // langsung terpilih dan tersedia untuk barang berikutnya TANPA reload
+  // halaman -- sesi 150 barang tidak boleh terhenti untuk itu.
+  const [categories, setCategories] = useState(initialCategories);
+  const [pemilikList, setPemilikList] = useState(initialPemilikList);
   const [categoryId, setCategoryId] = useState("");
   const [pemilikId, setPemilikId] = useState("");
   // Kode terakhir tersimpan ditampilkan langsung dari `state.success.kode`
@@ -260,6 +269,12 @@ export function BarangIntakeForm({
                 {c.name}
               </ChipButton>
             ))}
+            <QuickAddCategoryDialog
+              onCreated={(id, name) => {
+                setCategories((prev) => [...prev, { id, name }]);
+                setCategoryId(id);
+              }}
+            />
           </div>
         </div>
 
@@ -279,6 +294,12 @@ export function BarangIntakeForm({
                 {p.nama}
               </ChipButton>
             ))}
+            <QuickAddPemilikDialog
+              onCreated={(id, nama) => {
+                setPemilikList((prev) => [...prev, { id, nama }]);
+                setPemilikId(id);
+              }}
+            />
           </div>
         </div>
 

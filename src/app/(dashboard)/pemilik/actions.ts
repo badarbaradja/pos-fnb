@@ -13,6 +13,7 @@ export type { PemilikActionResult };
 
 export type PemilikFormState = {
   error?: string;
+  success?: { pemilikId: string };
 };
 
 /**
@@ -43,12 +44,11 @@ export async function savePemilik(
     if (result.error) {
       return { error: result.error };
     }
+    revalidatePath("/pemilik");
+    return { success: result.success };
   } finally {
     await closeDb();
   }
-
-  revalidatePath("/pemilik");
-  return {};
 }
 
 export async function setPemilikActive(
