@@ -7,8 +7,10 @@ import { hasPermission } from "@/lib/auth/permissions";
 import { createServerSupabaseClient } from "@/lib/auth/supabase";
 import { getUserDb } from "@/lib/db/client";
 import { stockTransfers } from "@/lib/db/schema";
+import { getKasirDestinationsForUser, type KasirDestination } from "@/lib/pos/kasir-shortcut";
 import { Button } from "@/components/ui/button";
 import { MobileNavDrawer } from "@/components/dashboard/mobile-nav-drawer";
+import { BukaKasirButton } from "@/components/dashboard/buka-kasir-button";
 import { id } from "@/lib/i18n/id";
 
 const navItems = [
@@ -41,26 +43,39 @@ export default async function DashboardLayout({
 
   const business = await getCurrentBusiness();
 
-  // T22 -- badge "permintaan transfer menunggu" di nav, tampil di SETIAP
-  // halaman dashboard (bukan cuma saat sudah membuka /stock-transfers)
-  // supaya gudang punya alasan membuka dashboard sama sekali, sambil
-  // menunggu tahu apakah ini cukup atau perlu notifikasi dorong beneran
-  // (T26b, docs/01-TASK-BOARD.md -- diputuskan setelah lihat pemakaian
-  // nyata). Cuma dihitung untuk yang punya izin approve -- staf lain
-  // tidak perlu tahu angka ini.
   let pendingTransferCount = 0;
-  if (business && hasPermission(business.role, "stock.transfer_approve")) {
+  let kasirDestinations: KasirDestination[] = [];
+  if (business) {
     const supabase = await createServerSupabaseClient();
     const { data: sessionData } = await supabase.auth.getSession();
     const accessToken = sessionData.session?.access_token;
     if (accessToken) {
       const { db, close } = await getUserDb(accessToken);
       try {
-        const rows = await db
-          .select({ id: stockTransfers.id })
-          .from(stockTransfers)
-          .where(and(eq(stockTransfers.businessId, business.businessId), eq(stockTransfers.status, "requested")));
-        pendingTransferCount = rows.length;
+        // T22 -- badge "permintaan transfer menunggu" di nav, tampil di
+        // SETIAP halaman dashboard (bukan cuma saat sudah membuka
+        // /stock-transfers) supaya gudang punya alasan membuka dashboard
+        // sama sekali, sambil menunggu tahu apakah ini cukup atau perlu
+        // notifikasi dorong beneran (T26b, docs/01-TASK-BOARD.md --
+        // diputuskan setelah lihat pemakaian nyata). Cuma dihitung untuk
+        // yang punya izin approve -- staf lain tidak perlu tahu angka ini.
+        if (hasPermission(business.role, "stock.transfer_approve")) {
+          const rows = await db
+            .select({ id: stockTransfers.id })
+            .from(stockTransfers)
+            .where(and(eq(stockTransfers.businessId, business.businessId), eq(stockTransfers.status, "requested")));
+          pendingTransferCount = rows.length;
+        }
+
+        // Tombol "Buka Kasir" (12 September 2026) -- navigasi saja, bukan
+        // izin, jadi tidak digerbang permission apa pun -- lihat komentar
+        // lib/pos/kasir-shortcut.ts.
+        kasirDestinations = await getKasirDestinationsForUser(
+          db,
+          business.businessId,
+          session.userId,
+          business.role
+        );
       } finally {
         await close();
       }
@@ -87,6 +102,9 @@ export default async function DashboardLayout({
           logoutLabel={id.auth.logout}
         />
         <span className="font-semibold">{id.nav.appName}</span>
+        <div className="ml-auto">
+          <BukaKasirButton destinations={kasirDestinations} />
+        </div>
       </div>
       <aside className="hidden w-56 shrink-0 flex-col gap-4 border-r p-4 lg:flex">
         <div>
@@ -97,6 +115,7 @@ export default async function DashboardLayout({
             </div>
           ) : null}
         </div>
+        <BukaKasirButton destinations={kasirDestinations} className="w-full" />
         <nav className="flex flex-col gap-1">
           {navItemsWithBadges.map((item) => (
             <Link

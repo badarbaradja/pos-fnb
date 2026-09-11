@@ -55,6 +55,8 @@ export const id = {
     reports: "Laporan Penjualan",
     openMenu: "Buka menu",
     closeMenu: "Tutup menu",
+    bukaKasirButton: "Buka Kasir",
+    bukaKasirPilihOutlet: "Pilih outlet",
   },
   employees: {
     title: "Karyawan",
