@@ -2,10 +2,25 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { toast } from "sonner";
 import { setBarangStatus } from "./actions";
 import { Button } from "@/components/ui/button";
+import { buttonVariants } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 import { id as strings } from "@/lib/i18n/id";
+
+export function BarangLabelLink({ barangId }: { barangId: string }) {
+  return (
+    <Link
+      href={`/barang/${barangId}/label`}
+      target="_blank"
+      className={cn(buttonVariants({ variant: "outline", size: "sm" }))}
+    >
+      {strings.barang.printLabelButton}
+    </Link>
+  );
+}
 
 export function BarangStatusActions({
   barangId,

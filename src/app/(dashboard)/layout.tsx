@@ -25,6 +25,7 @@ const navItems = [
   { href: "/outlets", label: id.nav.outlets },
   { href: "/pemilik", label: id.nav.pemilik },
   { href: "/barang", label: id.nav.barang },
+  { href: "/label-settings", label: id.nav.labelSettings },
   { href: "/units", label: id.nav.units },
   { href: "/ingredients", label: id.nav.ingredients },
   { href: "/stock-transfers", label: id.nav.stockTransfers },

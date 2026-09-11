@@ -15,7 +15,7 @@ import { formatIDR } from "@/lib/utils/money";
 import { Decimal } from "decimal.js";
 import { id as strings } from "@/lib/i18n/id";
 import { BarangIntakeForm } from "./barang-intake-form";
-import { BarangStatusActions } from "./barang-row-actions";
+import { BarangLabelLink, BarangStatusActions } from "./barang-row-actions";
 
 const statusLabels: Record<string, string> = {
   baru_masuk: "Baru Masuk",
@@ -144,7 +144,10 @@ export default async function BarangPage() {
                     </Badge>
                   </TableCell>
                   <TableCell className="text-right">
-                    <BarangStatusActions barangId={row.id} status={row.status} />
+                    <div className="flex items-center justify-end gap-1">
+                      <BarangLabelLink barangId={row.id} />
+                      <BarangStatusActions barangId={row.id} status={row.status} />
+                    </div>
                   </TableCell>
                 </TableRow>
               ))}

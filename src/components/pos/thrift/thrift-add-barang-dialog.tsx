@@ -136,7 +136,13 @@ export function ThriftAddBarangDialog({
           toast.error(result.error ?? strings.common.unexpectedError);
           return;
         }
-        toast.success(strings.barang.intakeSavedToast.replace("{kode}", result.success.kode));
+        const barangId = result.success.barangId;
+        toast.success(strings.barang.intakeSavedToast.replace("{kode}", result.success.kode), {
+          action: {
+            label: strings.barang.printLabelButton,
+            onClick: () => window.open(`/pos/thrift/label/${barangId}`, "_blank"),
+          },
+        });
         setOpen(false);
         resetFields();
         imageFieldRef.current?.reset();
