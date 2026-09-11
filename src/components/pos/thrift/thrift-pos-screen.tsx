@@ -98,6 +98,9 @@ export function ThriftPosScreen({
           toast.error(strings.pos.barangDuplikatDiKeranjangError);
         }
       }
+    } catch (err) {
+      console.error("Cari barang lewat kode gagal:", err);
+      toast.error(err instanceof Error ? err.message : strings.common.unexpectedError);
     } finally {
       setIsLooking(false);
       setKode("");

@@ -148,6 +148,9 @@ export function CloseShiftForm({
           toast.success(strings.shift.closedSuccess);
         }
       }
+    } catch (err) {
+      console.error("Setor hitungan kas gagal:", err);
+      toast.error(err instanceof Error ? err.message : strings.common.unexpectedError);
     } finally {
       setIsPending(false);
     }
@@ -166,6 +169,9 @@ export function CloseShiftForm({
         setState({ ...state, closed: true, closedAt: result.success.closedAt });
         toast.success(strings.shift.closedSuccess);
       }
+    } catch (err) {
+      console.error("Konfirmasi tutup shift gagal:", err);
+      toast.error(err instanceof Error ? err.message : strings.common.unexpectedError);
     } finally {
       setIsPending(false);
     }

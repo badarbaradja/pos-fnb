@@ -38,14 +38,19 @@ export function QuickAddPemilikDialog({
   function handleSubmit(formData: FormData) {
     const nama = String(formData.get("nama") ?? "");
     startTransition(async () => {
-      const result = await savePemilik({}, formData);
-      if (result.error) {
-        toast.error(result.error);
-        return;
-      }
-      if (result.success) {
-        onCreated(result.success.pemilikId, nama);
-        setOpen(false);
+      try {
+        const result = await savePemilik({}, formData);
+        if (result.error) {
+          toast.error(result.error);
+          return;
+        }
+        if (result.success) {
+          onCreated(result.success.pemilikId, nama);
+          setOpen(false);
+        }
+      } catch (err) {
+        console.error("Tambah pemilik gagal:", err);
+        toast.error(err instanceof Error ? err.message : strings.common.unexpectedError);
       }
     });
   }

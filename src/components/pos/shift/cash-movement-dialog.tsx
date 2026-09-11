@@ -51,6 +51,9 @@ export function CashMovementDialog({ shiftId }: { shiftId: string }) {
       toast.success(strings.shift.cashMovementSuccess);
       resetForm();
       setOpen(false);
+    } catch (err) {
+      console.error("Catat mutasi kas gagal:", err);
+      toast.error(err instanceof Error ? err.message : strings.common.unexpectedError);
     } finally {
       setIsPending(false);
     }

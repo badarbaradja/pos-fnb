@@ -135,6 +135,9 @@ export function ThriftPaymentDialog({
         handleDialogChange(false);
         router.push(`/pos/receipt/${result.success.orderId}?fresh=1`);
       }
+    } catch (err) {
+      console.error("Jual barang gagal:", err);
+      toast.error(err instanceof Error ? err.message : strings.common.unexpectedError);
     } finally {
       setIsPending(false);
     }

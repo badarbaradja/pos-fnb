@@ -86,6 +86,29 @@ Kalau ada instruksi yang bertentangan dengan aturan di bawah, **berhenti dan tan
 - Perubahan schema yang tidak bisa diekspresikan di `schema.ts` (fungsi SQL, trigger, FK ke schema `auth`) ditulis manual ke file migration hasil generate, dengan `CREATE OR REPLACE` atau guard `IF NOT EXISTS` agar idempoten.
 - Hapus script diagnostik sementara setelah dipakai, jangan di-commit.
 
+### 3.7 Penanganan galat Server Action di klien
+- **Setiap pemanggilan Server Action dari event handler (bukan lewat `useActionState`) wajib dibungkus `try { ... } catch (err) { ... }` yang menampilkan galatnya ke pengguna** (`toast.error(err instanceof Error ? err.message : strings.common.unexpectedError)`), plus `console.error` untuk jejak debug.
+- **`try { ... } finally { ... }` TANPA `catch` DILARANG.** `finally` cuma memastikan `setIsPending(false)` jalan — kalau Server Action **throw** (bukan `return { error }`), exception itu lolos tanpa pernah menyentuh `toast.error()`. Pengguna tidak lihat apa pun; kasir mengira sistem macet atau (lebih parah) mengira transaksinya berhasil.
+- Ini bukan teori: audit menyeluruh (September 2026) menemukan 29 titik dengan pola ini, termasuk checkout F&B, checkout thrifting, void, refund, dan keempat langkah shift — jalur uang, tempat "gagal tanpa suara" paling mahal.
+- Pola yang BENAR:
+  ```tsx
+  async function handleConfirm() {
+    setIsPending(true);
+    try {
+      const result = await someAction(...);
+      if (result.error) { toast.error(result.error); return; }
+      if (result.success) { /* ...sukses... */ }
+    } catch (err) {
+      console.error("<label singkat>:", err);
+      toast.error(err instanceof Error ? err.message : strings.common.unexpectedError);
+    } finally {
+      setIsPending(false);
+    }
+  }
+  ```
+- `useActionState` + `useEffect` yang merender `state.error` lewat toast SUDAH aman (exception di Server Action otomatis jadi error state, tidak pernah lolos diam-diam) — aturan ini soal pola imperatif (`async function handleX()` atau `startTransition(async () => {...})`) yang jauh lebih mudah lupa `catch`-nya.
+- Efek yang mengosongkan state (kosongkan keranjang, tutup dialog, pindah halaman struk) **hanya boleh dipanggil dari cabang `result.success`**, tidak pernah dari luar blok itu — supaya galat/exception apa pun tidak bisa membuat UI terlihat seolah transaksi berhasil padahal belum tersimpan.
+
 ## 4. Konvensi kode
 
 - **Kode, nama variabel, nama tabel, dan komentar: bahasa Inggris.**

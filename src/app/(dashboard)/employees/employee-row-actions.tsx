@@ -35,6 +35,9 @@ function ResetPinDialog({ employeeId }: { employeeId: string }) {
       setOpen(false);
       setNewPin("");
       router.refresh();
+    } catch (err) {
+      console.error("Reset PIN karyawan gagal:", err);
+      toast.error(err instanceof Error ? err.message : strings.common.unexpectedError);
     } finally {
       setIsPending(false);
     }
@@ -100,6 +103,9 @@ export function EmployeeRowActions({
       }
       toast.success(strings.employees.unlockSuccess);
       router.refresh();
+    } catch (err) {
+      console.error("Buka kunci karyawan gagal:", err);
+      toast.error(err instanceof Error ? err.message : strings.common.unexpectedError);
     } finally {
       setIsUnlocking(false);
     }

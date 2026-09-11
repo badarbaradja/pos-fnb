@@ -32,6 +32,9 @@ export function ModifierGroupToggleActiveButton({
           : strings.modifierGroups.activateSuccess
       );
       router.refresh();
+    } catch (err) {
+      console.error("Ubah status aktif grup modifier gagal:", err);
+      toast.error(err instanceof Error ? err.message : strings.common.unexpectedError);
     } finally {
       setIsPending(false);
     }

@@ -54,6 +54,9 @@ export function OpenShiftForm({
         router.push("/pos");
         router.refresh();
       }
+    } catch (err) {
+      console.error("Buka shift gagal:", err);
+      toast.error(err instanceof Error ? err.message : strings.common.unexpectedError);
     } finally {
       setIsPending(false);
     }

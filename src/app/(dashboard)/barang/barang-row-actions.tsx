@@ -27,6 +27,9 @@ export function BarangStatusActions({
       }
       toast.success(strings.barang.statusChangedToast);
       router.refresh();
+    } catch (err) {
+      console.error("Ubah status barang gagal:", err);
+      toast.error(err instanceof Error ? err.message : strings.common.unexpectedError);
     } finally {
       setIsPending(false);
     }

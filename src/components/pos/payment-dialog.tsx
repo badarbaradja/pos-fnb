@@ -127,6 +127,9 @@ export function PaymentDialog({
         onSuccess(result.success);
         onOpenChange(false);
       }
+    } catch (err) {
+      console.error("Bayar pesanan gagal:", err);
+      toast.error(err instanceof Error ? err.message : strings.common.unexpectedError);
     } finally {
       setIsPending(false);
     }

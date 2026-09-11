@@ -73,6 +73,9 @@ export function ApproveRejectButtons({
       }
       toast.success(strings.stockTransfers.approveSuccess);
       router.refresh();
+    } catch (err) {
+      console.error("Setuju transfer stok gagal:", err);
+      toast.error(err instanceof Error ? err.message : strings.common.unexpectedError);
     } finally {
       setIsApproving(false);
     }
@@ -89,6 +92,9 @@ export function ApproveRejectButtons({
       toast.success(strings.stockTransfers.rejectSuccess);
       setRejectOpen(false);
       router.refresh();
+    } catch (err) {
+      console.error("Tolak transfer stok gagal:", err);
+      toast.error(err instanceof Error ? err.message : strings.common.unexpectedError);
     } finally {
       setIsRejecting(false);
     }
@@ -177,6 +183,9 @@ export function StockTransferCancelButton({
         setWarnings(result.warnings);
       }
       router.refresh();
+    } catch (err) {
+      console.error("Batalkan transfer stok gagal:", err);
+      toast.error(err instanceof Error ? err.message : strings.common.unexpectedError);
     } finally {
       setIsPending(false);
     }

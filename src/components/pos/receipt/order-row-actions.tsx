@@ -47,6 +47,9 @@ function VoidDialog({ orderId }: { orderId: string }) {
       setOpen(false);
       setReason("");
       router.refresh();
+    } catch (err) {
+      console.error("Void pesanan gagal:", err);
+      toast.error(err instanceof Error ? err.message : strings.common.unexpectedError);
     } finally {
       setIsPending(false);
     }
@@ -126,6 +129,10 @@ function RefundDialog({
     try {
       const rows = await getRefundableItems(orderId);
       setItems(rows);
+    } catch (err) {
+      console.error("Ambil daftar barang untuk refund gagal:", err);
+      toast.error(err instanceof Error ? err.message : strings.common.unexpectedError);
+      setOpen(false);
     } finally {
       setIsLoading(false);
     }
@@ -171,6 +178,9 @@ function RefundDialog({
       toast.success(strings.voidRefund.refundSuccess);
       setOpen(false);
       router.refresh();
+    } catch (err) {
+      console.error("Refund pesanan gagal:", err);
+      toast.error(err instanceof Error ? err.message : strings.common.unexpectedError);
     } finally {
       setIsPending(false);
     }

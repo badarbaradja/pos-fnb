@@ -42,14 +42,19 @@ export function QuickAddCategoryDialog({
   function handleSubmit(formData: FormData) {
     const name = String(formData.get("name") ?? "");
     startTransition(async () => {
-      const result = await saveCategory({}, formData);
-      if (result.error) {
-        toast.error(result.error);
-        return;
-      }
-      if (result.success) {
-        onCreated(result.success.categoryId, name);
-        setOpen(false);
+      try {
+        const result = await saveCategory({}, formData);
+        if (result.error) {
+          toast.error(result.error);
+          return;
+        }
+        if (result.success) {
+          onCreated(result.success.categoryId, name);
+          setOpen(false);
+        }
+      } catch (err) {
+        console.error("Tambah kategori gagal:", err);
+        toast.error(err instanceof Error ? err.message : strings.common.unexpectedError);
       }
     });
   }

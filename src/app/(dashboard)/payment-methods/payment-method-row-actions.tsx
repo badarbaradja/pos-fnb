@@ -32,6 +32,9 @@ export function PaymentMethodToggleActiveButton({
           : strings.paymentMethods.activateSuccess
       );
       router.refresh();
+    } catch (err) {
+      console.error("Ubah status aktif metode bayar gagal:", err);
+      toast.error(err instanceof Error ? err.message : strings.common.unexpectedError);
     } finally {
       setIsPending(false);
     }

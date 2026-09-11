@@ -29,6 +29,9 @@ export function PemilikToggleActiveButton({
         isActive ? strings.pemilik.deactivateSuccess : strings.pemilik.activateSuccess
       );
       router.refresh();
+    } catch (err) {
+      console.error("Ubah status aktif pemilik gagal:", err);
+      toast.error(err instanceof Error ? err.message : strings.common.unexpectedError);
     } finally {
       setIsPending(false);
     }

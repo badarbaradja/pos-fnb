@@ -30,6 +30,9 @@ export function CategoryToggleActiveButton({
         isActive ? strings.categories.deactivateSuccess : strings.categories.activateSuccess
       );
       router.refresh();
+    } catch (err) {
+      console.error("Ubah status aktif kategori gagal:", err);
+      toast.error(err instanceof Error ? err.message : strings.common.unexpectedError);
     } finally {
       setIsPending(false);
     }

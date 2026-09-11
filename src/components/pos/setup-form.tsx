@@ -130,6 +130,9 @@ export function SetupForm({
         router.push("/pos");
         router.refresh();
       }
+    } catch (err) {
+      console.error("Pasangkan perangkat gagal:", err);
+      toast.error(err instanceof Error ? err.message : strings.common.unexpectedError);
     } finally {
       setIsPending(false);
     }

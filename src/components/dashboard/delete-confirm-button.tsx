@@ -52,6 +52,9 @@ export function DeleteConfirmButton({
       toast.success(successMessage);
       setOpen(false);
       router.refresh();
+    } catch (err) {
+      console.error("Hapus data gagal:", err);
+      toast.error(err instanceof Error ? err.message : strings.common.unexpectedError);
     } finally {
       setIsPending(false);
     }

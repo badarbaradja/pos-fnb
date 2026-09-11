@@ -53,6 +53,9 @@ export function CloseCashlessShiftForm({
         setClosedAt(result.success.closedAt);
         toast.success(strings.shift.closedSuccess);
       }
+    } catch (err) {
+      console.error("Tutup shift cashless gagal:", err);
+      toast.error(err instanceof Error ? err.message : strings.common.unexpectedError);
     } finally {
       setIsPending(false);
     }
