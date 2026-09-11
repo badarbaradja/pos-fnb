@@ -11,26 +11,163 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card } from "@/components/ui/card";
+import { cn } from "@/lib/utils";
 import { id as strings } from "@/lib/i18n/id";
 
 type OutletOption = { id: string; name: string };
 type CategoryOption = { id: string; name: string };
 type PemilikOption = { id: string; nama: string };
 
+const UKURAN_PRESETS = ["XS", "S", "M", "L", "XL", "XXL"];
+const KONDISI_PRESETS = ["Sangat baik", "Baik", "Cukup"];
+
 /**
- * app/(dashboard)/barang/barang-intake-form.tsx — TT04. Form tambah barang
- * SATU LAYAR permanen (bukan dialog modal) supaya sesi 150 barang tidak
- * terhambat buka-tutup dialog per barang (jawaban CEO §5
- * SPESIFIKASI-THRIFTING.md: kecepatan input adalah penentu dipakai/
- * tidaknya sistem).
+ * Ukuran/kondisi/harga -- REMOUNT lewat `key={barangId terakhir tersimpan}`
+ * di pemanggil, BUKAN direset lewat setState di dalam useEffect (react-hooks/
+ * set-state-in-effect melarang itu -- "Avoid calling setState() directly
+ * within an effect"). Key baru pada setiap sukses simpan otomatis memberi
+ * instance baru komponen ini nilai awal useState yang bersih, tanpa efek
+ * sama sekali.
+ */
+function BarangPricingFields() {
+  const [ukuran, setUkuran] = useState("");
+  const [kondisi, setKondisi] = useState("");
+  const [hargaModal, setHargaModal] = useState("0");
+  const [hargaJual, setHargaJual] = useState("");
+  const [hargaJualEdited, setHargaJualEdited] = useState(false);
+
+  function handleHargaModalChange(value: string) {
+    setHargaModal(value);
+    if (!hargaJualEdited) {
+      const modal = Number(value);
+      setHargaJual(Number.isFinite(modal) && modal > 0 ? String(modal * 2) : "");
+    }
+  }
+
+  return (
+    <>
+      <div className="flex flex-col gap-2">
+        <Label htmlFor="ukuran">{strings.barang.ukuran}</Label>
+        <div className="flex flex-wrap gap-2">
+          {UKURAN_PRESETS.map((u) => (
+            <ChipButton key={u} selected={ukuran === u} onClick={() => setUkuran(u)}>
+              {u}
+            </ChipButton>
+          ))}
+        </div>
+        <Input
+          id="ukuran"
+          name="ukuran"
+          value={ukuran}
+          onChange={(e) => setUkuran(e.target.value)}
+          placeholder={strings.barang.ukuranPlaceholder}
+        />
+      </div>
+
+      <div className="flex flex-col gap-2">
+        <Label htmlFor="kondisi">{strings.barang.kondisi}</Label>
+        <div className="flex flex-wrap gap-2">
+          {KONDISI_PRESETS.map((k) => (
+            <ChipButton key={k} selected={kondisi === k} onClick={() => setKondisi(k)}>
+              {k}
+            </ChipButton>
+          ))}
+        </div>
+        <Input
+          id="kondisi"
+          name="kondisi"
+          value={kondisi}
+          onChange={(e) => setKondisi(e.target.value)}
+          placeholder={strings.barang.kondisiPlaceholder}
+        />
+      </div>
+
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+        <div className="flex flex-col gap-2">
+          <Label htmlFor="hargaModal">{strings.barang.hargaModal}</Label>
+          <Input
+            id="hargaModal"
+            name="hargaModal"
+            type="number"
+            min={0}
+            step="1"
+            value={hargaModal}
+            onChange={(e) => handleHargaModalChange(e.target.value)}
+          />
+        </div>
+        <div className="flex flex-col gap-2">
+          <Label htmlFor="hargaJual">{strings.barang.hargaJual}</Label>
+          <Input
+            id="hargaJual"
+            name="hargaJual"
+            type="number"
+            min={0}
+            step="1"
+            required
+            value={hargaJual}
+            onChange={(e) => {
+              setHargaJual(e.target.value);
+              setHargaJualEdited(true);
+            }}
+          />
+          <p className="text-xs text-muted-foreground">{strings.barang.hargaJualAutoHint}</p>
+        </div>
+      </div>
+    </>
+  );
+}
+
+function ChipButton({
+  selected,
+  onClick,
+  children,
+}: {
+  selected: boolean;
+  onClick: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={cn(
+        "h-9 min-w-11 rounded-lg border px-3 text-sm transition-colors",
+        selected
+          ? "border-primary bg-primary text-primary-foreground"
+          : "border-input bg-transparent hover:bg-accent"
+      )}
+    >
+      {children}
+    </button>
+  );
+}
+
+/**
+ * app/(dashboard)/barang/barang-intake-form.tsx — TT04 (diupgrade 11
+ * September 2026 sesuai instruksi CEO langsung, lihat §5 SPESIFIKASI:
+ * kecepatan input adalah penentu dipakai/tidaknya sistem untuk sesi
+ * 50-150 barang sekali datang). Form tambah barang SATU LAYAR permanen
+ * (bukan dialog modal) supaya tidak terhambat buka-tutup dialog per
+ * barang.
+ *
+ * Kategori, ukuran, kondisi, pemilik semua TOMBOL tap (ChipButton),
+ * bukan menu jatuh -- satu ketukan, tidak perlu buka dropdown lalu
+ * scroll cari opsi. Ukuran/kondisi TETAP kolom teks di database
+ * (kondisi sengaja bukan enum, lihat schema.ts) -- tombol cuma mengisi
+ * preset paling umum, admin masih bisa ketik manual untuk kasus di luar
+ * preset (mis. ukuran sepatu angka).
  *
  * Field OUTLET, KATEGORI, PEMILIK sengaja CONTROLLED (React state) --
  * setelah satu barang tersimpan, `formRef.reset()` mengosongkan field lain
- * (nama, merek, ukuran, dst -- UNCONTROLLED, native defaultValue) tapi
- * TIDAK menyentuh ketiga field controlled ini sama sekali, jadi admin bisa
- * langsung foto+isi barang berikutnya dari pemilik yang sama tanpa
- * memilih ulang (§7 SPESIFIKASI-THRIFTING.md: "penghematan waktu terbesar
- * untuk sesi 150 barang").
+ * (nama, merek -- UNCONTROLLED, native defaultValue) tapi TIDAK menyentuh
+ * field controlled ini sama sekali, jadi admin bisa langsung foto+isi
+ * barang berikutnya dari pemilik yang sama tanpa memilih ulang (§7
+ * SPESIFIKASI-THRIFTING.md: "penghematan waktu terbesar untuk sesi 150
+ * barang").
+ *
+ * Harga jual OTOMATIS 2x harga modal (instruksi CEO) selama admin belum
+ * mengubahnya sendiri sejak terakhir kali harga modal berubah -- begitu
+ * diketik manual, auto-isi berhenti untuk barang itu (hargaJualEdited).
  */
 export function BarangIntakeForm({
   outlets,
@@ -61,7 +198,9 @@ export function BarangIntakeForm({
     if (state.success) {
       toast.success(strings.barang.intakeSavedToast.replace("{kode}", state.success.kode));
       // Kosongkan field per-barang, PERTAHANKAN outlet/kategori/pemilik
-      // (controlled, tidak tersentuh reset() native ini).
+      // (controlled, tidak tersentuh reset() native ini). Ukuran/kondisi/
+      // harga direset lewat remount BarangPricingFields (key di bawah),
+      // BUKAN setState di sini -- lihat komentar di komponen itu.
       formRef.current?.reset();
       imageFieldRef.current?.reset();
       namaInputRef.current?.focus();
@@ -94,39 +233,43 @@ export function BarangIntakeForm({
               ))}
             </select>
           </div>
-          <div className="flex flex-col gap-2">
-            <Label htmlFor="categoryId">{strings.barang.category}</Label>
-            <select
-              id="categoryId"
-              name="categoryId"
-              value={categoryId}
-              onChange={(e) => setCategoryId(e.target.value)}
-              className="h-8 rounded-lg border border-input bg-transparent px-2.5 text-sm"
-            >
-              <option value="">{strings.barang.noCategoryOption}</option>
-              {categories.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.name}
-                </option>
-              ))}
-            </select>
+        </div>
+
+        <div className="flex flex-col gap-2">
+          <Label>{strings.barang.category}</Label>
+          <input type="hidden" name="categoryId" value={categoryId} />
+          <div className="flex flex-wrap gap-2">
+            <ChipButton selected={categoryId === ""} onClick={() => setCategoryId("")}>
+              {strings.barang.noCategoryOption}
+            </ChipButton>
+            {categories.map((c) => (
+              <ChipButton
+                key={c.id}
+                selected={categoryId === c.id}
+                onClick={() => setCategoryId(c.id)}
+              >
+                {c.name}
+              </ChipButton>
+            ))}
           </div>
-          <div className="flex flex-col gap-2">
-            <Label htmlFor="pemilikId">{strings.barang.pemilik}</Label>
-            <select
-              id="pemilikId"
-              name="pemilikId"
-              value={pemilikId}
-              onChange={(e) => setPemilikId(e.target.value)}
-              className="h-8 rounded-lg border border-input bg-transparent px-2.5 text-sm"
-            >
-              <option value="">{strings.barang.pemilikTokoSendiri}</option>
-              {pemilikList.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.nama}
-                </option>
-              ))}
-            </select>
+        </div>
+
+        <div className="flex flex-col gap-2">
+          <Label>{strings.barang.pemilik}</Label>
+          <input type="hidden" name="pemilikId" value={pemilikId} />
+          <div className="flex flex-wrap gap-2">
+            <ChipButton selected={pemilikId === ""} onClick={() => setPemilikId("")}>
+              {strings.barang.pemilikTokoSendiri}
+            </ChipButton>
+            {pemilikList.map((p) => (
+              <ChipButton
+                key={p.id}
+                selected={pemilikId === p.id}
+                onClick={() => setPemilikId(p.id)}
+              >
+                {p.nama}
+              </ChipButton>
+            ))}
           </div>
         </div>
 
@@ -142,26 +285,12 @@ export function BarangIntakeForm({
             <Input id="merek" name="merek" />
           </div>
           <div className="flex flex-col gap-2">
-            <Label htmlFor="ukuran">{strings.barang.ukuran}</Label>
-            <Input id="ukuran" name="ukuran" />
-          </div>
-          <div className="flex flex-col gap-2">
             <Label htmlFor="warna">{strings.barang.warna}</Label>
             <Input id="warna" name="warna" />
           </div>
-          <div className="flex flex-col gap-2">
-            <Label htmlFor="kondisi">{strings.barang.kondisi}</Label>
-            <Input id="kondisi" name="kondisi" placeholder={strings.barang.kondisiPlaceholder} />
-          </div>
-          <div className="flex flex-col gap-2">
-            <Label htmlFor="hargaModal">{strings.barang.hargaModal}</Label>
-            <Input id="hargaModal" name="hargaModal" type="number" min={0} step="1" defaultValue="0" />
-          </div>
-          <div className="flex flex-col gap-2">
-            <Label htmlFor="hargaJual">{strings.barang.hargaJual}</Label>
-            <Input id="hargaJual" name="hargaJual" type="number" min={0} step="1" required />
-          </div>
         </div>
+
+        <BarangPricingFields key={state.success?.barangId ?? "belum-tersimpan"} />
 
         <div className="flex items-center gap-3">
           <Button type="submit" disabled={isPending}>
