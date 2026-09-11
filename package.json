@@ -20,6 +20,7 @@
     "demo:thrift-checkpoint": "tsx scripts/demo-thrift-checkpoint.ts",
     "demo:thrift-race": "tsx scripts/demo-thrift-race.ts",
     "demo:thrift-guest-account": "tsx scripts/demo-thrift-guest-account.ts",
+    "setup:dev-outlets": "tsx scripts/setup-dev-outlets.ts",
     "preview": "opennextjs-cloudflare build && opennextjs-cloudflare preview",
     "deploy": "opennextjs-cloudflare build && opennextjs-cloudflare deploy",
     "cf-typegen": "wrangler types"
