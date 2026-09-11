@@ -183,6 +183,13 @@
       "when": 1789033888465,
       "tag": "0025_thick_magma",
       "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "7",
+      "when": 1789035913586,
+      "tag": "0026_chief_master_chief",
+      "breakpoints": true
     }
   ]
 }
