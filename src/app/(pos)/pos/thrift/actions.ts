@@ -5,9 +5,13 @@ import { requirePermissionDb } from "@/lib/auth/permissions";
 import { findSellableBarangByKode, type LookupBarangResult } from "@/lib/barang/lookup";
 import { sellBarangWithDb, type SellBarangResult } from "@/lib/pos/sell-barang";
 import { addBarangFromShiftWithDb } from "@/lib/pos/pos-add-barang";
+import {
+  setBarangMenumpukDaysWithDb,
+  type SetBarangMenumpukDaysResult,
+} from "@/lib/pos/thrift-statistik";
 import type { BarangActionResult } from "@/lib/barang/manage";
 
-export type { LookupBarangResult, SellBarangResult, BarangActionResult };
+export type { LookupBarangResult, SellBarangResult, BarangActionResult, SetBarangMenumpukDaysResult };
 
 /**
  * Pembungkus Server Action tipis, pola sama app/(pos)/pos/actions.ts --
@@ -54,6 +58,25 @@ export async function addBarangFromPos(
   const { db, closeDb, businessId } = await requirePermissionDb(supabase, "pos.create_order");
   try {
     return await addBarangFromShiftWithDb(db, businessId, shiftId, input);
+  } finally {
+    await closeDb();
+  }
+}
+
+/**
+ * Ubah ambang "barang menumpuk" dari Statistik Ita -- gerbang terluar
+ * sama seperti addBarangFromPos di atas (sesi device pos.create_order),
+ * izin sungguhannya (role manager/owner pemilik shift) diputuskan di
+ * setBarangMenumpukDaysWithDb, bukan di sini.
+ */
+export async function setBarangMenumpukThreshold(
+  shiftId: string,
+  days: unknown
+): Promise<SetBarangMenumpukDaysResult> {
+  const supabase = await createServerSupabaseClient();
+  const { db, closeDb, businessId } = await requirePermissionDb(supabase, "pos.create_order");
+  try {
+    return await setBarangMenumpukDaysWithDb(db, businessId, shiftId, days);
   } finally {
     await closeDb();
   }

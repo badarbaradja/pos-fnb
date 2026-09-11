@@ -1,0 +1,1 @@
+ALTER TABLE "outlets" ADD COLUMN "barang_menumpuk_days" integer DEFAULT 60 NOT NULL;

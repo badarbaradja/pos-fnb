@@ -1,6 +1,8 @@
 import { and, asc, desc, eq, gte, isNotNull, lte, sql } from "drizzle-orm";
 import type { UserDbHandle } from "@/lib/db/client";
-import { barang, orderItems, orders, pemilik } from "@/lib/db/schema";
+import { barang, employees, orderItems, orders, outlets, pemilik, shifts } from "@/lib/db/schema";
+import { assertRowsAffected } from "@/lib/db/errors";
+import { id as strings } from "@/lib/i18n/id";
 
 type Db = UserDbHandle["db"];
 
@@ -57,19 +59,22 @@ export type BarangMenumpukRow = {
 };
 
 /**
- * Barang siap_jual, PALING LAMA dulu -- §7 SPESIFIKASI-THRIFTING.md:
- * barang titipan yang tidak laku berbulan-bulan perlu dibicarakan
- * dengan pemiliknya. TIDAK ADA ambang "menumpuk" yang dihardcode di
- * sini -- kebijakannya SENDIRI masih pertanyaan terbuka CEO
- * (SPESIFIKASI-THRIFTING.md §6 poin 3: dikembalikan atau didiskon,
- * belum diputuskan) -- umur hari ditampilkan apa adanya, keputusan
- * "ini sudah kelamaan atau belum" diserahkan ke Ita/CEO yang melihat,
- * bukan ditebak sistem.
+ * Barang siap_jual yang umurnya >= ambang "menumpuk" outlet ini, PALING
+ * LAMA dulu -- §7 SPESIFIKASI-THRIFTING.md: barang titipan yang tidak
+ * laku berbulan-bulan perlu dibicarakan dengan pemiliknya.
+ *
+ * Ambangnya (thresholdDays) TIDAK dihardcode di sini -- diambil dari
+ * outlets.barang_menumpuk_days (default 60, lihat komentar schema.ts),
+ * diubah lewat setBarangMenumpukDaysWithDb di bawah. Keputusan CEO 11
+ * September 2026 menutup pertanyaan terbuka SPESIFIKASI-THRIFTING.md §6
+ * poin 3 -- sebelumnya SENGAJA tidak ada ambang sama sekali (lihat riwayat
+ * git), sekarang ambangnya ADA tapi bisa diubah Ita/CEO, bukan angka mati.
  */
 export async function getBarangMenumpuk(
   db: Db,
   businessId: string,
-  outletId: string
+  outletId: string,
+  thresholdDays: number
 ): Promise<BarangMenumpukRow[]> {
   const rows = await db
     .select({
@@ -94,16 +99,78 @@ export async function getBarangMenumpuk(
     .orderBy(asc(barang.masukPada));
 
   const now = Date.now();
-  return rows.map((r) => ({
-    id: r.id,
-    kode: r.kode,
-    nama: r.nama,
-    ukuran: r.ukuran,
-    warna: r.warna,
-    hargaJual: r.hargaJual,
-    umurHari: Math.floor((now - r.masukPada.getTime()) / 86_400_000),
-    pemilikNama: r.pemilikNama,
-  }));
+  return rows
+    .map((r) => ({
+      id: r.id,
+      kode: r.kode,
+      nama: r.nama,
+      ukuran: r.ukuran,
+      warna: r.warna,
+      hargaJual: r.hargaJual,
+      umurHari: Math.floor((now - r.masukPada.getTime()) / 86_400_000),
+      pemilikNama: r.pemilikNama,
+    }))
+    .filter((r) => r.umurHari >= thresholdDays);
+}
+
+/**
+ * Ambang "barang menumpuk" outlet ini, dari outlets.barang_menumpuk_days
+ * (default 60 lewat kolom itu sendiri, bukan diketik ulang di sini).
+ */
+export async function getBarangMenumpukDays(
+  db: Db,
+  businessId: string,
+  outletId: string
+): Promise<number> {
+  const [row] = await db
+    .select({ days: outlets.barangMenumpukDays })
+    .from(outlets)
+    .where(and(eq(outlets.id, outletId), eq(outlets.businessId, businessId)));
+  return row?.days ?? 60;
+}
+
+export type SetBarangMenumpukDaysResult = { error?: string; success?: { days: number } };
+
+/**
+ * Ubah ambang "menumpuk" langsung dari Statistik Ita -- gerbang SAMA
+ * persis dengan addBarangFromShiftWithDb (lib/pos/pos-add-barang.ts):
+ * role EMPLOYEE pemilik shift (manager/owner via PIN), BUKAN role
+ * membership sesi device, karena Ita tidak pernah login dashboard untuk
+ * sampai ke outlet-form-dialog.tsx (jawaban CEO 11 September 2026, "Ita
+ * atau CEO bisa mengubahnya").
+ */
+export async function setBarangMenumpukDaysWithDb(
+  db: Db,
+  businessId: string,
+  shiftId: string,
+  rawDays: unknown
+): Promise<SetBarangMenumpukDaysResult> {
+  const days = Number(rawDays);
+  if (!Number.isInteger(days) || days < 1) {
+    return { error: strings.statistikIta.menumpukThresholdInvalidError };
+  }
+
+  const [shift] = await db
+    .select({ status: shifts.status, outletId: shifts.outletId, employeeRole: employees.role })
+    .from(shifts)
+    .innerJoin(employees, eq(shifts.employeeId, employees.id))
+    .where(and(eq(shifts.id, shiftId), eq(shifts.businessId, businessId)));
+
+  if (!shift || shift.status !== "open") {
+    return { error: strings.common.unexpectedError };
+  }
+  if (shift.employeeRole !== "manager" && shift.employeeRole !== "owner") {
+    return { error: strings.pos.tambahBarangAksesDitolakError };
+  }
+
+  const updated = await db
+    .update(outlets)
+    .set({ barangMenumpukDays: days })
+    .where(and(eq(outlets.id, shift.outletId), eq(outlets.businessId, businessId)))
+    .returning({ id: outlets.id });
+  assertRowsAffected(updated, "outlet");
+
+  return { success: { days } };
 }
 
 // ─── Rekap bagi hasil per pemilik, bulan berjalan ──────────────────────

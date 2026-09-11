@@ -8,6 +8,7 @@ import { getSalesSummary, getSalesByProduct } from "@/lib/db/queries/sales-repor
 import {
   getStokStatusSummary,
   getBarangMenumpuk,
+  getBarangMenumpukDays,
   getBagiHasilBulanIni,
 } from "@/lib/pos/thrift-statistik";
 import { businesses } from "@/lib/db/schema";
@@ -64,6 +65,8 @@ export default async function ThriftStatistikPage() {
     const todayFilter = { businessId, outletId, startDate: today, endDate: today };
     const monthFilter = { businessId, outletId, startDate: startOfMonth, endDate: today };
 
+    const menumpukDays = await getBarangMenumpukDays(db, businessId, outletId);
+
     const [
       todaySummary,
       monthSummary,
@@ -76,18 +79,20 @@ export default async function ThriftStatistikPage() {
       getSalesSummary(db, monthFilter),
       getSalesByProduct(db, monthFilter),
       getStokStatusSummary(db, businessId, outletId),
-      getBarangMenumpuk(db, businessId, outletId),
+      getBarangMenumpuk(db, businessId, outletId, menumpukDays),
       getBagiHasilBulanIni(db, businessId, outletId, startOfMonth, today),
     ]);
 
     return (
       <StatistikView
         outletName={paired.outlet.name}
+        shiftId={shift.id}
         todaySummary={todaySummary}
         monthSummary={monthSummary}
         topItems={topItems.slice(0, 5)}
         stokStatus={stokStatus}
         barangMenumpuk={barangMenumpuk}
+        menumpukDays={menumpukDays}
         bagiHasil={bagiHasil}
       />
     );

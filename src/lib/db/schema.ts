@@ -190,6 +190,14 @@ export const outlets = pgTable(
       .notNull()
       .default("100000"), // Rp 100.000 per bahan per opname
     posMode: posModeEnum("pos_mode").notNull().default("fnb"),
+    // Ambang "barang menumpuk" (Statistik Ita, thrifting) -- default 60
+    // hari, TIDAK di-hardcode di query (lihat lib/pos/thrift-statistik.ts)
+    // karena perputaran barang titipan beda-beda per outlet, cuma ketahuan
+    // setelah berjalan beberapa bulan. Diubah dari Statistik Ita langsung
+    // (role manager/owner pemilik shift, gerbang sama "Tambah Barang") --
+    // Ita tidak pernah login dashboard, jadi tidak lewat outlet-form-dialog
+    // (jawaban CEO 11 September 2026).
+    barangMenumpukDays: integer("barang_menumpuk_days").notNull().default(60),
     isActive: boolean("is_active").notNull().default(true),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()

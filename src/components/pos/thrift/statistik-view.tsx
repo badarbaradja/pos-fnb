@@ -8,6 +8,7 @@ import type {
 } from "@/lib/pos/thrift-statistik";
 import { formatIDR } from "@/lib/utils/money";
 import { id as strings } from "@/lib/i18n/id";
+import { MenumpukThresholdForm } from "./menumpuk-threshold-form";
 
 /**
  * components/pos/thrift/statistik-view.tsx — "Halaman Statistik Ita" (11
@@ -16,19 +17,23 @@ import { id as strings } from "@/lib/i18n/id";
  */
 export function StatistikView({
   outletName,
+  shiftId,
   todaySummary,
   monthSummary,
   topItems,
   stokStatus,
   barangMenumpuk,
+  menumpukDays,
   bagiHasil,
 }: {
   outletName: string;
+  shiftId: string;
   todaySummary: SalesSummary;
   monthSummary: SalesSummary;
   topItems: SalesByProductRow[];
   stokStatus: StokStatusSummary;
   barangMenumpuk: BarangMenumpukRow[];
+  menumpukDays: number;
   bagiHasil: BagiHasilPemilikRow[];
 }) {
   return (
@@ -84,7 +89,10 @@ export function StatistikView({
       </div>
 
       <div className="flex flex-col gap-2">
-        <h2 className="text-sm font-semibold text-muted-foreground">{strings.statistikIta.menumpukTitle}</h2>
+        <h2 className="text-sm font-semibold text-muted-foreground">
+          {strings.statistikIta.menumpukTitle.replace("{hari}", String(menumpukDays))}
+        </h2>
+        <MenumpukThresholdForm shiftId={shiftId} currentDays={menumpukDays} />
         {barangMenumpuk.length === 0 ? (
           <p className="text-sm text-muted-foreground">{strings.statistikIta.menumpukEmpty}</p>
         ) : (
