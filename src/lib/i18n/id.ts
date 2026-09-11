@@ -994,6 +994,11 @@ export const id = {
 
     outletComparisonTitle: "Perbandingan Antar Outlet",
 
+    brandSummaryTitle: "Omzet per Jenis Usaha",
+    brandOutletCount: "{count} outlet",
+    brandBackToAll: "← Semua Jenis Usaha",
+    brandDetailTitle: "Rincian {brand} Hari Ini",
+
     profitTitle: "Laba Kotor & Laba Bersih",
     profitPlaceholder:
       "Menyusul — laba kotor butuh data HPP (Fase 2) dan laba bersih butuh biaya operasional (Fase 3).",

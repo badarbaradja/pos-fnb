@@ -1,22 +1,33 @@
 import { Suspense } from "react";
+import Link from "next/link";
 import { and, asc, eq } from "drizzle-orm";
 import { format, parseISO, subDays } from "date-fns";
 import { Decimal } from "decimal.js";
 import { createServerSupabaseClient } from "@/lib/auth/supabase";
 import { requirePermissionDb } from "@/lib/auth/permissions";
 import { businesses, outlets } from "@/lib/db/schema";
-import { getSalesSummary, type SalesReportFilter } from "@/lib/db/queries/sales-report";
+import {
+  getSalesByBrand,
+  getSalesSummary,
+  type SalesReportFilter,
+} from "@/lib/db/queries/sales-report";
 import { getOpenShiftsForBusiness } from "@/lib/pos/shift";
 import { percentChange } from "@/lib/calc/kpi";
 import { businessDate } from "@/lib/utils/business-date";
 import { TodayKpiCards } from "@/components/dashboard/home/kpi-cards";
+import { BrandSummaryCards } from "@/components/dashboard/home/brand-summary-cards";
 import { ShiftStatusList } from "@/components/dashboard/home/shift-status";
 import { ProfitPlaceholder } from "@/components/dashboard/home/profit-placeholder";
 import { DashboardDeferredSections } from "@/components/dashboard/home/deferred-sections";
 import { DashboardSkeleton } from "@/components/dashboard/home/dashboard-skeleton";
 import { id as strings } from "@/lib/i18n/id";
 
-export default async function DashboardHomePage() {
+export default async function DashboardHomePage({
+  searchParams,
+}: {
+  searchParams: Promise<{ brandId?: string }>;
+}) {
+  const params = await searchParams;
   const supabase = await createServerSupabaseClient();
   const { db, closeDb, businessId } = await requirePermissionDb(supabase, "report.sales");
 
@@ -32,8 +43,7 @@ export default async function DashboardHomePage() {
   let timezone: string;
   let outletRows: { id: string; name: string; dayCutoffTime: string }[];
   let today: string;
-  let summary: Awaited<ReturnType<typeof getSalesSummary>>;
-  let lastWeekSummary: Awaited<ReturnType<typeof getSalesSummary>>;
+  let byBrand: Awaited<ReturnType<typeof getSalesByBrand>>;
   let openShifts: Awaited<ReturnType<typeof getOpenShiftsForBusiness>>;
 
   try {
@@ -54,23 +64,8 @@ export default async function DashboardHomePage() {
       ? businessDate(new Date(), timezone, defaultOutlet.dayCutoffTime)
       : businessDate(new Date(), timezone, "04:00:00");
 
-    const lastWeekSameDay = format(subDays(parseISO(today), 7), "yyyy-MM-dd");
-    const todayFilter: SalesReportFilter = {
-      businessId,
-      outletId: null,
-      startDate: today,
-      endDate: today,
-    };
-    const lastWeekFilter: SalesReportFilter = {
-      businessId,
-      outletId: null,
-      startDate: lastWeekSameDay,
-      endDate: lastWeekSameDay,
-    };
-
-    [summary, lastWeekSummary, openShifts] = await Promise.all([
-      getSalesSummary(db, todayFilter),
-      getSalesSummary(db, lastWeekFilter),
+    [byBrand, openShifts] = await Promise.all([
+      getSalesByBrand(db, { businessId, startDate: today, endDate: today }),
       getOpenShiftsForBusiness(db, businessId),
     ]);
   } catch (err) {
@@ -78,21 +73,77 @@ export default async function DashboardHomePage() {
     throw err;
   }
 
+  // "Omzet Hari Ini" TIDAK BOLEH menggabung Indosteak/Indokopi/Barang
+  // Titipan jadi satu angka (instruksi CEO 11 September 2026) -- brandId
+  // di URL (link biasa dari BrandSummaryCards, bukan client state)
+  // menentukan brand mana yang "dibuka" untuk dirinci ke level outlet.
+  // Tanpa brandId dipilih, halaman berhenti di tiga kartu brand -- TIDAK
+  // ADA lagi angka gabungan semua brand yang ditampilkan sama sekali.
+  const selectedBrandId = params.brandId || null;
+  const selectedBrand = selectedBrandId ? (byBrand.find((b) => b.brandId === selectedBrandId) ?? null) : null;
+  const scopedOutletIds = selectedBrand ? selectedBrand.outletIds : null;
+  const scopedOutletRows = selectedBrand
+    ? outletRows.filter((o) => selectedBrand.outletIds.includes(o.id))
+    : outletRows;
+
   const sevenDaysAgo = format(subDays(parseISO(today), 6), "yyyy-MM-dd");
+  const lastWeekSameDay = format(subDays(parseISO(today), 7), "yyyy-MM-dd");
   const todayFilter: SalesReportFilter = {
     businessId,
-    outletId: null,
+    outletId: scopedOutletIds,
     startDate: today,
     endDate: today,
   };
+  const lastWeekFilter: SalesReportFilter = {
+    businessId,
+    outletId: scopedOutletIds,
+    startDate: lastWeekSameDay,
+    endDate: lastWeekSameDay,
+  };
   const trendFilter: SalesReportFilter = {
     businessId,
-    outletId: null,
+    outletId: scopedOutletIds,
     startDate: sevenDaysAgo,
     endDate: today,
   };
 
-  const change = percentChange(new Decimal(summary.netSales), new Decimal(lastWeekSummary.netSales));
+  // Ringkasan KPI+tren SATU BRAND cuma dihitung kalau brand itu dipilih
+  // -- sebelum itu, halaman berhenti di tiga kartu brand, tidak ada
+  // angka gabungan apa pun yang perlu dihitung.
+  let brandSummarySection: React.ReactNode = null;
+  if (selectedBrand) {
+    let summary: Awaited<ReturnType<typeof getSalesSummary>>;
+    let lastWeekSummary: Awaited<ReturnType<typeof getSalesSummary>>;
+    try {
+      [summary, lastWeekSummary] = await Promise.all([
+        getSalesSummary(db, todayFilter),
+        getSalesSummary(db, lastWeekFilter),
+      ]);
+    } catch (err) {
+      await closeDb();
+      throw err;
+    }
+    const change = percentChange(new Decimal(summary.netSales), new Decimal(lastWeekSummary.netSales));
+    brandSummarySection = (
+      <div className="flex flex-col gap-3">
+        <div className="flex items-center justify-between">
+          <h2 className="text-sm font-semibold">
+            {strings.dashboardHome.brandDetailTitle.replace("{brand}", selectedBrand.brandName)}
+          </h2>
+          <Link href="/" className="text-sm text-muted-foreground hover:underline">
+            {strings.dashboardHome.brandBackToAll}
+          </Link>
+        </div>
+        <TodayKpiCards today={summary} percentChange={change} />
+      </div>
+    );
+  } else {
+    // Tidak ada brand dipilih -- tidak ada query lambat lagi untuk
+    // dijalankan (DashboardDeferredSections tidak dirender di cabang
+    // ini), jadi koneksi db ditutup di sini, bukan dipindah tanggung
+    // jawabnya seperti cabang "brand dipilih" di bawah.
+    await closeDb();
+  }
 
   return (
     <div className="flex flex-col gap-6">
@@ -101,7 +152,9 @@ export default async function DashboardHomePage() {
         <p className="text-sm text-muted-foreground">{strings.dashboardHome.subtitle}</p>
       </div>
 
-      <TodayKpiCards today={summary} percentChange={change} />
+      <BrandSummaryCards rows={byBrand} selectedBrandId={selectedBrandId} />
+
+      {brandSummarySection}
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
         <ShiftStatusList
@@ -112,15 +165,17 @@ export default async function DashboardHomePage() {
         <ProfitPlaceholder />
       </div>
 
-      <Suspense fallback={<DashboardSkeleton />}>
-        <DashboardDeferredSections
-          db={db}
-          closeDb={closeDb}
-          todayFilter={todayFilter}
-          trendFilter={trendFilter}
-          showOutletComparison={outletRows.length > 1}
-        />
-      </Suspense>
+      {selectedBrand ? (
+        <Suspense fallback={<DashboardSkeleton />}>
+          <DashboardDeferredSections
+            db={db}
+            closeDb={closeDb}
+            todayFilter={todayFilter}
+            trendFilter={trendFilter}
+            showOutletComparison={scopedOutletRows.length > 1}
+          />
+        </Suspense>
+      ) : null}
     </div>
   );
 }

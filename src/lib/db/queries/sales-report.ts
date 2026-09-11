@@ -2,6 +2,7 @@ import { and, desc, eq, gte, ilike, inArray, lte, sql } from "drizzle-orm";
 import { Decimal } from "decimal.js";
 import type { UserDbHandle } from "@/lib/db/client";
 import {
+  brands,
   businesses,
   employees,
   orderItems,
@@ -43,10 +44,25 @@ type Db = UserDbHandle["db"];
 
 export type SalesReportFilter = {
   businessId: string;
-  outletId: string | null; // null = semua outlet bisnis ini
+  // string = satu outlet, string[] = beberapa outlet sekaligus (dipakai
+  // saat menyaring per BRAND -- Indosteak/Indokopi masing-masing dua
+  // outlet, lihat getSalesByBrand & dashboard §a 11 September 2026),
+  // null = semua outlet bisnis ini.
+  outletId: string | string[] | null;
   startDate: string; // business_date, 'yyyy-MM-dd'
   endDate: string;
 };
+
+function outletFilterClause(outletId: SalesReportFilter["outletId"]) {
+  if (Array.isArray(outletId)) {
+    // Array kosong (brand tanpa outlet aktif) HARUS tidak mengembalikan
+    // apa pun -- inArray([]) di Drizzle menghasilkan SQL yang salah
+    // (selalu true), jadi ditangani eksplisit di sini, bukan diserahkan
+    // ke inArray() apa adanya.
+    return outletId.length > 0 ? inArray(orders.outletId, outletId) : sql`false`;
+  }
+  return outletId ? eq(orders.outletId, outletId) : undefined;
+}
 
 function buildOrderFilter(f: SalesReportFilter) {
   return and(
@@ -54,7 +70,7 @@ function buildOrderFilter(f: SalesReportFilter) {
     eq(orders.status, "paid"),
     gte(orders.businessDate, f.startDate),
     lte(orders.businessDate, f.endDate),
-    f.outletId ? eq(orders.outletId, f.outletId) : undefined
+    outletFilterClause(f.outletId)
   );
 }
 
@@ -346,7 +362,7 @@ export async function getTransactionHistory(
     inArray(orders.status, ["paid", "void"]),
     gte(orders.businessDate, filter.startDate),
     lte(orders.businessDate, filter.endDate),
-    filter.outletId ? eq(orders.outletId, filter.outletId) : undefined,
+    outletFilterClause(filter.outletId),
     options.search ? ilike(orders.number, `%${options.search}%`) : undefined
   );
 
@@ -452,4 +468,78 @@ export async function getSalesByOutlet(
     .orderBy(desc(sql`sum(${orders.netSales})`));
 
   return rows.map((r) => ({ ...r, orderCount: Number(r.orderCount) }));
+}
+
+// ---------------------------------------------------------------------
+// 11. Per brand/jenis usaha (dashboard §a, 11 September 2026) -- instruksi
+//    CEO: "Omzet Hari Ini" tidak boleh menggabung Indosteak/Indokopi/Barang
+//    Titipan jadi satu angka. Indosteak & Indokopi masing-masing punya DUA
+//    outlet -- menjumlah ke level brand dulu, baru diperinci ke outlet,
+//    adalah arah yang alami (disetujui CEO), makanya fungsi ini yang
+//    dipakai layar depan, bukan getSalesByOutlet.
+// ---------------------------------------------------------------------
+
+export type SalesByBrandRow = {
+  brandId: string;
+  brandName: string;
+  outletIds: string[]; // dipakai membangun filter drill-down ke getSalesSummary/getSalesByOutlet
+  orderCount: number;
+  netSales: string;
+};
+
+/**
+ * SATU BARIS PER BRAND, LEFT JOIN berantai brands -> outlets -> orders
+ * (bukan dari `orders` seperti breakdown lain di file ini) -- brand
+ * tanpa transaksi sama sekali di rentang ini TETAP muncul dengan Rp0,
+ * bukan hilang dari daftar. Pelajaran yang sama baru saja ditegakkan di
+ * Tinjau Kebersihan reportkoperumnasgroup: "yang tidak ada datanya
+ * justru yang paling perlu kelihatan" -- brand yang omzetnya nol hari
+ * ini justru yang paling perlu diperhatikan pemilik, bukan didiamkan
+ * tak terlihat. Rantai LEFT JOIN ini TIDAK menggandakan baris order --
+ * satu order cuma pernah py satu outlet, satu outlet cuma py satu
+ * brand, jadi agregasi SQL biasa (bukan reduce di JS) tetap benar,
+ * sesuai aturan file ini di komentar atas.
+ */
+export async function getSalesByBrand(
+  db: Db,
+  filter: Pick<SalesReportFilter, "businessId" | "startDate" | "endDate">
+): Promise<SalesByBrandRow[]> {
+  const rows = await db
+    .select({
+      brandId: brands.id,
+      brandName: brands.name,
+      outletIds: sql<
+        (string | null)[]
+      >`array_agg(distinct ${outlets.id}) filter (where ${outlets.id} is not null)`,
+      orderCount: sql<string>`count(${orders.id})`,
+      netSales: sql<string>`coalesce(sum(${orders.netSales}), '0')`,
+    })
+    .from(brands)
+    .leftJoin(outlets, and(eq(outlets.brandId, brands.id), eq(outlets.isActive, true)))
+    .leftJoin(
+      orders,
+      and(
+        eq(orders.outletId, outlets.id),
+        eq(orders.status, "paid"),
+        gte(orders.businessDate, filter.startDate),
+        lte(orders.businessDate, filter.endDate)
+      )
+    )
+    .where(eq(brands.businessId, filter.businessId))
+    .groupBy(brands.id, brands.name)
+    .orderBy(desc(sql`coalesce(sum(${orders.netSales}), 0)`));
+
+  return rows
+    .map((r) => ({
+      brandId: r.brandId,
+      brandName: r.brandName,
+      outletIds: (r.outletIds ?? []).filter((id): id is string => id !== null),
+      orderCount: Number(r.orderCount),
+      netSales: r.netSales,
+    }))
+    // Brand TANPA satu pun outlet AKTIF (mis. brand demo lama yang
+    // seluruh outletnya sudah dinonaktifkan) bukan "jenis usaha" yang
+    // relevan ditampilkan -- beda dengan brand yang punya outlet tapi
+    // omzetnya nol hari ini (itu TETAP muncul, lihat komentar fungsi ini).
+    .filter((r) => r.outletIds.length > 0);
 }
