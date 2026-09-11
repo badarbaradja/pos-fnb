@@ -129,13 +129,21 @@ export function ThriftPosScreen({
             {strings.shift.activeShiftLabel}: {shift.employeeName}
           </span>
           {canAddBarang ? (
-            <ThriftAddBarangDialog
-              outletId={outlet.id}
-              shiftId={shift.id}
-              categories={categories}
-              pemilikList={pemilikList}
-              onAdded={handleBarangAdded}
-            />
+            <>
+              <ThriftAddBarangDialog
+                outletId={outlet.id}
+                shiftId={shift.id}
+                categories={categories}
+                pemilikList={pemilikList}
+                onAdded={handleBarangAdded}
+              />
+              <Button
+                variant="outline"
+                size="sm"
+                nativeButton={false}
+                render={<Link href="/pos/thrift/statistik">{strings.statistikIta.buttonLabel}</Link>}
+              />
+            </>
           ) : null}
           <Button
             variant="outline"
