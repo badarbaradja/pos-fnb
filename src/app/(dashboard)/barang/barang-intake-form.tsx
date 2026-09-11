@@ -2,7 +2,7 @@
 
 import { useActionState, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
-import { saveBarang, barangFormInitialState } from "./actions";
+import { saveBarang, type BarangFormState } from "./actions";
 import {
   BarangImageField,
   type BarangImageFieldHandle,
@@ -20,6 +20,15 @@ type PemilikOption = { id: string; nama: string };
 
 const UKURAN_PRESETS = ["XS", "S", "M", "L", "XL", "XXL"];
 const KONDISI_PRESETS = ["Sangat baik", "Baik", "Cukup"];
+
+// Nilai awal useActionState WAJIB didefinisikan di sini (klien), BUKAN
+// diekspor dari actions.ts -- file "use server" cuma boleh mengekspor
+// fungsi async, mengekspor objek biasa (walau lewat re-export) membuat
+// SEMUA Server Action di file itu gagal dimuat saat form disubmit
+// ("A 'use server' file can only export async functions, found object").
+// Ini bug sungguhan yang ditemukan CEO 11 September 2026 -- pola yang
+// benar sudah ada di pemilik-form-dialog.tsx, diikuti di sini.
+const initialState: BarangFormState = {};
 
 /**
  * Ukuran/kondisi/harga -- REMOUNT lewat `key={barangId terakhir tersimpan}`
@@ -178,7 +187,7 @@ export function BarangIntakeForm({
   categories: CategoryOption[];
   pemilikList: PemilikOption[];
 }) {
-  const [state, formAction, isPending] = useActionState(saveBarang, barangFormInitialState);
+  const [state, formAction, isPending] = useActionState(saveBarang, initialState);
   const formRef = useRef<HTMLFormElement>(null);
   const imageFieldRef = useRef<BarangImageFieldHandle>(null);
   const namaInputRef = useRef<HTMLInputElement>(null);

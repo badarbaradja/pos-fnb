@@ -82,10 +82,6 @@ export const BarangImageField = forwardRef<BarangImageFieldHandle, { barangName:
             return;
           }
           streamRef.current = stream;
-          if (videoRef.current) {
-            videoRef.current.srcObject = stream;
-            videoRef.current.play().catch(() => {});
-          }
           setCameraState("live");
         })
         .catch(() => {
@@ -97,6 +93,20 @@ export const BarangImageField = forwardRef<BarangImageFieldHandle, { barangName:
         streamRef.current = null;
       };
     }, []);
+
+    // Menyambungkan srcObject HARUS terjadi di efek TERPISAH yang bereaksi
+    // ke `cameraState`, bukan langsung di dalam .then() getUserMedia di
+    // atas -- saat .then() itu berjalan, elemen <video> BELUM ada di DOM
+    // (cabang render masih "starting", videoRef.current masih null), jadi
+    // srcObject yang diset di sana akan hilang percuma begitu React baru
+    // memasang <video> setelah setCameraState("live"). Efek ini berjalan
+    // SETELAH React mengomit cabang render "live" (video sudah terpasang).
+    useEffect(() => {
+      if (cameraState === "live" && videoRef.current && streamRef.current) {
+        videoRef.current.srcObject = streamRef.current;
+        videoRef.current.play().catch(() => {});
+      }
+    }, [cameraState]);
 
     useImperativeHandle(ref, () => ({
       reset() {

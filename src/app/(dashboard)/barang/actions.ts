@@ -18,9 +18,6 @@ export type BarangFormState = {
   success?: { barangId: string; kode: string };
 };
 
-const initialState: BarangFormState = {};
-export { initialState as barangFormInitialState };
-
 /**
  * Pembungkus Server Action -- logika inti di lib/barang/manage.ts, gambar
  * ditangani di sini (pola SAMA app/(dashboard)/products/actions.ts#saveProduct,
