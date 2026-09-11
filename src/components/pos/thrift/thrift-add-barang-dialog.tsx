@@ -105,27 +105,42 @@ export function ThriftAddBarangDialog({
 
   function handleSubmit(formData: FormData) {
     startTransition(async () => {
-      const result = await addBarangFromPos(shiftId, {
-        outletId,
-        categoryId: categoryId || undefined,
-        nama: formData.get("nama"),
-        merek: formData.get("merek") || undefined,
-        ukuran: ukuran || undefined,
-        warna: formData.get("warna") || undefined,
-        kondisi: kondisi || undefined,
-        hargaModal: hargaModal || 0,
-        hargaJual: hargaJual,
-        pemilikId: pemilikId || undefined,
-      });
-      if (result.error || !result.success) {
-        toast.error(result.error ?? strings.common.unexpectedError);
-        return;
+      // Dibungkus try/catch (11 September 2026, instruksi CEO) -- CEO
+      // sempat melihat "Terjadi kesalahan, coba lagi" dari dialog ini
+      // tanpa pesan sungguhan yang bisa ditelusuri. Kalau addBarangFromPos
+      // MELEMPAR exception (bukan mengembalikan {error}) -- mis. sesi
+      // Supabase device kedaluwarsa di tengah pemakaian, atau galat
+      // jaringan -- sebelumnya exception itu lolos begitu saja dari
+      // startTransition tanpa toast APA PUN (silent failure). Sekarang
+      // pesan exception sungguhan yang ditampilkan, bukan cuma fallback
+      // generik, supaya lain kali penyebabnya langsung kelihatan di toast
+      // tanpa perlu buka console browser.
+      try {
+        const result = await addBarangFromPos(shiftId, {
+          outletId,
+          categoryId: categoryId || undefined,
+          nama: formData.get("nama"),
+          merek: formData.get("merek") || undefined,
+          ukuran: ukuran || undefined,
+          warna: formData.get("warna") || undefined,
+          kondisi: kondisi || undefined,
+          hargaModal: hargaModal || 0,
+          hargaJual: hargaJual,
+          pemilikId: pemilikId || undefined,
+        });
+        if (result.error || !result.success) {
+          toast.error(result.error ?? strings.common.unexpectedError);
+          return;
+        }
+        toast.success(strings.barang.intakeSavedToast.replace("{kode}", result.success.kode));
+        setOpen(false);
+        resetFields();
+        imageFieldRef.current?.reset();
+        onAdded(result.success.kode);
+      } catch (err) {
+        console.error("addBarangFromPos gagal:", err);
+        toast.error(err instanceof Error ? err.message : strings.common.unexpectedError);
       }
-      toast.success(strings.barang.intakeSavedToast.replace("{kode}", result.success.kode));
-      setOpen(false);
-      resetFields();
-      imageFieldRef.current?.reset();
-      onAdded(result.success.kode);
     });
   }
 
