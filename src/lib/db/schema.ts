@@ -272,6 +272,12 @@ export const employees = pgTable(
     employmentType: text("employment_type").notNull().default("fulltime"), // fulltime|parttime|daily|freelance
     joinDate: date("join_date"),
     resignDate: date("resign_date"),
+    // Akun tamu bersama (TT09b, 10 September 2026) -- SATU baris employee
+    // dengan kredensial PIN yang dibagi ke siapa pun bertugas jam sepi
+    // (part-time, dst). `openShiftWithDb()` MEWAJIBKAN `shifts.servedByName`
+    // diisi kalau baris ini true -- lihat komentar di `shifts` di bawah.
+    // Default false -- karyawan bernama biasa TIDAK terpengaruh sama sekali.
+    isSharedAccount: boolean("is_shared_account").notNull().default(false),
     isActive: boolean("is_active").notNull().default(true),
   },
   (t) => [
@@ -382,6 +388,13 @@ export const productTypeEnum = pgEnum("product_type", [
   "open_price",
 ]);
 
+// TT01, 10 September 2026 -- reuse `categories` untuk thrifting (Pakaian,
+// Sepatu, dst) butuh pembeda supaya tidak tercampur dengan kategori F&B
+// (Kopi, Makanan) di mana pun daftar ini ditampilkan/difilter. `default
+// "fnb"` membuat penambahan kolom ini aman untuk baris yang sudah ada --
+// tidak perlu backfill manual.
+export const categoryScopeEnum = pgEnum("category_scope", ["fnb", "thrifting"]);
+
 export const categories = pgTable(
   "categories",
   {
@@ -393,6 +406,7 @@ export const categories = pgTable(
     color: text("color"),
     sortOrder: integer("sort_order").notNull().default(0),
     parentId: uuid("parent_id").references((): AnyPgColumn => categories.id),
+    scope: categoryScopeEnum("scope").notNull().default("fnb"),
     // Master data tidak pernah dihapus, cuma dinonaktifkan (CLAUDE.md §3.2)
     // -- kategori nonaktif tidak muncul sebagai chip filter di layar kasir.
     isActive: boolean("is_active").notNull().default(true),
@@ -989,6 +1003,13 @@ export const shifts = pgTable(
     countedCash: numeric("counted_cash", { precision: 16, scale: 2 }),
     expectedCash: numeric("expected_cash", { precision: 16, scale: 2 }),
     cashVariance: numeric("cash_variance", { precision: 16, scale: 2 }),
+    // Akun tamu bersama (TT09b) -- WAJIB diisi di openShiftWithDb() kalau
+    // employees.isSharedAccount milik shift ini true, NULL selamanya untuk
+    // shift yang dibuka karyawan bernama biasa. Tempat yang menampilkan
+    // "siapa bertugas" (dashboard, getSalesByCashier, struk) mengutamakan
+    // nilai ini dibanding employees.fullName kalau terisi -- supaya laporan
+    // malam menyebut nama sungguhan pelayan, bukan literal nama akun tamu.
+    servedByName: text("served_by_name"),
     note: text("note"),
   },
   (t) => [
@@ -1185,6 +1206,18 @@ export const orderItems = pgTable(
       .references(() => orders.id, { onDelete: "cascade" }),
     productId: uuid("product_id").references(() => products.id),
     variantId: uuid("variant_id").references(() => productVariants.id),
+    // Thrifting (TT02, 10 September 2026) -- NULL untuk semua baris F&B,
+    // tidak mengubah perilaku channel yang sudah ada sama sekali. Barang
+    // dijamin siap_jual->terjual atomik oleh trigger claim_barang_for_sale
+    // (lihat migration). pemilikBagiPercentAtSale/pemilikShareAmount/
+    // tokoShareAmount SNAPSHOT saat transaksi (sama prinsip productName di
+    // bawah) -- kalau pemilik.persenBagi diubah bulan depan, transaksi bulan
+    // ini tidak ikut berubah.
+    barangId: uuid("barang_id").references(() => barang.id),
+    pemilikId: uuid("pemilik_id").references(() => pemilik.id),
+    pemilikBagiPercentAtSale: numeric("pemilik_bagi_percent_at_sale", { precision: 5, scale: 2 }),
+    pemilikShareAmount: numeric("pemilik_share_amount", { precision: 16, scale: 2 }),
+    tokoShareAmount: numeric("toko_share_amount", { precision: 16, scale: 2 }),
     // SNAPSHOT -- jangan join ke products untuk laporan historis
     // (CLAUDE.md §3.2). Nilai-nilai ini tidak boleh berubah walau produk
     // aslinya diedit/nonaktif setelah transaksi ini terjadi.
@@ -2010,6 +2043,151 @@ export const stockTransferItems = pgTable(
       withCheck: sql`${t.businessId} = any(auth_business_ids())`,
     }),
     pgPolicy("stock_transfer_items_update", {
+      for: "update",
+      using: sql`${t.businessId} = any(auth_business_ids())`,
+      withCheck: sql`${t.businessId} = any(auth_business_ids())`,
+    }),
+  ]
+).enableRLS();
+
+// ─────────────────────────────────────────────────────────────────────────
+// Thrifting (TT01/TT02, 10 September 2026) — docs/RENCANA-PEMBANGUNAN-
+// KASIR-THRIFTING.md di repo reportkoperumnasgroup (sumber spesifikasi,
+// disetujui pemilik sebelum ditulis di sini). Tidak menyentuh perilaku F&B
+// yang sudah ada — cuma tabel baru + kolom nullable/berdefault aman.
+// ─────────────────────────────────────────────────────────────────────────
+
+export const pemilik = pgTable(
+  "pemilik",
+  {
+    id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+    businessId: uuid("business_id")
+      .notNull()
+      .references(() => businesses.id, { onDelete: "cascade" }),
+    // NULLABLE, TIDAK unik -- pemilik proyek eksplisit "jangan terpaku kode
+    // 2-huruf gaya SS", `nama` yang jadi identitas utama, `kode` cuma label
+    // singkat opsional kalau admin mau.
+    kode: text("kode"),
+    nama: text("nama").notNull(),
+    kontak: text("kontak"),
+    persenBagi: numeric("persen_bagi", { precision: 5, scale: 2 })
+      .notNull()
+      .default("60"),
+    isActive: boolean("is_active").notNull().default(true), // master data, tidak pernah dihapus (CLAUDE.md §3.2)
+    catatan: text("catatan"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    pgPolicy("pemilik_select", {
+      for: "select",
+      using: sql`${t.businessId} = any(auth_business_ids())`,
+    }),
+    pgPolicy("pemilik_insert", {
+      for: "insert",
+      withCheck: sql`${t.businessId} = any(auth_business_ids())`,
+    }),
+    pgPolicy("pemilik_update", {
+      for: "update",
+      using: sql`${t.businessId} = any(auth_business_ids())`,
+      withCheck: sql`${t.businessId} = any(auth_business_ids())`,
+    }),
+  ]
+).enableRLS();
+
+export const barangStatusEnum = pgEnum("barang_status", [
+  "baru_masuk",
+  "siap_jual",
+  "terjual",
+  "rusak",
+]);
+
+export const barang = pgTable(
+  "barang",
+  {
+    id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+    businessId: uuid("business_id")
+      .notNull()
+      .references(() => businesses.id, { onDelete: "cascade" }),
+    outletId: uuid("outlet_id")
+      .notNull()
+      .references(() => outlets.id),
+    kode: text("kode").notNull(), // dicetak jadi label barcode, satu per potong fisik
+    categoryId: uuid("category_id").references(() => categories.id),
+    nama: text("nama").notNull(),
+    merek: text("merek"),
+    ukuran: text("ukuran"),
+    warna: text("warna"),
+    kondisi: text("kondisi"), // teks bebas ("Sangat baik"/"Baik"/"Cukup") -- BUKAN enum terstruktur (spesifikasi eksplisit)
+    hargaModal: numeric("harga_modal", { precision: 16, scale: 2 })
+      .notNull()
+      .default("0"),
+    hargaJual: numeric("harga_jual", { precision: 16, scale: 2 }).notNull(),
+    status: barangStatusEnum("status").notNull().default("baru_masuk"),
+    pemilikId: uuid("pemilik_id").references(() => pemilik.id), // null = milik toko sendiri
+    imagePath: text("image_path"), // pola sama products.imagePath (T09c) -- bucket privat, signed URL saat dibaca
+    masukPada: timestamp("masuk_pada", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    terjualPada: timestamp("terjual_pada", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    unique().on(t.businessId, t.kode),
+    pgPolicy("barang_select", {
+      for: "select",
+      using: sql`${t.businessId} = any(auth_business_ids())`,
+    }),
+    pgPolicy("barang_insert", {
+      for: "insert",
+      withCheck: sql`${t.businessId} = any(auth_business_ids())`,
+    }),
+    pgPolicy("barang_update", {
+      for: "update",
+      using: sql`${t.businessId} = any(auth_business_ids())`,
+      withCheck: sql`${t.businessId} = any(auth_business_ids())`,
+    }),
+  ]
+).enableRLS();
+
+/**
+ * Ukuran & isi label barcode -- pemilik proyek eksplisit "jangan dikunci
+ * ke kode", satu baris pengaturan AKTIF per bisnis, diubah kapan saja dari
+ * Admin (TT05). Preset umum (33x15, 50x25, 50x30, 50x80mm) cuma mengisi
+ * widthMm/heightMm di UI, bukan nilai terkunci di sini.
+ */
+export const labelSettings = pgTable(
+  "label_settings",
+  {
+    id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+    businessId: uuid("business_id")
+      .notNull()
+      .references(() => businesses.id, { onDelete: "cascade" })
+      .unique(),
+    widthMm: numeric("width_mm", { precision: 5, scale: 1 }).notNull().default("50"),
+    heightMm: numeric("height_mm", { precision: 5, scale: 1 }).notNull().default("80"),
+    showBarcode: boolean("show_barcode").notNull().default(true),
+    showName: boolean("show_name").notNull().default(true),
+    showPrice: boolean("show_price").notNull().default(true),
+    showPemilikKode: boolean("show_pemilik_kode").notNull().default(false),
+    showUkuran: boolean("show_ukuran").notNull().default(true),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    pgPolicy("label_settings_select", {
+      for: "select",
+      using: sql`${t.businessId} = any(auth_business_ids())`,
+    }),
+    pgPolicy("label_settings_insert", {
+      for: "insert",
+      withCheck: sql`${t.businessId} = any(auth_business_ids())`,
+    }),
+    pgPolicy("label_settings_update", {
       for: "update",
       using: sql`${t.businessId} = any(auth_business_ids())`,
       withCheck: sql`${t.businessId} = any(auth_business_ids())`,

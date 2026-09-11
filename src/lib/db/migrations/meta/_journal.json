@@ -176,6 +176,13 @@
       "when": 1787147655579,
       "tag": "0024_sleepy_quentin_quire",
       "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "7",
+      "when": 1789033888465,
+      "tag": "0025_thick_magma",
+      "breakpoints": true
     }
   ]
 }

@@ -46,7 +46,9 @@ export type PermissionKey =
   | "report.sales"
   | "report.profit_loss"
   | "settings.business"
-  | "settings.tax";
+  | "settings.tax"
+  | "barang.manage"
+  | "pemilik.manage";
 
 type PermissionState = "on" | "off" | "na";
 
@@ -118,6 +120,19 @@ export const PERMISSIONS: Record<PermissionKey, RoleStates> = {
   "report.profit_loss": row("on", "off", "na", "na", "na", "na", "on"),
   "settings.business": row("on", "na", "na", "na", "na", "na", "na"),
   "settings.tax": row("on", "na", "na", "na", "na", "na", "on"),
+  // Thrifting (TT01, 10 September 2026) -- BELUM ada di BLUEPRINT §7 (dibuat
+  // sebelum thrifting ada). Ita didaftarkan role=manager (dikonfirmasi
+  // pemilik proyek -- mengurus barang masuk, harga, pemilik titipan, dan
+  // laporan bagi hasil, pekerjaan manajerial, bukan kasir dengan
+  // kelonggaran). `na` untuk cashier -- SENGAJA, bukan `off` -- supaya TIDAK
+  // ADA jalan bagi kredensial kasir mana pun, termasuk akun tamu bersama
+  // (TT09b), mendapat izin ini lewat permissions_override apa pun. Pola
+  // sama persis "product.manage".
+  "barang.manage": row("on", "on", "na", "na", "na", "na", "na"),
+  // Pola sama "employee.manage" -- menambah/mengubah mitra titipan (dan
+  // persentase bagi hasilnya) lebih dekat ke keputusan bisnis daripada
+  // pekerjaan operasional harian.
+  "pemilik.manage": row("on", "off", "na", "na", "na", "na", "na"),
 };
 
 /**
