@@ -76,6 +76,19 @@ async function main() {
   }
   console.log(`[uji 2] Buka shift TAMU dengan nama "Rani": BERHASIL -- tampil sebagai "${openResult.success.employeeName}"`);
 
+  // Pelajaran 11 September 2026 (CEO): shift yang dibuka skrip ini WAJIB
+  // ditutup lewat finally, BUKAN pernyataan biasa di akhir fungsi -- kalau
+  // salah satu langkah di bawah melempar error, shift Rani akan tertinggal
+  // terbuka permanen di THRIFT2 (sama kelas masalah yang ditemukan CEO di
+  // demo-thrift-checkpoint.ts, pola sama insiden password Qasim-Ryan).
+  try {
+    await runGuestAccountChecks();
+  } finally {
+    await closeCashlessShiftWithDb(db, businessId, { shiftId: openResult.success.shiftId });
+    console.log("\n[selesai] Shift uji Rani ditutup.");
+  }
+
+  async function runGuestAccountChecks() {
   // Bukti dashboard "siapa bertugas" (getOpenShiftsForBusiness) menyebut Rani
   const openShifts = await getOpenShiftsForBusiness(db, businessId);
   const raniRow = openShifts.find((s) => s.employeeName === "Rani");
@@ -134,10 +147,7 @@ async function main() {
 
   // --- 4. Karyawan bernama biasa (Ita) tetap tidak terpengaruh ---
   console.log(`\n[uji 4] Karyawan biasa (Ita) tidak diwajibkan servedByName -- sudah dibuktikan lewat demo-thrift-checkpoint.ts (shift Ita dibuka dengan servedByName kosong, tidak ditolak).`);
-
-  // Bersihkan shift uji supaya tidak menyisakan shift terbuka permanen
-  await closeCashlessShiftWithDb(db, businessId, { shiftId: openResult.success.shiftId });
-  console.log("\n[selesai] Shift uji Rani ditutup.");
+  }
 }
 
 main()

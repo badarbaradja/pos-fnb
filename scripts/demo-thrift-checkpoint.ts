@@ -18,7 +18,12 @@ import {
 import { generateId } from "../src/lib/utils/id";
 import { generateBarangKode } from "../src/lib/barang/kode";
 import { hashPin } from "../src/lib/auth/pin";
-import { openShiftWithDb, getOpenShiftForDevice, isShiftSellable } from "../src/lib/pos/shift";
+import {
+  openShiftWithDb,
+  getOpenShiftForDevice,
+  isShiftSellable,
+  closeCashlessShiftWithDb,
+} from "../src/lib/pos/shift";
 import { findSellableBarangByKode } from "../src/lib/barang/lookup";
 import { sellBarangWithDb } from "../src/lib/pos/sell-barang";
 import { getOrderForReceiptById } from "../src/app/(pos)/pos/receipt/get-order-for-receipt";
@@ -267,7 +272,15 @@ async function main() {
   console.log(`[barang] dibuat & langsung siap_jual: ${kode} -- Rp${HARGA_JUAL} (modal Rp${HARGA_MODAL}, pemilik 60%)`);
 
   // --- Buka shift Ita di device ini kalau belum ada shift terbuka ---
+  // Pelajaran 11 September 2026 (CEO): skrip yang MEMBUKA shift WAJIB
+  // menutupnya lagi di finally -- shift yang tertinggal terbuka dari
+  // run sebelumnya membuat /pos/thrift bisa diakses tanpa PIN sama
+  // sekali (bukan celah kode, tapi keadaan tidak dipulihkan, pola sama
+  // insiden password Qasim-Ryan). `openedByThisRun` cuma true kalau
+  // SKRIP INI yang membuka shiftnya -- shift yang sudah terbuka dari
+  // luar (mis. CEO sedang mencoba manual) TIDAK PERNAH ditutup paksa.
   let shift = await getOpenShiftForDevice(db, businessId, device!.id);
+  let openedByThisRun = false;
   if (!shift) {
     const openResult = await openShiftWithDb(db, businessId, {
       id: generateId(),
@@ -283,13 +296,25 @@ async function main() {
     }
     console.log(`[shift] dibuka untuk ${openResult.success!.employeeName}`);
     shift = await getOpenShiftForDevice(db, businessId, device!.id);
+    openedByThisRun = true;
   } else {
-    console.log(`[shift] sudah terbuka untuk ${shift.employeeName}`);
+    console.log(`[shift] sudah terbuka untuk ${shift.employeeName} -- dibiarkan terbuka (bukan milik skrip ini)`);
   }
   if (!shift || !isShiftSellable(shift)) {
     throw new Error("Shift tidak dalam kondisi bisa jualan (sedang proses tutup?).");
   }
+  const shiftId = shift.id;
 
+  try {
+    await runCheckpointSale();
+  } finally {
+    if (openedByThisRun) {
+      await closeCashlessShiftWithDb(db, businessId, { shiftId });
+      console.log(`[shift] ditutup lagi (dibuka oleh skrip ini) -- device siap minta PIN lagi.`);
+    }
+  }
+
+  async function runCheckpointSale() {
   console.log("\n=== TITIK PERIKSA KEDUA: satu penjualan sungguhan, pindai sampai struk ===\n");
   const t0 = Date.now();
 
@@ -374,6 +399,7 @@ async function main() {
   console.log(`Percobaan kedua ditolak: ${secondAttempt.error ?? "!!! TIDAK DITOLAK, INI BUG !!!"}`);
 
   console.log("\n=== SELESAI ===");
+  }
 }
 
 main()
