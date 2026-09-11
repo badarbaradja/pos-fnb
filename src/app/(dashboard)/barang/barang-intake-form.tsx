@@ -14,14 +14,12 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
+import { getUkuranPresets, KONDISI_PRESETS } from "@/lib/barang/ukuran-presets";
 import { id as strings } from "@/lib/i18n/id";
 
 type OutletOption = { id: string; name: string };
 type CategoryOption = { id: string; name: string };
 type PemilikOption = { id: string; nama: string };
-
-const UKURAN_PRESETS = ["XS", "S", "M", "L", "XL", "XXL"];
-const KONDISI_PRESETS = ["Sangat baik", "Baik", "Cukup"];
 
 // Nilai awal useActionState WAJIB didefinisikan di sini (klien), BUKAN
 // diekspor dari actions.ts -- file "use server" cuma boleh mengekspor
@@ -40,9 +38,12 @@ const initialState: BarangFormState = {};
  * instance baru komponen ini nilai awal useState yang bersih, tanpa efek
  * sama sekali.
  */
-function BarangPricingFields() {
+function BarangPricingFields({ categoryName }: { categoryName: string | null }) {
+  const ukuranPresets = getUkuranPresets(categoryName);
   const [ukuran, setUkuran] = useState("");
+  const [ukuranCustom, setUkuranCustom] = useState(false);
   const [kondisi, setKondisi] = useState("");
+  const [kondisiCustom, setKondisiCustom] = useState(false);
   const [hargaModal, setHargaModal] = useState("0");
   const [hargaJual, setHargaJual] = useState("");
   const [hargaJualEdited, setHargaJualEdited] = useState(false);
@@ -60,37 +61,67 @@ function BarangPricingFields() {
       <div className="flex flex-col gap-2">
         <Label htmlFor="ukuran">{strings.barang.ukuran}</Label>
         <div className="flex flex-wrap gap-2">
-          {UKURAN_PRESETS.map((u) => (
-            <ChipButton key={u} selected={ukuran === u} onClick={() => setUkuran(u)}>
+          {ukuranPresets.map((u) => (
+            <ChipButton
+              key={u}
+              selected={!ukuranCustom && ukuran === u}
+              onClick={() => {
+                setUkuranCustom(false);
+                setUkuran(u);
+              }}
+            >
               {u}
             </ChipButton>
           ))}
+          <ChipButton selected={ukuranCustom} onClick={() => setUkuranCustom(true)}>
+            {strings.barang.otherOption}
+          </ChipButton>
         </div>
-        <Input
-          id="ukuran"
-          name="ukuran"
-          value={ukuran}
-          onChange={(e) => setUkuran(e.target.value)}
-          placeholder={strings.barang.ukuranPlaceholder}
-        />
+        {ukuranCustom ? (
+          <Input
+            id="ukuran"
+            name="ukuran"
+            value={ukuran}
+            onChange={(e) => setUkuran(e.target.value)}
+            placeholder={strings.barang.ukuranPlaceholder}
+            autoFocus
+          />
+        ) : (
+          <input type="hidden" name="ukuran" value={ukuran} />
+        )}
       </div>
 
       <div className="flex flex-col gap-2">
         <Label htmlFor="kondisi">{strings.barang.kondisi}</Label>
         <div className="flex flex-wrap gap-2">
           {KONDISI_PRESETS.map((k) => (
-            <ChipButton key={k} selected={kondisi === k} onClick={() => setKondisi(k)}>
+            <ChipButton
+              key={k}
+              selected={!kondisiCustom && kondisi === k}
+              onClick={() => {
+                setKondisiCustom(false);
+                setKondisi(k);
+              }}
+            >
               {k}
             </ChipButton>
           ))}
+          <ChipButton selected={kondisiCustom} onClick={() => setKondisiCustom(true)}>
+            {strings.barang.otherOption}
+          </ChipButton>
         </div>
-        <Input
-          id="kondisi"
-          name="kondisi"
-          value={kondisi}
-          onChange={(e) => setKondisi(e.target.value)}
-          placeholder={strings.barang.kondisiPlaceholder}
-        />
+        {kondisiCustom ? (
+          <Input
+            id="kondisi"
+            name="kondisi"
+            value={kondisi}
+            onChange={(e) => setKondisi(e.target.value)}
+            placeholder={strings.barang.kondisiPlaceholder}
+            autoFocus
+          />
+        ) : (
+          <input type="hidden" name="kondisi" value={kondisi} />
+        )}
       </div>
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
@@ -320,7 +351,10 @@ export function BarangIntakeForm({
           </div>
         </div>
 
-        <BarangPricingFields key={state.success?.barangId ?? "belum-tersimpan"} />
+        <BarangPricingFields
+          key={state.success?.barangId ?? "belum-tersimpan"}
+          categoryName={categories.find((c) => c.id === categoryId)?.name ?? null}
+        />
 
         <div className="flex items-center gap-3">
           <Button type="submit" disabled={isPending}>
