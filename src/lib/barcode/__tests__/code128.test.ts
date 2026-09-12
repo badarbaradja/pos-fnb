@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { decodeCode128B, encodeCode128B } from "../code128";
+import { code128CharValue, decodeCode128B, encodeCode128B } from "../code128";
 
 /**
  * Bug 12 September 2026: barcode TERBACA scanner sungguhan tapi isinya
@@ -143,5 +143,61 @@ describe("Code128 subset B — round-trip decode(encode(x)) === x (JARING REGRES
 
   it("menolak string kosong", () => {
     expect(() => encodeCode128B("")).toThrow();
+  });
+});
+
+/**
+ * Instruksi CEO 12 September 2026, sesudah TT05 ditutup: encodeCode128B
+ * belum pernah diuji EKSPLISIT untuk input di luar ASCII 32-126 --
+ * charCode-32 di luar rentang itu memberi indeks negatif atau >94, dan
+ * CODE128_PATTERNS[indeks] jadi undefined. Ini WAJIB melempar galat
+ * eksplisit, BUKAN diam-diam menggambar barcode rusak yang kelihatan
+ * normal -- pola gagal-diam yang sama persis dilarang CLAUDE.md §3.7
+ * untuk Server Action, cuma di sini titik paling mahalnya adalah label
+ * fisik yang sudah tercetak dan terpasang di barang sebelum ada yang
+ * sadar isinya rusak.
+ *
+ * code128CharValue() SUDAH punya guard (`code < 32 || code > 126`)
+ * SEBELUM pernah mengurangi 32 atau mengindeks tabel pola -- test di
+ * bawah membuktikan itu berlaku persis di kedua BATAS TEPI (31 dan 127,
+ * bukan cuma "jelas di luar" seperti héllo), karakter kontrol yang
+ * sering lolos dari pemeriksaan ceroboh (tab, newline, null), dan
+ * karakter multi-byte (charCodeAt(0) pada surrogate pair memberi nilai
+ * jauh di atas 126).
+ */
+describe("Code128 subset B — input di luar rentang WAJIB melempar galat, tidak pernah menggambar diam-diam", () => {
+  it.each([
+    ["kode 31 (tepat 1 di bawah batas bawah 32)", String.fromCharCode(31)],
+    ["kode 127 (DEL, tepat 1 di atas batas atas 126)", String.fromCharCode(127)],
+    ["kode 0 (NUL)", String.fromCharCode(0)],
+    ["tab (kode 9)", "\t"],
+    ["newline (kode 10)", "\n"],
+    ["carriage return (kode 13)", "\r"],
+    ["emoji/multi-byte (charCodeAt(0) jauh di atas 126)", "😀"],
+    ["huruf beraksen di luar ASCII (é, kode 233)", "é"],
+  ])("code128CharValue melempar galat untuk %s", (_label, ch) => {
+    expect(() => code128CharValue(ch)).toThrow();
+  });
+
+  it.each([
+    ["di awal string", String.fromCharCode(31) + "ABC"],
+    ["di tengah string", "AB" + String.fromCharCode(127) + "CD"],
+    ["di akhir string", "ABC" + String.fromCharCode(0)],
+  ])("encodeCode128B melempar galat kalau karakter di luar rentang ada %s, bukan cuma di posisi pertama", (_label, kode) => {
+    expect(() => encodeCode128B(kode)).toThrow();
+  });
+
+  it("encodeCode128B TIDAK PERNAH mengembalikan string berisi literal \"undefined\" (bukti CODE128_PATTERNS[indeks] tidak pernah diakses dengan indeks di luar array)", () => {
+    // Sapuan lengkap 0-31 dan 127-200 -- kalau code128CharValue() punya
+    // celah di satu nilai saja, symbolValues.map(v => CODE128_PATTERNS[v])
+    // akan menghasilkan `undefined` yang ikut ter-join jadi teks
+    // "undefined" di dalam modules -- ini akan menggambar sesuatu di
+    // kanvas alih-alih melempar galat, persis yang CEO khawatirkan.
+    for (let code = 0; code <= 31; code++) {
+      expect(() => encodeCode128B(String.fromCharCode(code))).toThrow();
+    }
+    for (let code = 127; code <= 200; code++) {
+      expect(() => encodeCode128B(String.fromCharCode(code))).toThrow();
+    }
   });
 });
