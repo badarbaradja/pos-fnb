@@ -7,6 +7,7 @@ import { getOpenShiftForDevice, isShiftSellable } from "@/lib/pos/shift";
 import { getLabelSettingsWithDb } from "@/lib/labels/manage";
 import { barang, pemilik } from "@/lib/db/schema";
 import { LabelView } from "@/components/barang/label-view";
+import { Code128DebugPanel } from "@/components/barcode/code128-debug-panel";
 import { PrintButton } from "@/components/receipt/print-button";
 import { id as strings } from "@/lib/i18n/id";
 
@@ -109,6 +110,9 @@ export default async function ThriftLabelPage({
           <a href="/pos/thrift" className="text-sm text-muted-foreground hover:underline self-center">
             {strings.statistikIta.backToKasir}
           </a>
+        </div>
+        <div className="print:hidden">
+          <Code128DebugPanel kode={row.kode} />
         </div>
       </div>
     );

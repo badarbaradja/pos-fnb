@@ -5,6 +5,7 @@ import { requirePermissionDb } from "@/lib/auth/permissions";
 import { getLabelSettingsWithDb } from "@/lib/labels/manage";
 import { barang, pemilik } from "@/lib/db/schema";
 import { LabelView } from "@/components/barang/label-view";
+import { Code128DebugPanel } from "@/components/barcode/code128-debug-panel";
 import { PrintButton } from "@/components/receipt/print-button";
 import { id as strings } from "@/lib/i18n/id";
 
@@ -77,6 +78,9 @@ export default async function BarangLabelPage({
         </div>
         <div className="print:hidden">
           <PrintButton label={strings.barang.printLabelButton} />
+        </div>
+        <div className="print:hidden">
+          <Code128DebugPanel kode={row.kode} />
         </div>
       </div>
     );
