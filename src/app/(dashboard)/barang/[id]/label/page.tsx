@@ -76,7 +76,7 @@ export default async function BarangLabelPage({
           />
         </div>
         <div className="print:hidden">
-          <PrintButton />
+          <PrintButton label={strings.barang.printLabelButton} />
         </div>
       </div>
     );

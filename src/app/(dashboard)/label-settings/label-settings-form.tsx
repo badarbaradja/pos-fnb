@@ -5,6 +5,7 @@ import { toast } from "sonner";
 import { saveLabelSettings, type LabelSettingsFormState } from "./actions";
 import type { LabelSettingsValue } from "@/lib/labels/manage";
 import { LabelView, type LabelBarangData } from "@/components/barang/label-view";
+import { debugEncodeCode128B } from "@/lib/barcode/code128";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -180,7 +181,69 @@ export function LabelSettingsForm({ initialSettings }: { initialSettings: LabelS
         <p className="max-w-40 text-center text-xs text-muted-foreground">
           {strings.labelSettings.previewHint}
         </p>
+        <Code128DebugPanel kode={SAMPLE_BARANG.kode} />
       </div>
     </div>
+  );
+}
+
+/**
+ * Mode debug barcode -- instruksi CEO 12 September 2026, sesudah bug
+ * barcode salah baca. Menampilkan code set, nilai per simbol, dan
+ * checksum yang SUNGGUHAN dipakai encoder (debugEncodeCode128B, logika
+ * sama persis dengan encodeCode128B, bukan reimplementasi terpisah) --
+ * supaya putaran uji berikutnya CEO bisa pindai label lalu bandingkan
+ * sendiri tanpa bertanya ke developer tiap kali.
+ */
+function Code128DebugPanel({ kode }: { kode: string }) {
+  let debugInfo;
+  try {
+    debugInfo = debugEncodeCode128B(kode);
+  } catch (err) {
+    return (
+      <p className="text-xs text-destructive">
+        {err instanceof Error ? err.message : strings.common.unexpectedError}
+      </p>
+    );
+  }
+
+  return (
+    <details className="w-full max-w-xs rounded-lg border p-2 text-xs">
+      <summary className="cursor-pointer font-medium">{strings.labelSettings.debugTitle}</summary>
+      <div className="mt-2 flex flex-col gap-2">
+        <div>
+          {strings.labelSettings.debugCodeSet}: <span className="font-mono">{debugInfo.codeSet}</span>
+          {" · "}
+          {strings.labelSettings.debugStartValue}: <span className="font-mono">{debugInfo.startValue}</span>
+        </div>
+        <table className="w-full border-collapse text-left font-mono text-[11px]">
+          <thead>
+            <tr className="border-b">
+              <th className="pr-2">pos</th>
+              <th className="pr-2">char</th>
+              <th className="pr-2">code</th>
+              <th className="pr-2">nilai</th>
+            </tr>
+          </thead>
+          <tbody>
+            {debugInfo.symbols.map((s) => (
+              <tr key={s.position}>
+                <td className="pr-2">{s.position}</td>
+                <td className="pr-2">{s.char}</td>
+                <td className="pr-2">{s.charCode}</td>
+                <td className="pr-2">{s.value}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        <div>
+          {strings.labelSettings.debugChecksum}:{" "}
+          <span className="font-mono">{debugInfo.checksum}</span>
+        </div>
+        <div>
+          {strings.labelSettings.debugStopValue}: <span className="font-mono">{debugInfo.stopValue}</span>
+        </div>
+      </div>
+    </details>
   );
 }

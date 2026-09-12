@@ -105,7 +105,7 @@ export default async function ThriftLabelPage({
           />
         </div>
         <div className="flex gap-2 print:hidden">
-          <PrintButton />
+          <PrintButton label={strings.barang.printLabelButton} />
           <a href="/pos/thrift" className="text-sm text-muted-foreground hover:underline self-center">
             {strings.statistikIta.backToKasir}
           </a>

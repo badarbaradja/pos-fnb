@@ -932,6 +932,11 @@ export const id = {
     previewHint: "Pratinjau pakai data contoh -- apa yang terlihat di sini yang akan tercetak.",
     saveSuccess: "Pengaturan label disimpan.",
     printPageTitle: "Cetak Label Barang",
+    debugTitle: "Mode debug barcode (untuk pindai uji)",
+    debugCodeSet: "Code set",
+    debugStartValue: "Nilai Start",
+    debugChecksum: "Checksum",
+    debugStopValue: "Nilai Stop",
   },
   voidRefund: {
     voidBadge: "Dibatalkan",

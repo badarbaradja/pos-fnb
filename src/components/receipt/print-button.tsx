@@ -3,10 +3,10 @@
 import { Button } from "@/components/ui/button";
 import { id as strings } from "@/lib/i18n/id";
 
-export function PrintButton() {
+export function PrintButton({ label }: { label?: string } = {}) {
   return (
     <Button size="lg" onClick={() => window.print()}>
-      {strings.receipt.printButton}
+      {label ?? strings.receipt.printButton}
     </Button>
   );
 }

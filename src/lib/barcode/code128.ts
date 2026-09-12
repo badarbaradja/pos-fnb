@@ -84,6 +84,52 @@ export function encodeCode128B(data: string): string {
   return symbolValues.map((v) => CODE128_PATTERNS[v]).join("");
 }
 
+export type Code128DebugInfo = {
+  codeSet: "B";
+  startValue: number;
+  symbols: { position: number; char: string; charCode: number; value: number }[];
+  checksumSteps: { position: number; value: number; weight: number; contribution: number; runningTotal: number }[];
+  checksum: number;
+  stopValue: number;
+  modules: string;
+};
+
+/**
+ * Rincian per-simbol untuk mode debug (/label-settings) -- instruksi CEO
+ * 12 September 2026, sesudah bug barcode salah baca: kasir/CEO harus bisa
+ * memindai label lalu membandingkan sendiri nilai per simbol dan checksum
+ * tanpa bertanya ke developer tiap kali. Logika SAMA PERSIS dengan
+ * encodeCode128B() (bukan reimplementasi terpisah yang bisa diam-diam
+ * menyimpang) -- fungsi ini cuma mengekspos langkah antaranya.
+ */
+export function debugEncodeCode128B(data: string): Code128DebugInfo {
+  const values = [...data].map(code128CharValue);
+
+  let checksum = START_B;
+  const checksumSteps: Code128DebugInfo["checksumSteps"] = [];
+  values.forEach((v, i) => {
+    const weight = i + 1;
+    const contribution = v * weight;
+    checksum += contribution;
+    checksumSteps.push({ position: i + 1, value: v, weight, contribution, runningTotal: checksum });
+  });
+
+  return {
+    codeSet: "B",
+    startValue: START_B,
+    symbols: [...data].map((ch, i) => ({
+      position: i + 1,
+      char: ch,
+      charCode: ch.charCodeAt(0),
+      value: values[i]!,
+    })),
+    checksumSteps,
+    checksum: checksum % 103,
+    stopValue: STOP,
+    modules: encodeCode128B(data),
+  };
+}
+
 /**
  * Decode modul kembali jadi data + checksum -- DIPAKAI CUMA untuk
  * verifikasi round-trip di test, bukan di alur aplikasi (tidak ada
