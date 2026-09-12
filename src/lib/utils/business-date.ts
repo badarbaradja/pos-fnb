@@ -43,6 +43,24 @@ export function businessDate(
 // SEBAGAI NILAI (detik), bukan string mentah -- "04:00" dan "04:00:00"
 // sama nilainya tapi beda string, dan Postgres selalu menyimpan `time`
 // dengan detik (TT11, 12 September 2026).
+// Tiga zona waktu resmi Indonesia -- BUKAN tabel yang bisa berkembang bebas,
+// ini standar negara (UU/Kepres zona waktu), aman dipetakan tetap. Zona di
+// LUAR ketiga ini (kalau suatu saat ada bisnis di luar Indonesia) sengaja
+// TIDAK ditebak singkatannya -- dikembalikan apa adanya (nama IANA) daripada
+// mengarang singkatan yang salah (TT11, koreksi CEO 12 September 2026:
+// "batas hari 04:00" tanpa zona waktu tidak berarti apa-apa untuk konfirmasi
+// manusia).
+const INDONESIA_TIMEZONE_LABELS: Record<string, string> = {
+  "Asia/Jakarta": "WIB",
+  "Asia/Pontianak": "WIB",
+  "Asia/Makassar": "WITA",
+  "Asia/Jayapura": "WIT",
+};
+
+export function formatTimezoneAbbreviation(timezone: string): string {
+  return INDONESIA_TIMEZONE_LABELS[timezone] ?? timezone;
+}
+
 export function parseCutoffSeconds(dayCutoffTime: string): number {
   const match = CUTOFF_PATTERN.exec(dayCutoffTime);
   if (!match) {

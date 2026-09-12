@@ -37,6 +37,12 @@ export const id = {
     loginError: "Email atau kata sandi salah",
     logout: "Keluar",
   },
+  businesses: {
+    // TT11 (12 September 2026) -- belum ada halaman pengaturan bisnis yang
+    // memakai ini, disiapkan untuk lib/businesses/manage.ts.
+    timezoneInvalid: "Zona waktu tidak valid: {timezone}",
+    notFound: "Bisnis tidak ditemukan.",
+  },
   nav: {
     appName: "Dashboard",
     dashboard: "Ringkasan",
@@ -956,7 +962,7 @@ export const id = {
     outletLabel: "Outlet",
     startDateLabel: "Dari tanggal",
     endDateLabel: "Sampai tanggal",
-    cutoffInfo: "Batas hari outlet ini: {cutoff}",
+    cutoffInfo: "Batas hari outlet ini: {cutoff} {timezone}",
     cutoffConfirmed: "Sudah dikonfirmasi",
     cutoffNotConfirmed: "BELUM dikonfirmasi",
     cutoffWarning: "Batas hari outlet ini belum dikonfirmasi -- angka periode bisa bergeser. Konfirmasi di halaman Outlet dulu.",

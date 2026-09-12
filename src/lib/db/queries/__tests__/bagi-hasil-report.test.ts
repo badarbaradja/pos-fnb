@@ -236,7 +236,7 @@ describe.skipIf(!hasEnv)("TT11 — laporan bagi hasil bulanan penuh", () => {
     const rows = await getBagiHasilLaporan(db, {
       businessId,
       outletId,
-      outletTimezone: TIMEZONE,
+      businessTimezone: TIMEZONE,
       startDate: "2000-01-01",
       endDate: TODAY,
     });
@@ -253,7 +253,7 @@ describe.skipIf(!hasEnv)("TT11 — laporan bagi hasil bulanan penuh", () => {
     const rows = await getBagiHasilLaporan(db, {
       businessId,
       outletId,
-      outletTimezone: TIMEZONE,
+      businessTimezone: TIMEZONE,
       startDate: "2000-01-01",
       endDate: TODAY,
     });
@@ -268,7 +268,7 @@ describe.skipIf(!hasEnv)("TT11 — laporan bagi hasil bulanan penuh", () => {
     const rows = await getBagiHasilLaporan(db, {
       businessId,
       outletId,
-      outletTimezone: TIMEZONE,
+      businessTimezone: TIMEZONE,
       startDate: "2000-01-01",
       endDate: TODAY,
     });
@@ -283,7 +283,7 @@ describe.skipIf(!hasEnv)("TT11 — laporan bagi hasil bulanan penuh", () => {
     const before = await getBagiHasilLaporan(db, {
       businessId,
       outletId,
-      outletTimezone: TIMEZONE,
+      businessTimezone: TIMEZONE,
       startDate: "2000-01-01",
       endDate: TODAY,
     });
@@ -296,7 +296,7 @@ describe.skipIf(!hasEnv)("TT11 — laporan bagi hasil bulanan penuh", () => {
     const after = await getBagiHasilLaporan(db, {
       businessId,
       outletId,
-      outletTimezone: TIMEZONE,
+      businessTimezone: TIMEZONE,
       startDate: "2000-01-01",
       endDate: TODAY,
     });
@@ -335,7 +335,7 @@ describe.skipIf(!hasEnv)("TT11 — laporan bagi hasil bulanan penuh", () => {
     const beforeSale = await getBagiHasilLaporan(db, {
       businessId,
       outletId,
-      outletTimezone: TIMEZONE,
+      businessTimezone: TIMEZONE,
       startDate: "2000-01-01",
       endDate: yesterday,
     });
@@ -362,7 +362,7 @@ describe.skipIf(!hasEnv)("TT11 — laporan bagi hasil bulanan penuh", () => {
     const afterSale = await getBagiHasilLaporan(db, {
       businessId,
       outletId,
-      outletTimezone: TIMEZONE,
+      businessTimezone: TIMEZONE,
       startDate: "2000-01-01",
       endDate: yesterday,
     });
@@ -375,7 +375,7 @@ describe.skipIf(!hasEnv)("TT11 — laporan bagi hasil bulanan penuh", () => {
     const today = await getBagiHasilLaporan(db, {
       businessId,
       outletId,
-      outletTimezone: TIMEZONE,
+      businessTimezone: TIMEZONE,
       startDate: "2000-01-01",
       endDate: TODAY,
     });
@@ -413,7 +413,7 @@ describe.skipIf(!hasEnv)("TT11 — laporan bagi hasil bulanan penuh", () => {
     const rows = await getBagiHasilLaporan(db, {
       businessId,
       outletId,
-      outletTimezone: TIMEZONE,
+      businessTimezone: TIMEZONE,
       startDate: "2000-01-01",
       endDate: TODAY,
     });

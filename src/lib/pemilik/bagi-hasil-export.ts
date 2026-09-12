@@ -5,9 +5,30 @@ import type { UserDbHandle } from "@/lib/db/client";
 import { businesses, outlets } from "@/lib/db/schema";
 import { getBagiHasilLaporan } from "@/lib/db/queries/bagi-hasil-report";
 import { calculateSisaDibayar } from "@/lib/calc/bagi-hasil-payout";
+import { formatTimezoneAbbreviation } from "@/lib/utils/business-date";
 import { id as strings } from "@/lib/i18n/id";
 
 type Db = UserDbHandle["db"];
+
+const COLUMN_DEFS = [
+  { header: strings.bagiHasil.colPemilik, key: "pemilik", width: 24 },
+  { header: strings.bagiHasil.colDititipkan, key: "dititipkan", width: 12 },
+  { header: strings.bagiHasil.colTerjual, key: "terjual", width: 12 },
+  { header: strings.bagiHasil.colBelumTerjual, key: "belumTerjual", width: 14 },
+  { header: strings.bagiHasil.colRusak, key: "rusak", width: 10 },
+  { header: strings.bagiHasil.colTotalPenjualan, key: "totalPenjualan", width: 18 },
+  { header: strings.bagiHasil.colBagianPemilik, key: "bagianPemilik", width: 18 },
+  { header: strings.bagiHasil.colBagianToko, key: "bagianToko", width: 18 },
+  { header: strings.bagiHasil.colSudahDibayar, key: "sudahDibayar", width: 18 },
+  { header: strings.bagiHasil.colSisaDibayar, key: "sisaDibayar", width: 18 },
+] as const;
+const MONEY_COLUMN_KEYS = [
+  "totalPenjualan",
+  "bagianPemilik",
+  "bagianToko",
+  "sudahDibayar",
+  "sisaDibayar",
+] as const;
 
 /**
  * lib/pemilik/bagi-hasil-export.ts — TT11. Logika ekspor Excel DIPISAH
@@ -31,7 +52,11 @@ export async function buildBagiHasilExport(
   const { businessId, outletId, startDate, endDate } = params;
 
   const [outlet] = await db
-    .select({ name: outlets.name, dayCutoffConfirmed: outlets.dayCutoffConfirmed })
+    .select({
+      name: outlets.name,
+      dayCutoffTime: outlets.dayCutoffTime,
+      dayCutoffConfirmed: outlets.dayCutoffConfirmed,
+    })
     .from(outlets)
     .where(and(eq(outlets.id, outletId), eq(outlets.businessId, businessId)));
 
@@ -52,10 +77,19 @@ export async function buildBagiHasilExport(
     .from(businesses)
     .where(eq(businesses.id, businessId));
 
+  // businessTimezone -- BUKAN "outletTimezone" (outlet tidak punya kolom
+  // zona waktu sendiri di skema ini). Batas periode ditentukan DUA nilai
+  // bersama: dayCutoffTime outlet DAN zona waktu bisnis ini -- keduanya
+  // WAJIB tampil bersama di kepala laporan, kalau tidak konfirmasi
+  // "04:00" tidak berarti apa-apa (koreksi CEO 12 September 2026: gerbang
+  // yang cuma memagari satu dari dua nilai memberi rasa aman palsu).
+  const businessTimezone = business?.timezone ?? "Asia/Jakarta";
+  const timezoneLabel = formatTimezoneAbbreviation(businessTimezone);
+
   const rows = await getBagiHasilLaporan(db, {
     businessId,
     outletId,
-    outletTimezone: business?.timezone ?? "Asia/Jakarta",
+    businessTimezone,
     startDate,
     endDate,
   });
@@ -63,19 +97,22 @@ export async function buildBagiHasilExport(
   const workbook = new ExcelJS.Workbook();
   const sheet = workbook.addWorksheet(`${startDate} s.d. ${endDate}`.slice(0, 31));
 
-  sheet.columns = [
-    { header: strings.bagiHasil.colPemilik, key: "pemilik", width: 24 },
-    { header: strings.bagiHasil.colDititipkan, key: "dititipkan", width: 12 },
-    { header: strings.bagiHasil.colTerjual, key: "terjual", width: 12 },
-    { header: strings.bagiHasil.colBelumTerjual, key: "belumTerjual", width: 14 },
-    { header: strings.bagiHasil.colRusak, key: "rusak", width: 10 },
-    { header: strings.bagiHasil.colTotalPenjualan, key: "totalPenjualan", width: 18 },
-    { header: strings.bagiHasil.colBagianPemilik, key: "bagianPemilik", width: 18 },
-    { header: strings.bagiHasil.colBagianToko, key: "bagianToko", width: 18 },
-    { header: strings.bagiHasil.colSudahDibayar, key: "sudahDibayar", width: 18 },
-    { header: strings.bagiHasil.colSisaDibayar, key: "sisaDibayar", width: 18 },
-  ];
-  sheet.getRow(1).font = { bold: true };
+  // Kolom TANPA `header` (beda dari sebelumnya) -- ExcelJS otomatis menulis
+  // `header` ke baris 1 begitu `sheet.columns` di-set, yang akan menabrak
+  // baris info batas-hari/zona-waktu yang kita tulis manual di bawah.
+  sheet.columns = COLUMN_DEFS.map(({ key, width }) => ({ key, width }));
+
+  // Baris 1: kepala laporan -- batas hari + zona waktu WAJIB tampil
+  // bersama (lihat komentar di atas). Baris 2: kosong (spasi). Baris 3:
+  // label kolom (ditulis manual, sama urutan/isi dengan COLUMN_DEFS).
+  sheet.addRow([
+    strings.bagiHasil.cutoffInfo
+      .replace("{cutoff}", outlet.dayCutoffTime)
+      .replace("{timezone}", timezoneLabel),
+  ]);
+  sheet.addRow([]);
+  const headerRow = sheet.addRow(COLUMN_DEFS.map((c) => c.header));
+  headerRow.font = { bold: true };
 
   for (const row of rows) {
     const sisa = calculateSisaDibayar(new Decimal(row.bagianPemilik), new Decimal(row.sudahDibayar));
@@ -93,7 +130,7 @@ export async function buildBagiHasilExport(
     });
   }
 
-  ["totalPenjualan", "bagianPemilik", "bagianToko", "sudahDibayar", "sisaDibayar"].forEach((key) => {
+  MONEY_COLUMN_KEYS.forEach((key) => {
     sheet.getColumn(key).numFmt = "#,##0";
   });
 

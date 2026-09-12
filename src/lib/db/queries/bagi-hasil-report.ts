@@ -61,21 +61,27 @@ export async function getBagiHasilLaporan(
   params: {
     businessId: string;
     outletId: string;
-    outletTimezone: string;
+    // businessTimezone, BUKAN "outletTimezone" -- outlet TIDAK PUNYA kolom
+    // zona waktu sendiri di skema ini, timezone SELALU dari businesses.timezone
+    // (nama parameter lama berbohong soal sumbernya, koreksi CEO 12 September
+    // 2026: batas periode ditentukan DUA nilai, dayCutoffTime DAN zona waktu
+    // -- gerbang yang cuma memagari satu nilai memberi rasa aman palsu).
+    businessTimezone: string;
     startDate: string; // 'yyyy-MM-dd', business_date
     endDate: string; // 'yyyy-MM-dd', business_date
   }
 ): Promise<BagiHasilLaporanRow[]> {
-  const { businessId, outletId, outletTimezone, startDate, endDate } = params;
+  const { businessId, outletId, businessTimezone, startDate, endDate } = params;
 
   // Batas "akhir periode" sebagai instant UTC sungguhan (bukan tengah
   // malam UTC) -- barang.masukPada/terjualPada timestamptz dibandingkan
-  // terhadap instant ini, dikonversi dari kalender lokal outlet supaya
-  // konsisten dengan zona waktu yang sama dipakai businessDate() untuk
-  // penjualan (CLAUDE.md §3.3: tidak pernah pakai zona waktu server).
+  // terhadap instant ini, dikonversi dari kalender lokal BISNIS (bukan
+  // outlet -- outlet tidak punya zona waktu sendiri) supaya konsisten
+  // dengan zona waktu yang sama dipakai businessDate() untuk penjualan
+  // (CLAUDE.md §3.3: tidak pernah pakai zona waktu server).
   // .toISOString() -- driver postgres tidak menerima objek Date mentah
   // sebagai parameter terikat (bind param), harus string.
-  const endOfPeriodInstant = fromZonedTime(`${endDate}T23:59:59.999`, outletTimezone).toISOString();
+  const endOfPeriodInstant = fromZonedTime(`${endDate}T23:59:59.999`, businessTimezone).toISOString();
 
   const stockCte = db.$with("bagi_hasil_stock").as(
     db

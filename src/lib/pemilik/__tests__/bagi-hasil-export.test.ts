@@ -112,7 +112,18 @@ describe.skipIf(!hasEnv)("TT11 — buildBagiHasilExport (gerbang SYARAT 3)", () 
     expect(sheet).toBeTruthy();
     expect(sheet!.name).toBe("2026-09-01 s.d. 2026-09-30");
 
-    const headerRow = sheet!.getRow(1).values as unknown[];
+    // Baris 1 -- kepala laporan HARUS menyebut cutoff DAN zona waktu
+    // bersama (koreksi CEO 12 September 2026: cutoff tanpa zona waktu
+    // tidak berarti apa-apa untuk konfirmasi manusia). Outlet ini dibuat
+    // dengan dayCutoffTime "04:00:00", businesses.timezone bawaan
+    // Asia/Jakarta -> label "WIB".
+    const infoRowText = String((sheet!.getRow(1).values as unknown[])[1]);
+    expect(infoRowText).toContain("04:00:00");
+    expect(infoRowText).toContain("WIB");
+
+    // Label kolom sekarang di baris 3 (baris 1 = info cutoff/zona waktu,
+    // baris 2 = spasi kosong).
+    const headerRow = sheet!.getRow(3).values as unknown[];
     expect(headerRow).toContain("Pemilik");
 
     // getColumn(key) cuma berlaku untuk workbook yang MASIH di memori --

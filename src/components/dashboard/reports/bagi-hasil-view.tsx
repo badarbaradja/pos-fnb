@@ -23,6 +23,7 @@ export function BagiHasilView({
   selectedOutletId,
   dayCutoffTime,
   dayCutoffConfirmed,
+  timezoneLabel,
   startDate,
   endDate,
   rows,
@@ -31,6 +32,7 @@ export function BagiHasilView({
   selectedOutletId: string;
   dayCutoffTime: string;
   dayCutoffConfirmed: boolean;
+  timezoneLabel: string;
   startDate: string;
   endDate: string;
   rows: BagiHasilLaporanRow[];
@@ -99,7 +101,11 @@ export function BagiHasilView({
       </form>
 
       <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border p-3 text-sm">
-        <span>{strings.bagiHasil.cutoffInfo.replace("{cutoff}", dayCutoffTime)}</span>
+        <span>
+          {strings.bagiHasil.cutoffInfo
+            .replace("{cutoff}", dayCutoffTime)
+            .replace("{timezone}", timezoneLabel)}
+        </span>
         {dayCutoffConfirmed ? (
           <span className="text-xs font-medium text-emerald-600">
             {strings.bagiHasil.cutoffConfirmed}

@@ -3,7 +3,7 @@ import { createServerSupabaseClient } from "@/lib/auth/supabase";
 import { requirePermissionDb } from "@/lib/auth/permissions";
 import { businesses, outlets } from "@/lib/db/schema";
 import { getBagiHasilLaporan } from "@/lib/db/queries/bagi-hasil-report";
-import { businessDate } from "@/lib/utils/business-date";
+import { businessDate, formatTimezoneAbbreviation } from "@/lib/utils/business-date";
 import { BagiHasilView } from "@/components/dashboard/reports/bagi-hasil-view";
 import { id as strings } from "@/lib/i18n/id";
 
@@ -30,7 +30,13 @@ export default async function BagiHasilReportPage({
       .select({ timezone: businesses.timezone })
       .from(businesses)
       .where(eq(businesses.id, businessId));
-    const timezone = business?.timezone ?? "Asia/Jakarta";
+    // businessTimezone -- BUKAN "outletTimezone" (outlet tidak punya kolom
+    // zona waktu sendiri di skema ini). Batas periode laporan ditentukan
+    // DUA nilai bersama: dayCutoffTime outlet DAN businessTimezone ini --
+    // keduanya harus tampil bersama supaya konfirmasi manusia berarti
+    // sesuatu (TT11, koreksi CEO 12 September 2026).
+    const businessTimezone = business?.timezone ?? "Asia/Jakarta";
+    const timezoneLabel = formatTimezoneAbbreviation(businessTimezone);
 
     const outletRows = await db
       .select({
@@ -61,14 +67,14 @@ export default async function BagiHasilReportPage({
     const selectedOutletId = params.outletId || outletRows[0]!.id;
     const selectedOutlet = outletRows.find((o) => o.id === selectedOutletId) ?? outletRows[0]!;
 
-    const today = businessDate(new Date(), timezone, selectedOutlet.dayCutoffTime);
+    const today = businessDate(new Date(), businessTimezone, selectedOutlet.dayCutoffTime);
     const startDate = params.from || `${today.slice(0, 7)}-01`;
     const endDate = params.to || today;
 
     const rows = await getBagiHasilLaporan(db, {
       businessId,
       outletId: selectedOutlet.id,
-      outletTimezone: timezone,
+      businessTimezone,
       startDate,
       endDate,
     });
@@ -79,6 +85,7 @@ export default async function BagiHasilReportPage({
         selectedOutletId={selectedOutlet.id}
         dayCutoffTime={selectedOutlet.dayCutoffTime}
         dayCutoffConfirmed={selectedOutlet.dayCutoffConfirmed}
+        timezoneLabel={timezoneLabel}
         startDate={startDate}
         endDate={endDate}
         rows={rows}
