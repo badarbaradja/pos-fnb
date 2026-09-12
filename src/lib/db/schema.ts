@@ -2,6 +2,7 @@ import { sql } from "drizzle-orm";
 import {
   bigint,
   boolean,
+  check,
   date,
   index,
   integer,
@@ -205,6 +206,15 @@ export const outlets = pgTable(
   },
   (t) => [
     unique().on(t.businessId, t.code),
+    // A-Z0-9 saja -- kode outlet dicetak jadi awalan barcode barang titipan
+    // (lib/barang/kode.ts), langsung di-encode Code128 tanpa transformasi
+    // apa pun. Pertahanan server terakhir (CLAUDE.md §3.4: RLS/validasi
+    // bukan satu-satunya) -- validasi Zod di lib/outlets/manage.ts sudah
+    // menolak input baru, ini menutup jalur lain (mis. insert manual lewat
+    // getAdminDb()) yang tidak lewat Server Action. Ditemukan sebagai
+    // kerapuhan (bukan penyebab) saat investigasi bug barcode salah baca,
+    // 12 September 2026 -- lihat migration 0028 untuk baris lama.
+    check("outlets_code_format", sql`${t.code} ~ '^[A-Z0-9]+$'`),
     pgPolicy("outlets_select", {
       for: "select",
       using: sql`${t.businessId} = any(auth_business_ids())`,

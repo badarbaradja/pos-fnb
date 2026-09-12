@@ -55,8 +55,23 @@ const editableOutletFields = {
   varianceAlertValue: z.string().trim().min(1, strings.common.requiredField),
 };
 
+// A-Z0-9 saja -- kode outlet dicetak jadi awalan barcode barang titipan
+// (lib/barang/kode.ts: `${outletCode}-${suffix}`, langsung di-encode
+// Code128 tanpa transformasi apa pun). Longgar sebelumnya
+// (z.string().trim().min(1)) membiarkan huruf kecil/spasi/tanda baca
+// lolos ke barcode fisik tanpa alasan bisnis apa pun -- ditemukan saat
+// investigasi bug barcode salah baca (12 September 2026), BUKAN
+// penyebab kasus itu (kode outlet produksi sudah bersih), tapi
+// kerapuhan nyata yang layak ditutup. Lihat migration 0028 untuk
+// penanganan baris lama yang sudah terlanjur tidak sesuai pola.
+const OUTLET_CODE_PATTERN = /^[A-Z0-9]+$/;
+
 const createOutletSchema = z.object({
-  code: z.string().trim().min(1, strings.common.requiredField),
+  code: z
+    .string()
+    .trim()
+    .min(1, strings.common.requiredField)
+    .regex(OUTLET_CODE_PATTERN, strings.outlets.codeFormatError),
   ...editableOutletFields,
 });
 

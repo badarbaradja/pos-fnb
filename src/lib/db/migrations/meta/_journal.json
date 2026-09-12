@@ -197,6 +197,13 @@
       "when": 1789133398537,
       "tag": "0027_barang_menumpuk_days",
       "breakpoints": true
+    },
+    {
+      "idx": 28,
+      "version": "7",
+      "when": 1789184507813,
+      "tag": "0028_outlets_code_format_check",
+      "breakpoints": true
     }
   ]
 }

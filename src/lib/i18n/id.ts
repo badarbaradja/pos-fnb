@@ -180,6 +180,7 @@ export const id = {
     varianceAlertHint: "Selisih stok opname di atas SALAH SATU ambang ini (persen dari pemakaian teoritis atau nilai rupiah) memicu peringatan.",
     isActive: "Aktif",
     duplicateCode: "Kode outlet sudah dipakai",
+    codeFormatError: "Kode outlet cuma boleh huruf besar A-Z dan angka 0-9, tanpa spasi atau tanda baca -- kode ini dicetak jadi awalan barcode barang titipan.",
     deactivateBlockedOpenShift: "Tidak bisa menonaktifkan outlet yang sedang punya shift terbuka",
     cutoffTimeFormatError: "Format jam harus HH:mm atau HH:mm:ss, mis. 04:00",
     percentMustBeNonNegative: "Persentase tidak boleh negatif",
