@@ -1,3 +1,5 @@
+import { config as loadEnv } from "dotenv";
+
 const OVERRIDE_ENV_VAR = "ALLOW_TEST_DB_OVERRIDE";
 
 /**
@@ -126,10 +128,22 @@ export function checkTestDatabaseAllowed(
  * DATABASE_URL yang ADA tapi salah/tidak dikenal -- BUKAN untuk yang
  * memang sengaja tidak diisi. Ditulis eksplisit di sini supaya CEO bisa
  * mengoreksi kalau penafsiran ini salah.
+ *
+ * KEDUA PARAMETER WAJIB DIISI EKSPLISIT, TIDAK ADA NILAI BAWAAN --
+ * sengaja, bukan lupa. Nilai bawaan yang membaca process.env langsung di
+ * signature fungsi adalah PERSIS bug yang pernah terjadi di sini: memanggil
+ * fungsi ini dengan `undefined` YANG DITULIS EKSPLISIT (bukan argumen yang
+ * dihilangkan) tetap memicu nilai bawaan di JavaScript -- kalau nilai
+ * bawaan itu membaca process.env SAAT DIPANGGIL (bukan snapshot dari
+ * sebelum loadEnv), override yang sudah di-snapshot pemanggil (lihat
+ * setupTestDatabaseGuard) diam-diam diganti lagi dengan process.env yang
+ * sudah tercemar loadEnv -- meniadakan seluruh maksud snapshot itu.
+ * Memaksa kedua parameter eksplisit di sini membuat kesalahan itu
+ * mustahil terulang tanpa disadari.
  */
 export function assertTestDatabaseIsAllowed(
-  databaseUrl: string | undefined = process.env["DATABASE_URL"],
-  overrideFlag: string | undefined = process.env[OVERRIDE_ENV_VAR]
+  databaseUrl: string | undefined,
+  overrideFlag: string | undefined
 ): void {
   if (!databaseUrl) {
     return;
@@ -142,4 +156,45 @@ export function assertTestDatabaseIsAllowed(
   if (result.warning) {
     console.warn(`[guard-test-database] ${result.warning}`);
   }
+}
+
+/**
+ * Titik masuk SATU-SATUNYA yang boleh dipanggil vitest.setup.ts. Menyatukan
+ * urutan yang WAJIB benar supaya pengaman tidak bisa dikalahkan diam-diam:
+ *
+ * 1. Snapshot ALLOW_TEST_DB_OVERRIDE dari process.env SEBELUM loadEnv()
+ *    menyentuh apa pun. `dotenv.config()` TIDAK menimpa key yang SUDAH
+ *    ada di process.env, tapi TETAP MENGISI kalau key itu belum ada --
+ *    jadi kalau override dibaca SESUDAH loadEnv, baris
+ *    `ALLOW_TEST_DB_OVERRIDE=1` yang cuma tertulis (dan mudah lupa
+ *    dihapus) di .env.local akan permanen mematikan pengaman di mesin
+ *    itu, tidak bisa dibedakan lagi dari override sungguhan yang
+ *    di-export shell/CI -- gagal-terbuka yang sama persis, cuma pindah
+ *    tempat (koreksi CEO 12 September 2026). Snapshot DI SINI, sebelum
+ *    baris loadEnv manapun, memastikan HANYA environment proses
+ *    sungguhan (shell/CI, ada sebelum Node bahkan mulai) yang dihitung.
+ * 2. Muat file env (path yang sama dipakai tiap file test).
+ * 3. Kalau DATABASE_URL tetap tidak ada sesudah dimuat, cetak peringatan
+ *    MENCOLOK -- disiplin yang sama dengan tiap file test integrasi
+ *    (describe.skipIf(!hasEnv)): hasil hijau TIDAK berarti integrasi
+ *    database sungguhan teruji, cuma berarti test itu DILEWATI.
+ * 4. Jalankan pengecekan (assertTestDatabaseIsAllowed melempar kalau
+ *    DATABASE_URL ADA tapi salah/tidak dikenal -- lihat komentarnya).
+ */
+export function setupTestDatabaseGuard(envPaths: string[]): void {
+  const realProcessOverride = process.env[OVERRIDE_ENV_VAR];
+
+  loadEnv({ path: envPaths, quiet: true });
+
+  if (!process.env["DATABASE_URL"]) {
+    console.warn(
+      "\n" +
+        "!!! DATABASE_URL TIDAK DISET !!!\n" +
+        "SELURUH test integrasi (describe.skipIf(!hasEnv) di tiap file __tests__) DILEWATI.\n" +
+        "Hasil HIJAU run ini TIDAK BERARTI integrasi database sungguhan teruji -- cuma berarti\n" +
+        "test itu tidak pernah dijalankan sama sekali.\n"
+    );
+  }
+
+  assertTestDatabaseIsAllowed(process.env["DATABASE_URL"], realProcessOverride);
 }

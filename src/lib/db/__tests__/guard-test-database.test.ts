@@ -4,11 +4,15 @@
  * digerbang skipIf), karena ini justru penjaga yang harus terbukti benar
  * SEBELUM test integrasi mana pun dipercaya.
  */
-import { describe, expect, it } from "vitest";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { afterEach, describe, expect, it } from "vitest";
 import {
   assertTestDatabaseIsAllowed,
   checkTestDatabaseAllowed,
   extractSupabaseProjectRef,
+  setupTestDatabaseGuard,
 } from "../guard-test-database";
 
 const ALLOWED_REF = "txmkbklzhleavjhzrckm"; // sama dengan ALLOWED_TEST_PROJECT_REFS
@@ -106,5 +110,68 @@ describe("assertTestDatabaseIsAllowed", () => {
 
   it("string kosong diperlakukan SAMA seperti tidak ada -- tidak melempar", () => {
     expect(() => assertTestDatabaseIsAllowed("", undefined)).not.toThrow();
+  });
+});
+
+describe("setupTestDatabaseGuard -- override HANYA dari environment proses sungguhan, bukan berkas dotenv", () => {
+  let tempDir: string | undefined;
+  let originalDatabaseUrl: string | undefined;
+  let originalOverride: string | undefined;
+
+  afterEach(() => {
+    if (tempDir) {
+      rmSync(tempDir, { recursive: true, force: true });
+      tempDir = undefined;
+    }
+    // Pulihkan process.env PERSIS seperti sebelum test ini -- file test
+    // lain di run yang sama (isolate:false) bergantung pada nilai asli
+    // masih ada sesudah test ini selesai.
+    if (originalDatabaseUrl === undefined) delete process.env["DATABASE_URL"];
+    else process.env["DATABASE_URL"] = originalDatabaseUrl;
+    if (originalOverride === undefined) delete process.env["ALLOW_TEST_DB_OVERRIDE"];
+    else process.env["ALLOW_TEST_DB_OVERRIDE"] = originalOverride;
+  });
+
+  it("ALLOW_TEST_DB_OVERRIDE yang HANYA ditulis di berkas .env (bukan di-export shell/CI) TIDAK melewatkan pengaman -- tetap DITOLAK untuk ref tidak dikenal", () => {
+    originalDatabaseUrl = process.env["DATABASE_URL"];
+    originalOverride = process.env["ALLOW_TEST_DB_OVERRIDE"];
+
+    // Simulasikan kondisi PERSIS seperti vitest.setup.ts pertama kali jalan
+    // di mesin bersih -- override TIDAK pernah di-export di environment
+    // proses sungguhan, DATABASE_URL juga belum ada sebelum file dimuat.
+    delete process.env["ALLOW_TEST_DB_OVERRIDE"];
+    delete process.env["DATABASE_URL"];
+
+    tempDir = mkdtempSync(join(tmpdir(), "guard-test-db-"));
+    const envPath = join(tempDir, ".env.fake");
+    writeFileSync(
+      envPath,
+      [
+        "ALLOW_TEST_DB_OVERRIDE=1",
+        "DATABASE_URL=postgresql://postgres.zzzzznotallowedrefzz:pw@aws-0-x.pooler.supabase.com:5432/postgres",
+      ].join("\n")
+    );
+
+    // Baris ALLOW_TEST_DB_OVERRIDE=1 di berkas ini TIDAK BOLEH dihitung --
+    // kalau kode lama (baca override SESUDAH loadEnv) masih dipakai, test
+    // ini akan GAGAL (tidak melempar, padahal seharusnya melempar).
+    expect(() => setupTestDatabaseGuard([envPath])).toThrow(/zzzzznotallowedrefzz/);
+  });
+
+  it("ALLOW_TEST_DB_OVERRIDE yang SUNGGUHAN ada di environment proses SEBELUM dipanggil (setara `ALLOW_TEST_DB_OVERRIDE=1 npm test` di shell/CI) TETAP berfungsi", () => {
+    originalDatabaseUrl = process.env["DATABASE_URL"];
+    originalOverride = process.env["ALLOW_TEST_DB_OVERRIDE"];
+
+    process.env["ALLOW_TEST_DB_OVERRIDE"] = "1"; // ini yang mensimulasikan shell/CI, bukan berkas
+    delete process.env["DATABASE_URL"];
+
+    tempDir = mkdtempSync(join(tmpdir(), "guard-test-db-"));
+    const envPath = join(tempDir, ".env.fake");
+    writeFileSync(
+      envPath,
+      "DATABASE_URL=postgresql://postgres.zzzzznotallowedrefzz:pw@aws-0-x.pooler.supabase.com:5432/postgres"
+    );
+
+    expect(() => setupTestDatabaseGuard([envPath])).not.toThrow();
   });
 });
