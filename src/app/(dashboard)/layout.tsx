@@ -30,6 +30,8 @@ const navItems = [
   { href: "/ingredients", label: id.nav.ingredients },
   { href: "/stock-transfers", label: id.nav.stockTransfers },
   { href: "/reports/sales", label: id.nav.reports },
+  { href: "/reports/stock", label: id.nav.stockReport },
+  { href: "/reports/bagi-hasil", label: id.nav.bagiHasilReport },
 ];
 
 export default async function DashboardLayout({
