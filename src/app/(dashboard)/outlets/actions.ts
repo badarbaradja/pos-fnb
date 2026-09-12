@@ -5,6 +5,7 @@ import { createServerSupabaseClient } from "@/lib/auth/supabase";
 import { requirePermissionDb } from "@/lib/auth/permissions";
 import { createBrandWithDb } from "@/lib/brands/manage";
 import {
+  confirmDayCutoffWithDb,
   createOutletWithDb,
   updateOutletWithDb,
   type OutletActionResult,
@@ -98,4 +99,27 @@ export async function saveOutlet(
 
   revalidatePath("/outlets");
   return {};
+}
+
+/**
+ * TT11 -- konfirmasi manusia bahwa dayCutoffTime outlet ini benar.
+ * Gerbang sama "outlet.manage" (owner+manajer) -- keputusan operasional
+ * tentang outlet yang sudah ada, sama kelas dengan mengubah pajak/service
+ * charge-nya. TIDAK mengubah dayCutoffTime sama sekali.
+ */
+export async function confirmDayCutoff(outletId: string): Promise<OutletActionResult> {
+  const supabase = await createServerSupabaseClient();
+  const { db, closeDb, businessId } = await requirePermissionDb(supabase, "outlet.manage");
+
+  try {
+    const result = await confirmDayCutoffWithDb(db, businessId, outletId);
+    if (result.error) {
+      return { error: result.error };
+    }
+    revalidatePath("/outlets");
+    revalidatePath("/reports/bagi-hasil");
+    return result;
+  } finally {
+    await closeDb();
+  }
 }

@@ -145,6 +145,19 @@ export const outlets = pgTable(
     address: text("address"),
     phone: text("phone"),
     dayCutoffTime: time("day_cutoff_time").notNull().default("04:00:00"),
+    // TT11 (12 September 2026) -- penanda bahwa dayCutoffTime SUDAH
+    // dikonfirmasi manusia (bukan cuma bawaan skema yang belum pernah
+    // ditinjau siapa pun). Default false untuk SEMUA outlet, termasuk yang
+    // sudah lama ada -- tidak ada cara sistem menebak apakah 04:00 yang
+    // berlaku sekarang pernah benar-benar dikonfirmasi seseorang atau
+    // cuma warisan default. Direset ke false otomatis kalau dayCutoffTime
+    // diubah (lihat updateOutletWithDb) -- konfirmasi lama tidak berlaku
+    // untuk nilai baru. Laporan bagi hasil bulanan (TT11) mengunci ekspor
+    // Excel dan tombol "Tandai sudah dibayar" selama ini false, karena
+    // batas hari yang salah menggeser transaksi dini hari ke bulan yang
+    // salah -- mengubah jumlah uang yang harus dibayarkan ke pemilik
+    // titipan.
+    dayCutoffConfirmed: boolean("day_cutoff_confirmed").notNull().default(false),
     isCentralKitchen: boolean("is_central_kitchen").notNull().default(false),
     // numeric(7,4) sesuai BLUEPRINT §3.0 (kolom persentase)
     taxPercent: numeric("tax_percent", { precision: 7, scale: 4 })
@@ -2127,6 +2140,65 @@ export const pemilik = pgTable(
       using: sql`${t.businessId} = any(auth_business_ids())`,
       withCheck: sql`${t.businessId} = any(auth_business_ids())`,
     }),
+  ]
+).enableRLS();
+
+/**
+ * pemilikPayouts (TT11, 12 September 2026) -- catatan pembayaran bagi
+ * hasil ke pemilik titipan, SATU BARIS PER PEMBAYARAN (bukan satu baris
+ * per periode) -- SPESIFIKASI-THRIFTING.md §7 contoh eksplisit: Rp800.000
+ * dibayar dari Rp1.110.000 yang terutang, sisa Rp310.000 -- artinya bisa
+ * ada BEBERAPA pembayaran (cicilan) untuk satu periode yang sama, "sudah
+ * dibayarkan" bukan boolean tunggal. "Sisa dibayar" DIHITUNG (jumlah
+ * bagianPemilik periode dikurangi SEMUA baris pembayaran periode itu),
+ * tidak pernah disimpan sebagai kolom sendiri -- satu sumber kebenaran.
+ *
+ * startDate/endDate SAMA PERSIS dengan rentang tanggal yang dipakai
+ * menghitung bagianPemilik saat pembayaran ini dicatat (bukan cuma label
+ * "September 2026") -- supaya laporan bulan lalu tidak pernah bergeser
+ * kalau kelak periode pelaporan berubah jadi custom range.
+ */
+export const pemilikPayouts = pgTable(
+  "pemilik_payouts",
+  {
+    id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+    businessId: uuid("business_id")
+      .notNull()
+      .references(() => businesses.id, { onDelete: "cascade" }),
+    outletId: uuid("outlet_id")
+      .notNull()
+      .references(() => outlets.id),
+    pemilikId: uuid("pemilik_id")
+      .notNull()
+      .references(() => pemilik.id),
+    startDate: date("start_date").notNull(),
+    endDate: date("end_date").notNull(),
+    jumlah: numeric("jumlah", { precision: 16, scale: 2 }).notNull(),
+    tanggalBayar: date("tanggal_bayar").notNull(),
+    // Siapa yang mencatat -- akun dashboard (Supabase Auth), BUKAN
+    // employees.id (PIN kasir) -- "Tandai sudah dibayar" adalah aksi
+    // dashboard (report.profit_loss/payroll.process), bukan aksi kasir.
+    recordedByUserId: uuid("recorded_by_user_id")
+      .notNull()
+      .references(() => profiles.id),
+    catatan: text("catatan"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    pgPolicy("pemilik_payouts_select", {
+      for: "select",
+      using: sql`${t.businessId} = any(auth_business_ids())`,
+    }),
+    pgPolicy("pemilik_payouts_insert", {
+      for: "insert",
+      withCheck: sql`${t.businessId} = any(auth_business_ids())`,
+    }),
+    // TIDAK ADA policy UPDATE/DELETE -- catatan pembayaran bersifat
+    // append-only, sama filosofi stock_movements (CLAUDE.md §3.2). Salah
+    // catat jumlah = baris koreksi baru (bisa negatif kalau perlu), bukan
+    // mengedit riwayat pembayaran uang sungguhan yang sudah terjadi.
   ]
 ).enableRLS();
 

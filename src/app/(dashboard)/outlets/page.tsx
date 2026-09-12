@@ -14,6 +14,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { id as strings } from "@/lib/i18n/id";
 import { OutletFormDialog, type OutletFormValue } from "./outlet-form-dialog";
+import { DayCutoffConfirmButton } from "./day-cutoff-confirm-button";
 
 export default async function OutletsPage() {
   const supabase = await createServerSupabaseClient();
@@ -85,6 +86,7 @@ export default async function OutletsPage() {
               <TableHead>{strings.outlets.colName}</TableHead>
               <TableHead>{strings.outlets.brand}</TableHead>
               <TableHead>{strings.outlets.colType}</TableHead>
+              <TableHead>{strings.outlets.colCutoff}</TableHead>
               <TableHead>{strings.outlets.colStatus}</TableHead>
               <TableHead className="text-right">{strings.outlets.colActions}</TableHead>
             </TableRow>
@@ -126,6 +128,19 @@ export default async function OutletsPage() {
                         {strings.outlets.typeRetail}
                       </span>
                     )}
+                  </TableCell>
+                  <TableCell>
+                    <div className="flex flex-col items-start gap-1">
+                      <span className="font-mono text-xs">{row.dayCutoffTime}</span>
+                      {row.dayCutoffConfirmed ? (
+                        <Badge variant="default">{strings.outlets.cutoffConfirmed}</Badge>
+                      ) : (
+                        <>
+                          <Badge variant="destructive">{strings.outlets.cutoffNotConfirmed}</Badge>
+                          <DayCutoffConfirmButton outletId={row.id} />
+                        </>
+                      )}
+                    </div>
                   </TableCell>
                   <TableCell>
                     <Badge variant={row.isActive ? "default" : "secondary"}>

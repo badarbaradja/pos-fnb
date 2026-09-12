@@ -39,7 +39,11 @@ export function businessDate(
   return format(businessDay, "yyyy-MM-dd");
 }
 
-function parseCutoffSeconds(dayCutoffTime: string): number {
+// Diekspor supaya lib/outlets/manage.ts bisa membandingkan dayCutoffTime
+// SEBAGAI NILAI (detik), bukan string mentah -- "04:00" dan "04:00:00"
+// sama nilainya tapi beda string, dan Postgres selalu menyimpan `time`
+// dengan detik (TT11, 12 September 2026).
+export function parseCutoffSeconds(dayCutoffTime: string): number {
   const match = CUTOFF_PATTERN.exec(dayCutoffTime);
   if (!match) {
     throw new Error(

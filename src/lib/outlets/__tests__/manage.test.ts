@@ -20,7 +20,7 @@ import { brands, businesses, devices, employees, outlets, shifts } from "@/lib/d
 import { generateId } from "@/lib/utils/id";
 import { hashPin } from "@/lib/auth/pin";
 import { openShiftWithDb } from "@/lib/pos/shift";
-import { createOutletWithDb, updateOutletWithDb } from "../manage";
+import { confirmDayCutoffWithDb, createOutletWithDb, updateOutletWithDb } from "../manage";
 
 const hasEnv = Boolean(
   process.env["DATABASE_URL"] &&
@@ -192,5 +192,67 @@ describe.skipIf(!hasEnv)("T22b — CRUD outlet", () => {
 
     const [row] = await db.select().from(outlets).where(eq(outlets.id, outletId));
     expect(row?.isActive).toBe(false);
+  });
+
+  // TT11 -- dayCutoffConfirmed menggerbang ekspor Excel dan "Tandai sudah
+  // dibayar" di laporan bagi hasil. Kalau reset-nya salah (terlalu longgar
+  // atau terlalu ketat), laporan uang bisa terkunci padahal sudah benar,
+  // atau -- lebih parah -- tetap terbuka padahal batas harinya baru saja
+  // diubah dan belum ditinjau siapa pun.
+  describe("dayCutoffConfirmed (TT11)", () => {
+    it("outlet baru SELALU mulai belum terkonfirmasi (false), walau dayCutoffTime bawaan tidak diubah siapa pun", async () => {
+      const created = await createOutletWithDb(db, businessId, validOutletInput("CUTOFFNEW"));
+      const [row] = await db.select().from(outlets).where(eq(outlets.id, created.success!.outletId));
+      expect(row?.dayCutoffConfirmed).toBe(false);
+    });
+
+    it("confirmDayCutoffWithDb menyalakan penanda TANPA mengubah dayCutoffTime", async () => {
+      const created = await createOutletWithDb(db, businessId, validOutletInput("CUTOFFCONFIRM"));
+      const outletId = created.success!.outletId;
+
+      const result = await confirmDayCutoffWithDb(db, businessId, outletId);
+      expect(result.success).toBeTruthy();
+
+      const [row] = await db.select().from(outlets).where(eq(outlets.id, outletId));
+      expect(row?.dayCutoffConfirmed).toBe(true);
+      expect(row?.dayCutoffTime).toBe("04:00:00"); // tidak berubah
+    });
+
+    it("mengubah dayCutoffTime ke nilai BERBEDA mereset konfirmasi ke false", async () => {
+      const created = await createOutletWithDb(db, businessId, validOutletInput("CUTOFFRESET"));
+      const outletId = created.success!.outletId;
+      await confirmDayCutoffWithDb(db, businessId, outletId);
+
+      const result = await updateOutletWithDb(db, businessId, {
+        id: outletId,
+        ...validOutletInput("IGNORED_CODE"),
+        dayCutoffTime: "03:00:00",
+        isActive: true,
+      });
+      expect(result.success).toBeTruthy();
+
+      const [row] = await db.select().from(outlets).where(eq(outlets.id, outletId));
+      expect(row?.dayCutoffTime).toBe("03:00:00");
+      expect(row?.dayCutoffConfirmed).toBe(false);
+    });
+
+    it("submit ulang form dengan dayCutoffTime SAMA (walau beda format string, \"04:00\" vs \"04:00:00\") TIDAK mereset konfirmasi", async () => {
+      const created = await createOutletWithDb(db, businessId, validOutletInput("CUTOFFKEEP"));
+      const outletId = created.success!.outletId;
+      await confirmDayCutoffWithDb(db, businessId, outletId);
+
+      const result = await updateOutletWithDb(db, businessId, {
+        id: outletId,
+        ...validOutletInput("IGNORED_CODE"),
+        dayCutoffTime: "04:00", // sama nilainya dengan "04:00:00", beda string
+        name: "Nama Diubah Tanpa Sentuh Cutoff",
+        isActive: true,
+      });
+      expect(result.success).toBeTruthy();
+
+      const [row] = await db.select().from(outlets).where(eq(outlets.id, outletId));
+      expect(row?.name).toBe("Nama Diubah Tanpa Sentuh Cutoff");
+      expect(row?.dayCutoffConfirmed).toBe(true); // TETAP terkonfirmasi
+    });
   });
 });

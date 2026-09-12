@@ -4,7 +4,7 @@ import type { UserDbHandle } from "@/lib/db/client";
 import { brands, outlets } from "@/lib/db/schema";
 import { assertRowsAffected, isUniqueViolation } from "@/lib/db/errors";
 import { generateId } from "@/lib/utils/id";
-import { CUTOFF_PATTERN } from "@/lib/utils/business-date";
+import { CUTOFF_PATTERN, parseCutoffSeconds } from "@/lib/utils/business-date";
 import { hasOpenShiftForOutlet } from "@/lib/pos/shift";
 import { id as strings } from "@/lib/i18n/id";
 
@@ -175,6 +175,25 @@ export async function updateOutletWithDb(
     }
   }
 
+  // TT11 -- dayCutoffConfirmed cuma berarti sesuatu untuk nilai
+  // dayCutoffTime YANG SEDANG dikonfirmasi. Kalau nilainya berubah lewat
+  // form ini, konfirmasi lama tidak berlaku lagi untuk nilai baru --
+  // direset ke false di sini (bukan cuma di UI), supaya tidak ada jalan
+  // mengubah batas hari lalu diam-diam mewarisi status "terkonfirmasi"
+  // dari nilai sebelumnya.
+  const [current] = await db
+    .select({ dayCutoffTime: outlets.dayCutoffTime })
+    .from(outlets)
+    .where(and(eq(outlets.id, data.id), eq(outlets.businessId, businessId)));
+  if (!current) {
+    return { error: strings.common.unexpectedError };
+  }
+  // Bandingkan sebagai detik, bukan string mentah -- "04:00" (form tanpa
+  // detik) dan "04:00:00" (tersimpan di Postgres) SAMA secara nilai tapi
+  // beda sebagai string, jangan sampai itu memicu reset konfirmasi palsu
+  // tiap form outlet disimpan ulang tanpa benar-benar mengubah jamnya.
+  const cutoffChanged = parseCutoffSeconds(current.dayCutoffTime) !== parseCutoffSeconds(data.dayCutoffTime);
+
   const updated = await db
     .update(outlets)
     .set({
@@ -183,6 +202,7 @@ export async function updateOutletWithDb(
       address: data.address || null,
       phone: data.phone || null,
       dayCutoffTime: data.dayCutoffTime,
+      ...(cutoffChanged ? { dayCutoffConfirmed: false } : {}),
       isCentralKitchen: data.isCentralKitchen,
       taxPercent: String(data.taxPercent),
       taxInclusive: data.taxInclusive,
@@ -200,4 +220,26 @@ export async function updateOutletWithDb(
   assertRowsAffected(updated, "outlet");
 
   return { success: { outletId: data.id } };
+}
+
+/**
+ * TT11 -- konfirmasi manusia bahwa dayCutoffTime outlet ini SUDAH benar
+ * (bukan cuma bawaan skema yang belum pernah ditinjau). TIDAK mengubah
+ * dayCutoffTime sama sekali -- cuma menyalakan penanda. Dipisah dari
+ * updateOutletWithDb supaya alur "saya sudah cek, ini benar" tidak perlu
+ * submit ulang seluruh form outlet.
+ */
+export async function confirmDayCutoffWithDb(
+  db: Db,
+  businessId: string,
+  outletId: string
+): Promise<OutletActionResult> {
+  const updated = await db
+    .update(outlets)
+    .set({ dayCutoffConfirmed: true })
+    .where(and(eq(outlets.id, outletId), eq(outlets.businessId, businessId)))
+    .returning({ id: outlets.id });
+  assertRowsAffected(updated, "outlet");
+
+  return { success: { outletId } };
 }
