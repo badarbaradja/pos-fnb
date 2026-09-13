@@ -1,0 +1,1 @@
+ALTER TABLE "shifts" ADD COLUMN "force_closed_at" timestamp with time zone;

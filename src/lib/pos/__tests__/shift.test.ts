@@ -14,11 +14,12 @@
  */
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { config as loadEnv } from "dotenv";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 loadEnv({ path: [".env.local", ".env"], quiet: true });
 
 import { getAdminDb } from "@/lib/db/client";
 import {
+  auditLogs,
   brands,
   businesses,
   devices,
@@ -35,12 +36,18 @@ import { hashPin } from "@/lib/auth/pin";
 import { generateId } from "@/lib/utils/id";
 import {
   addCashMovementWithDb,
+  checkShiftSellability,
+  confirmForceClosedReconciliationWithDb,
   confirmShiftCloseWithDb,
+  forceCloseShiftWithDb,
   getOpenShiftForDevice,
   getOpenShiftsForBusiness,
+  getShiftsNeedingReview,
   isShiftSellable,
   openShiftWithDb,
+  reconcileForceClosedShiftWithDb,
   submitCountedCashWithDb,
+  type OpenShiftRow,
 } from "../shift";
 import { payOrderWithDb } from "../pay-order";
 
@@ -49,6 +56,73 @@ const hasEnv = Boolean(
     process.env["NEXT_PUBLIC_SUPABASE_URL"] &&
     process.env["SUPABASE_SERVICE_ROLE_KEY"]
 );
+
+/**
+ * checkShiftSellability -- MURNI, tidak butuh koneksi apa pun, selalu
+ * jalan (§14 prasyarat shift, 13 September 2026).
+ */
+describe("checkShiftSellability", () => {
+  const TIMEZONE = "Asia/Jakarta";
+  const CUTOFF = "04:00:00";
+  const TODAY = businessDateForTest();
+
+  function businessDateForTest(): string {
+    // Duplikasi minimal logika businessDate() cuma untuk mendapat "hari
+    // ini" versi test, TANPA impor businessDate() -- sengaja, supaya
+    // test ini benar-benar independen dari implementasi yang diuji.
+    return new Date().toISOString().slice(0, 10);
+  }
+
+  function makeShift(overrides: Partial<OpenShiftRow>): OpenShiftRow {
+    return {
+      id: "shift-1",
+      outletId: "outlet-1",
+      deviceId: "device-1",
+      employeeId: "employee-1",
+      employeeName: "Karyawan Uji",
+      employeeRole: "cashier",
+      servedByName: null,
+      status: "open",
+      openedAt: new Date(),
+      businessDate: TODAY,
+      openingCash: "0",
+      countedCash: null,
+      expectedCash: null,
+      cashVariance: null,
+      ...overrides,
+    };
+  }
+
+  it("shift null -> 'no_shift'", () => {
+    expect(checkShiftSellability(null, TIMEZONE, CUTOFF)).toBe("no_shift");
+  });
+
+  it("countedCash sudah terisi -> 'closing_in_progress', walau businessDate masih hari ini", () => {
+    expect(checkShiftSellability(makeShift({ countedCash: "100000" }), TIMEZONE, CUTOFF)).toBe(
+      "closing_in_progress"
+    );
+  });
+
+  it("businessDate SAMA dengan hari ini -> null (sellable)", () => {
+    expect(checkShiftSellability(makeShift({}), TIMEZONE, CUTOFF)).toBeNull();
+  });
+
+  it("businessDate BEDA dari hari ini (shift basi, tertinggal dari hari sebelumnya) -> 'stale'", () => {
+    expect(checkShiftSellability(makeShift({ businessDate: "2000-01-01" }), TIMEZONE, CUTOFF)).toBe(
+      "stale"
+    );
+  });
+
+  it("countedCash terisi DAN businessDate basi -- 'closing_in_progress' didahulukan (urutan pengecekan disengaja)", () => {
+    expect(
+      checkShiftSellability(
+        makeShift({ countedCash: "50000", businessDate: "2000-01-01" }),
+        TIMEZONE,
+        CUTOFF
+      )
+    ).toBe("closing_in_progress");
+  });
+});
 
 describe.skipIf(!hasEnv)("T15 — siklus shift", () => {
   // getAdminDb() dipakai di seluruh file ini untuk setup fixture DAN untuk
@@ -183,7 +257,9 @@ describe.skipIf(!hasEnv)("T15 — siklus shift", () => {
     const active = await getOpenShiftForDevice(db, businessId, deviceId);
     expect(active).not.toBeNull();
     expect(active!.employeeId).toBe(employeeId);
-    expect(isShiftSellable(active)).toBe(true);
+    // Fixture tidak menimpa timezone/dayCutoffTime -- default skema
+    // (Asia/Jakarta, 04:00:00) yang berlaku.
+    expect(isShiftSellable(active, "Asia/Jakarta", "04:00:00")).toBe(true);
   });
 
   it("buka shift ditolak kalau device sudah punya shift terbuka", async () => {
@@ -217,6 +293,72 @@ describe.skipIf(!hasEnv)("T15 — siklus shift", () => {
     expect(result.error).toMatch(/salah/i);
 
     await db.delete(devices).where(eq(devices.id, otherDevice!.id));
+  });
+
+  it("shift BASI (businessDate bukan hari ini) tidak bisa dipakai jualan, TAPI tidak menghalangi shift baru dibuka -- §14 prasyarat shift (13 September 2026)", async () => {
+    const [staleDevice] = await db
+      .insert(devices)
+      .values({ businessId, outletId, serialNumber: "SHIFTDEV_STALE", name: "Kasir Uji Basi" })
+      .returning({ id: devices.id });
+
+    const openResult = await openShiftWithDb(db, businessId, {
+      id: generateId(),
+      outletId,
+      deviceId: staleDevice!.id,
+      employeeCode: EMPLOYEE_CODE,
+      pin: CORRECT_PIN,
+      openingCash: "0",
+    });
+    expect(openResult.success).toBeTruthy();
+    const staleShiftId = openResult.success!.shiftId;
+
+    // openShiftWithDb sendiri TIDAK PUNYA cara menerima businessDate dari
+    // luar (dan memang tidak boleh) -- dipaksa mundur langsung di DB di
+    // sini untuk mensimulasikan shift yang tertinggal terbuka dari hari
+    // sebelumnya.
+    await db.update(shifts).set({ businessDate: "2000-01-01" }).where(eq(shifts.id, staleShiftId));
+
+    // TIDAK BISA jualan di bawah shift basi ini -- pesan menyebut jelas
+    // "kemarin belum ditutup", bukan pesan galat generik "tidak ada shift".
+    const payResult = await payOrderWithDb(db, businessId, {
+      orderId: generateId(),
+      outletId,
+      deviceId: staleDevice!.id,
+      priceTierId,
+      lines: [
+        { id: generateId(), productId, variantId: null, modifierIds: [], qty: "1", itemDiscount: "0", note: "" },
+      ],
+      discountType: "none",
+      orderDiscountAmount: "0",
+      orderDiscountPercentInput: "0",
+      payments: [{ id: generateId(), paymentMethodId: cashPaymentMethodId, amount: "20000", reference: "" }],
+    });
+    expect(payResult.error).toBeTruthy();
+    expect(payResult.error).toMatch(/kemarin belum ditutup/i);
+    expect(payResult.success).toBeUndefined();
+
+    // TAPI shift basi ini TIDAK menghalangi shift BARU dibuka di device
+    // yang sama -- itu justru jalan keluarnya (bukan cron, bukan
+    // pembersihan otomatis).
+    const reopenResult = await openShiftWithDb(db, businessId, {
+      id: generateId(),
+      outletId,
+      deviceId: staleDevice!.id,
+      employeeCode: EMPLOYEE_CODE,
+      pin: CORRECT_PIN,
+      openingCash: "0",
+    });
+    expect(reopenResult.error).toBeUndefined();
+    expect(reopenResult.success).toBeTruthy();
+
+    // Shift lama (basi) tetap ada apa adanya, status masih 'open' --
+    // TIDAK disentuh sama sekali, menunggu manajer menutupnya lewat fitur
+    // force-close (bukan ditutup diam-diam oleh mekanisme ini).
+    const [oldShiftRow] = await db.select({ status: shifts.status }).from(shifts).where(eq(shifts.id, staleShiftId));
+    expect(oldShiftRow?.status).toBe("open");
+
+    await db.delete(shifts).where(eq(shifts.deviceId, staleDevice!.id));
+    await db.delete(devices).where(eq(devices.id, staleDevice!.id));
   });
 
   it("payOrderWithDb mengisi shiftId/cashierId dari shift aktif device", async () => {
@@ -430,5 +572,231 @@ describe.skipIf(!hasEnv)("T15 — siklus shift", () => {
 
     const afterClose = await getOpenShiftsForBusiness(db, businessId);
     expect(afterClose.find((s) => s.id === secondShiftId)).toBeUndefined();
+  });
+
+  describe("forceCloseShiftWithDb / reconcileForceClosedShiftWithDb -- §14 prasyarat shift, manajer menutup shift orang lain (13 September 2026)", () => {
+    async function openIsolatedShift(serialSuffix: string) {
+      const [device] = await db
+        .insert(devices)
+        .values({ businessId, outletId, serialNumber: `SHIFTDEV_FC_${serialSuffix}`, name: `Kasir Uji FC ${serialSuffix}` })
+        .returning({ id: devices.id });
+      const opened = await openShiftWithDb(db, businessId, {
+        id: generateId(),
+        outletId,
+        deviceId: device!.id,
+        employeeCode: EMPLOYEE_CODE,
+        pin: CORRECT_PIN,
+        openingCash: "0",
+      });
+      if (!opened.success) {
+        throw new Error(`Gagal buka shift uji force-close: ${opened.error}`);
+      }
+      return { deviceId: device!.id, shiftId: opened.success.shiftId };
+    }
+
+    it("force-close outlet BERTUNAI: forceClosedAt terisi, countedCash TETAP null, needsReview=true, audit log tercatat", async () => {
+      const { deviceId: fcDeviceId, shiftId } = await openIsolatedShift("A");
+
+      const result = await forceCloseShiftWithDb(db, businessId, "manager-uji-a", {
+        shiftId,
+        reason: "Shift kemarin malam tidak ditutup",
+      });
+      expect(result.error).toBeUndefined();
+      expect(result.success?.needsReview).toBe(true);
+
+      const [row] = await db.select().from(shifts).where(eq(shifts.id, shiftId));
+      expect(row?.status).toBe("closed");
+      expect(row?.forceClosedAt).not.toBeNull();
+      expect(row?.countedCash).toBeNull();
+      expect(row?.note).toBe("Shift kemarin malam tidak ditutup");
+
+      const [log] = await db
+        .select()
+        .from(auditLogs)
+        .where(and(eq(auditLogs.refId, shiftId), eq(auditLogs.action, "shift_force_closed")));
+      expect(log).toBeTruthy();
+      expect(log?.reason).toBe("Shift kemarin malam tidak ditutup");
+      expect((log?.metadata as { closedByProfileId?: string })?.closedByProfileId).toBe("manager-uji-a");
+
+      await db.delete(shifts).where(eq(shifts.id, shiftId));
+      await db.delete(devices).where(eq(devices.id, fcDeviceId));
+    });
+
+    it("force-close DITOLAK untuk shift yang sudah closed", async () => {
+      const { deviceId: fcDeviceId, shiftId } = await openIsolatedShift("B");
+      await db.update(shifts).set({ status: "closed", closedAt: new Date() }).where(eq(shifts.id, shiftId));
+
+      const result = await forceCloseShiftWithDb(db, businessId, "manager-uji-b", {
+        shiftId,
+        reason: "coba tutup lagi",
+      });
+      expect(result.error).toBeTruthy();
+      expect(result.success).toBeUndefined();
+
+      await db.delete(shifts).where(eq(shifts.id, shiftId));
+      await db.delete(devices).where(eq(devices.id, fcDeviceId));
+    });
+
+    it("reconcile DALAM toleransi -> langsung 'reconciled', audit log 'shift_reconciled' tercatat", async () => {
+      const { deviceId: fcDeviceId, shiftId } = await openIsolatedShift("C");
+      await forceCloseShiftWithDb(db, businessId, "manager-uji-c", { shiftId, reason: "ditinggal" });
+
+      // openingCash "0", tidak ada transaksi -- expectedCash = 0. Toleransi
+      // fixture 20000, jadi countedCash "0" pasti dalam toleransi.
+      const result = await reconcileForceClosedShiftWithDb(db, businessId, { shiftId, countedCash: "0" });
+      expect(result.error).toBeUndefined();
+      expect(result.success?.requiresReason).toBe(false);
+      expect(result.success?.reconciled).toBe(true);
+
+      const [row] = await db.select().from(shifts).where(eq(shifts.id, shiftId));
+      expect(row?.status).toBe("reconciled");
+      expect(row?.countedCash).toBe("0.00");
+
+      const [log] = await db
+        .select()
+        .from(auditLogs)
+        .where(and(eq(auditLogs.refId, shiftId), eq(auditLogs.action, "shift_reconciled")));
+      expect(log).toBeTruthy();
+
+      await db.delete(shifts).where(eq(shifts.id, shiftId));
+      await db.delete(devices).where(eq(devices.id, fcDeviceId));
+    });
+
+    it("reconcile DI LUAR toleransi -> tetap 'closed' menunggu alasan, confirmForceClosedReconciliationWithDb baru memindahkan ke 'reconciled'", async () => {
+      const { deviceId: fcDeviceId, shiftId } = await openIsolatedShift("D");
+      await forceCloseShiftWithDb(db, businessId, "manager-uji-d", { shiftId, reason: "ditinggal" });
+
+      // Toleransi fixture 20000 -- countedCash "100000" jauh di luar itu
+      // (expectedCash tetap 0, tidak ada transaksi).
+      const result = await reconcileForceClosedShiftWithDb(db, businessId, { shiftId, countedCash: "100000" });
+      expect(result.error).toBeUndefined();
+      expect(result.success?.requiresReason).toBe(true);
+      expect(result.success?.reconciled).toBe(false);
+
+      const [midRow] = await db.select().from(shifts).where(eq(shifts.id, shiftId));
+      expect(midRow?.status).toBe("closed"); // BELUM 'reconciled'
+      expect(midRow?.countedCash).toBe("100000.00"); // tapi sudah terkunci (write-once)
+
+      // Percobaan reconcile KEDUA ditolak -- write-once, sama filosofi
+      // submitCountedCashWithDb.
+      const secondAttempt = await reconcileForceClosedShiftWithDb(db, businessId, { shiftId, countedCash: "0" });
+      expect(secondAttempt.error).toBeTruthy();
+
+      const confirmResult = await confirmForceClosedReconciliationWithDb(db, businessId, {
+        shiftId,
+        reason: "selisih karena modal awal salah dicatat manajer sebelumnya",
+      });
+      expect(confirmResult.error).toBeUndefined();
+      expect(confirmResult.success?.reconciledAt).toBeTruthy();
+
+      const [finalRow] = await db.select().from(shifts).where(eq(shifts.id, shiftId));
+      expect(finalRow?.status).toBe("reconciled");
+
+      const [log] = await db
+        .select()
+        .from(auditLogs)
+        .where(and(eq(auditLogs.refId, shiftId), eq(auditLogs.action, "shift_reconciled")));
+      expect(log?.reason).toBe("selisih karena modal awal salah dicatat manajer sebelumnya");
+
+      await db.delete(shifts).where(eq(shifts.id, shiftId));
+      await db.delete(devices).where(eq(devices.id, fcDeviceId));
+    });
+
+    it("reconcile DITOLAK untuk shift yang bukan hasil force-close (shift open biasa)", async () => {
+      const { deviceId: fcDeviceId, shiftId } = await openIsolatedShift("E");
+
+      const result = await reconcileForceClosedShiftWithDb(db, businessId, { shiftId, countedCash: "0" });
+      expect(result.error).toBeTruthy();
+
+      await db.delete(shifts).where(eq(shifts.id, shiftId));
+      await db.delete(devices).where(eq(devices.id, fcDeviceId));
+    });
+
+    it("outlet CASHLESS: force-close langsung selesai, needsReview=false, tidak pernah menunggu rekonsiliasi", async () => {
+      const [brand] = await db
+        .insert(brands)
+        .values({ businessId, name: `${PREFIX}_brand_cashless` })
+        .returning({ id: brands.id });
+      const [cashlessOutlet] = await db
+        .insert(outlets)
+        .values({
+          businessId,
+          brandId: brand!.id,
+          code: "SHF2",
+          name: `${PREFIX}_outlet_cashless`,
+          cashEnabled: false,
+        })
+        .returning({ id: outlets.id });
+      const [device] = await db
+        .insert(devices)
+        .values({ businessId, outletId: cashlessOutlet!.id, serialNumber: "SHIFTDEV_FC_CASHLESS", name: "Kasir Uji Cashless" })
+        .returning({ id: devices.id });
+      // Karyawan BARU khusus outlet ini -- EMPLOYEE_CODE fixture terikat
+      // ke outlet ASLI (bertunai), verifyCashierPin() menolak kalau
+      // outletId tidak cocok dengan employees.outlet_id-nya.
+      const cashlessEmployeeCode = `${EMPLOYEE_CODE}_CL`;
+      const cashlessPinHash = await hashPin(CORRECT_PIN);
+      await db.insert(employees).values({
+        businessId,
+        outletId: cashlessOutlet!.id,
+        code: cashlessEmployeeCode,
+        fullName: `${PREFIX}_employee_cashless`,
+        role: "cashier",
+        pinHash: cashlessPinHash,
+      });
+
+      const opened = await openShiftWithDb(db, businessId, {
+        id: generateId(),
+        outletId: cashlessOutlet!.id,
+        deviceId: device!.id,
+        employeeCode: cashlessEmployeeCode,
+        pin: CORRECT_PIN,
+        openingCash: "0",
+      });
+      expect(opened.success).toBeTruthy();
+      const shiftId = opened.success!.shiftId;
+
+      const result = await forceCloseShiftWithDb(db, businessId, "manager-uji-cashless", {
+        shiftId,
+        reason: "ditinggal, outlet cashless",
+      });
+      expect(result.error).toBeUndefined();
+      expect(result.success?.needsReview).toBe(false);
+
+      const [row] = await db.select().from(shifts).where(eq(shifts.id, shiftId));
+      expect(row?.status).toBe("closed");
+      expect(row?.forceClosedAt).not.toBeNull();
+
+      // audit_logs.employee_id -> employees FK -- hapus dulu sebelum
+      // employee-nya, sama pola shifts/orders di afterAll file ini.
+      await db.delete(auditLogs).where(eq(auditLogs.refId, shiftId));
+      await db.delete(shifts).where(eq(shifts.id, shiftId));
+      await db.delete(employees).where(eq(employees.code, cashlessEmployeeCode));
+      await db.delete(devices).where(eq(devices.id, device!.id));
+      await db.delete(outlets).where(eq(outlets.id, cashlessOutlet!.id));
+      await db.delete(brands).where(eq(brands.id, brand!.id));
+    });
+
+    it("getShiftsNeedingReview: shift basi muncul reviewReason='stale', shift force-closed-tanpa-kas muncul reviewReason='force_closed_awaiting_cash'", async () => {
+      const { deviceId: staleDeviceId, shiftId: staleShiftId } = await openIsolatedShift("F");
+      await db.update(shifts).set({ businessDate: "2000-01-01" }).where(eq(shifts.id, staleShiftId));
+
+      const { deviceId: fcDeviceId, shiftId: fcShiftId } = await openIsolatedShift("G");
+      await forceCloseShiftWithDb(db, businessId, "manager-uji-f", { shiftId: fcShiftId, reason: "ditinggal" });
+
+      const rows = await getShiftsNeedingReview(db, businessId, "Asia/Jakarta");
+      const staleRow = rows.find((r) => r.id === staleShiftId);
+      const fcRow = rows.find((r) => r.id === fcShiftId);
+
+      expect(staleRow?.reviewReason).toBe("stale");
+      expect(staleRow?.status).toBe("open");
+      expect(fcRow?.reviewReason).toBe("force_closed_awaiting_cash");
+      expect(fcRow?.status).toBe("closed");
+
+      await db.delete(shifts).where(eq(shifts.id, staleShiftId));
+      await db.delete(shifts).where(eq(shifts.id, fcShiftId));
+      await db.delete(devices).where(eq(devices.id, staleDeviceId));
+      await db.delete(devices).where(eq(devices.id, fcDeviceId));
+    });
   });
 });

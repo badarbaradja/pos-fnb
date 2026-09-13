@@ -17,7 +17,7 @@ import { calculateOrder, type CalcLine, type CalcSettings } from "@/lib/calc/ord
 import { consignmentSplit } from "@/lib/calc/consignment-split";
 import { assertRowsAffected } from "@/lib/db/errors";
 import { businessDate } from "@/lib/utils/business-date";
-import { getOpenShiftForDevice, isShiftSellable } from "@/lib/pos/shift";
+import { checkShiftSellability, getOpenShiftForDevice, getShiftSellabilityErrorMessage } from "@/lib/pos/shift";
 import { id as strings } from "@/lib/i18n/id";
 
 /**
@@ -129,10 +129,16 @@ export async function sellBarangWithDb(
       return { error: strings.common.unexpectedError };
     }
 
-    const activeShift = await getOpenShiftForDevice(db, businessId, data.deviceId);
-    if (!isShiftSellable(activeShift)) {
-      return { error: strings.pos.noActiveShiftError };
+    const rawActiveShift = await getOpenShiftForDevice(db, businessId, data.deviceId);
+    const sellabilityIssue = checkShiftSellability(rawActiveShift, business.timezone, outlet.dayCutoffTime);
+    if (sellabilityIssue !== null) {
+      return { error: getShiftSellabilityErrorMessage(sellabilityIssue) };
     }
+    // sellabilityIssue === null berarti rawActiveShift PASTI bukan null
+    // (lihat checkShiftSellability) -- checkShiftSellability bukan type
+    // guard (perlu mengembalikan ALASAN, bukan cuma boolean), jadi TS
+    // tidak bisa menyempitkan sendiri.
+    const activeShift = rawActiveShift!;
 
     // --- Fetch ulang barang dari DB (bukan dari klien) -- lapis #1 anti-
     // jual-dobel, lihat komentar besar di atas file. ---

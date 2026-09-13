@@ -4,9 +4,9 @@ import { createServerSupabaseClient } from "@/lib/auth/supabase";
 import { requirePermissionDb } from "@/lib/auth/permissions";
 import { ThriftPosScreen } from "@/components/pos/thrift/thrift-pos-screen";
 import { getThriftCatalog } from "./get-thrift-catalog";
-import { getOpenShiftForDevice, isShiftSellable } from "@/lib/pos/shift";
+import { checkShiftSellability, getOpenShiftForDevice } from "@/lib/pos/shift";
 import { getPairedDevice } from "@/lib/pos/device-pairing";
-import { categories, pemilik } from "@/lib/db/schema";
+import { businesses, categories, pemilik } from "@/lib/db/schema";
 
 /**
  * app/(pos)/pos/thrift/page.tsx — TT06. Padanan app/(pos)/pos/page.tsx
@@ -39,8 +39,24 @@ export default async function ThriftPosPage() {
     if (!shift) {
       redirect("/pos/shift/open");
     }
-    if (!isShiftSellable(shift)) {
+
+    const [business] = await db
+      .select({ timezone: businesses.timezone })
+      .from(businesses)
+      .where(eq(businesses.id, businessId));
+    const shiftIssue = checkShiftSellability(
+      shift,
+      business?.timezone ?? "Asia/Jakarta",
+      paired.outlet.dayCutoffTime
+    );
+    if (shiftIssue === "closing_in_progress") {
       redirect("/pos/shift/close");
+    }
+    if (shiftIssue === "stale") {
+      // Shift lama tertinggal terbuka (§14 prasyarat shift, 13 September
+      // 2026) -- arahkan ke layar buka shift yang sama, halamannya sendiri
+      // yang menampilkan pesan jelas kenapa.
+      redirect("/pos/shift/open");
     }
 
     // "Ita super kasir" (11 September 2026) -- tombol tambah barang cuma

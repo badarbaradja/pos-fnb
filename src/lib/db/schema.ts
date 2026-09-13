@@ -1052,6 +1052,15 @@ export const shifts = pgTable(
     // malam menyebut nama sungguhan pelayan, bukan literal nama akun tamu.
     servedByName: text("served_by_name"),
     note: text("note"),
+    // §14 prasyarat shift (13 September 2026) -- terisi HANYA kalau shift
+    // ini ditutup MANAJER (bukan pemiliknya sendiri) TANPA hitungan kas,
+    // lewat forceCloseShiftWithDb(). Menandai "perlu ditinjau" di layar
+    // manajer: status sudah 'closed' tapi countedCash masih NULL. Begitu
+    // kasnya dihitung belakangan lewat reconcileForceClosedShiftWithDb(),
+    // status pindah ke 'reconciled' -- forceClosedAt TETAP terisi
+    // (jejak historis bahwa ini pernah ditutup paksa, bukan ditutup
+    // normal oleh pemiliknya sendiri).
+    forceClosedAt: timestamp("force_closed_at", { withTimezone: true }),
   },
   (t) => [
     pgPolicy("shifts_select", {

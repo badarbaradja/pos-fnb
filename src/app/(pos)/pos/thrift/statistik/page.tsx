@@ -3,7 +3,7 @@ import { eq } from "drizzle-orm";
 import { createServerSupabaseClient } from "@/lib/auth/supabase";
 import { requirePermissionDb } from "@/lib/auth/permissions";
 import { getPairedDevice } from "@/lib/pos/device-pairing";
-import { getOpenShiftForDevice, isShiftSellable } from "@/lib/pos/shift";
+import { checkShiftSellability, getOpenShiftForDevice } from "@/lib/pos/shift";
 import { getSalesSummary, getSalesByProduct } from "@/lib/db/queries/sales-report";
 import {
   getStokStatusSummary,
@@ -42,8 +42,19 @@ export default async function ThriftStatistikPage() {
     if (!shift) {
       redirect("/pos/shift/open");
     }
-    if (!isShiftSellable(shift)) {
+
+    const [business] = await db
+      .select({ timezone: businesses.timezone })
+      .from(businesses)
+      .where(eq(businesses.id, businessId));
+    const timezone = business?.timezone ?? "Asia/Jakarta";
+
+    const shiftIssue = checkShiftSellability(shift, timezone, paired.outlet.dayCutoffTime);
+    if (shiftIssue === "closing_in_progress") {
       redirect("/pos/shift/close");
+    }
+    if (shiftIssue === "stale") {
+      redirect("/pos/shift/open");
     }
     if (shift.employeeRole !== "manager" && shift.employeeRole !== "owner") {
       // Akun tamu/cashier biasa -- tombol ini tidak pernah muncul untuk
@@ -51,12 +62,6 @@ export default async function ThriftStatistikPage() {
       // ditolak di sini, bukan cuma disembunyikan di UI.
       redirect("/pos/thrift");
     }
-
-    const [business] = await db
-      .select({ timezone: businesses.timezone })
-      .from(businesses)
-      .where(eq(businesses.id, businessId));
-    const timezone = business?.timezone ?? "Asia/Jakarta";
 
     const today = businessDate(new Date(), timezone, paired.outlet.dayCutoffTime);
     const startOfMonth = `${today.slice(0, 7)}-01`;

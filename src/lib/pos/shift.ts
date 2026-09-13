@@ -1,8 +1,9 @@
 import { z } from "zod";
-import { and, eq, isNull, desc, sql } from "drizzle-orm";
+import { and, eq, isNotNull, isNull, desc, sql } from "drizzle-orm";
 import { Decimal } from "decimal.js";
 import type { UserDbHandle } from "@/lib/db/client";
 import {
+  auditLogs,
   businesses,
   cashMovements,
   employees,
@@ -16,6 +17,7 @@ import {
 import { calculateShiftReconciliation } from "@/lib/calc/shift";
 import { businessDate } from "@/lib/utils/business-date";
 import { verifyCashierPin } from "@/lib/auth/pin";
+import { generateId } from "@/lib/utils/id";
 import { id as strings } from "@/lib/i18n/id";
 
 /**
@@ -116,9 +118,67 @@ export async function getOpenShiftForDevice(
   return row ?? null;
 }
 
-/** Shift boleh dipakai jualan hanya kalau open DAN belum mulai proses tutup. */
-export function isShiftSellable(shift: OpenShiftRow | null): shift is OpenShiftRow {
-  return shift !== null && shift.countedCash === null;
+export type ShiftSellabilityIssue = "no_shift" | "closing_in_progress" | "stale";
+
+/**
+ * Kenapa ini ada (13 September 2026, temuan CEO -- §14 prasyarat shift):
+ * shift yang tertinggal terbuka semalam SEBELUMNYA tetap bisa dipakai
+ * jualan selama status masih 'open' -- businessDate transaksi dihitung
+ * ulang tiap kali (benar), tapi orders.shiftId/cashierId diwariskan dari
+ * shift yang sedang aktif APA ADANYA, tidak peduli sudah berapa lama
+ * dibuka. Akibatnya penjualan besok tercatat atas nama/shift kemarin --
+ * getSalesByCashier salah atribusi, rekonsiliasi kas shift itu mencampur
+ * uang lebih dari satu hari kerja jadi satu angka yang mustahil
+ * diverifikasi.
+ *
+ * Perbaikannya BUKAN cron yang menutup shift basi (itu cuma kerapian,
+ * ditunda) -- titik yang sungguh berbahaya adalah shift basi BISA
+ * MENYERAP TRANSAKSI BARU. Menutup jalur itu saja (di sini, satu-satunya
+ * tempat) membuat shift basi tidak berbahaya lagi walau tetap
+ * menggantung status='open' sampai ada yang menutupnya (kasir baru buka
+ * shift baru sendiri -- lihat openShiftWithDb -- atau manajer menutupnya
+ * lewat fitur force-close).
+ */
+export function checkShiftSellability(
+  shift: OpenShiftRow | null,
+  businessTimezone: string,
+  dayCutoffTime: string
+): ShiftSellabilityIssue | null {
+  if (shift === null) {
+    return "no_shift";
+  }
+  if (shift.countedCash !== null) {
+    return "closing_in_progress";
+  }
+  const todayBusinessDate = businessDate(new Date(), businessTimezone, dayCutoffTime);
+  if (shift.businessDate !== todayBusinessDate) {
+    return "stale";
+  }
+  return null;
+}
+
+export function getShiftSellabilityErrorMessage(issue: ShiftSellabilityIssue): string {
+  switch (issue) {
+    case "no_shift":
+      return strings.pos.noActiveShiftError;
+    case "closing_in_progress":
+      return strings.pos.shiftClosingInProgressError;
+    case "stale":
+      return strings.pos.staleShiftError;
+  }
+}
+
+/**
+ * Shift boleh dipakai jualan hanya kalau open, belum mulai proses tutup,
+ * DAN businessDate-nya masih hari ini (bukan tertinggal dari hari
+ * sebelumnya -- lihat checkShiftSellability di atas).
+ */
+export function isShiftSellable(
+  shift: OpenShiftRow | null,
+  businessTimezone: string,
+  dayCutoffTime: string
+): shift is OpenShiftRow {
+  return checkShiftSellability(shift, businessTimezone, dayCutoffTime) === null;
 }
 
 export type OpenShiftSummaryRow = {
@@ -159,6 +219,113 @@ export async function getOpenShiftsForBusiness(
     .innerJoin(outlets, eq(shifts.outletId, outlets.id))
     .where(and(eq(shifts.businessId, businessId), eq(shifts.status, "open")))
     .orderBy(shifts.openedAt);
+}
+
+export type ShiftReviewReason = "stale" | "force_closed_awaiting_cash";
+
+export type ShiftNeedingReviewRow = {
+  id: string;
+  outletId: string;
+  outletName: string;
+  employeeId: string;
+  employeeName: string;
+  businessDate: string;
+  status: "open" | "closed";
+  reviewReason: ShiftReviewReason;
+  openedAt: Date;
+  closedAt: Date | null;
+};
+
+/**
+ * Dua kategori shift yang perlu perhatian manajer (§14 prasyarat shift,
+ * 13 September 2026):
+ * 1. "stale" -- status masih 'open' tapi businessDate-nya bukan hari ini
+ *    lagi (lihat checkShiftSellability) -- tidak bisa dipakai jualan
+ *    lagi, menunggu forceCloseShiftWithDb().
+ * 2. "force_closed_awaiting_cash" -- sudah ditutup manajer (forceClosedAt
+ *    terisi) tapi kas belum dihitung -- menunggu
+ *    reconcileForceClosedShiftWithDb().
+ *
+ * Staleness dihitung PER OUTLET (dayCutoffTime beda-beda per outlet),
+ * makanya dilakukan di JavaScript sesudah query, bukan di WHERE SQL --
+ * jumlah shift open per bisnis kecil (satu per device aktif), murah.
+ */
+export async function getShiftsNeedingReview(
+  db: Db,
+  businessId: string,
+  businessTimezone: string
+): Promise<ShiftNeedingReviewRow[]> {
+  const openRows = await db
+    .select({
+      id: shifts.id,
+      outletId: shifts.outletId,
+      outletName: outlets.name,
+      employeeId: shifts.employeeId,
+      employeeName: sql<string>`coalesce(${shifts.servedByName}, ${employees.fullName})`,
+      businessDate: shifts.businessDate,
+      openedAt: shifts.openedAt,
+      dayCutoffTime: outlets.dayCutoffTime,
+    })
+    .from(shifts)
+    .innerJoin(employees, eq(shifts.employeeId, employees.id))
+    .innerJoin(outlets, eq(shifts.outletId, outlets.id))
+    .where(and(eq(shifts.businessId, businessId), eq(shifts.status, "open")));
+
+  const staleRows: ShiftNeedingReviewRow[] = openRows
+    .filter((r) => r.businessDate !== businessDate(new Date(), businessTimezone, r.dayCutoffTime))
+    .map((r) => ({
+      id: r.id,
+      outletId: r.outletId,
+      outletName: r.outletName,
+      employeeId: r.employeeId,
+      employeeName: r.employeeName,
+      businessDate: r.businessDate,
+      status: "open" as const,
+      reviewReason: "stale" as const,
+      openedAt: r.openedAt,
+      closedAt: null,
+    }));
+
+  const awaitingCashRows = await db
+    .select({
+      id: shifts.id,
+      outletId: shifts.outletId,
+      outletName: outlets.name,
+      employeeId: shifts.employeeId,
+      employeeName: sql<string>`coalesce(${shifts.servedByName}, ${employees.fullName})`,
+      businessDate: shifts.businessDate,
+      openedAt: shifts.openedAt,
+      closedAt: shifts.closedAt,
+    })
+    .from(shifts)
+    .innerJoin(employees, eq(shifts.employeeId, employees.id))
+    .innerJoin(outlets, eq(shifts.outletId, outlets.id))
+    .where(
+      and(
+        eq(shifts.businessId, businessId),
+        eq(shifts.status, "closed"),
+        isNotNull(shifts.forceClosedAt),
+        isNull(shifts.countedCash)
+      )
+    );
+
+  return [
+    ...staleRows,
+    ...awaitingCashRows.map(
+      (r): ShiftNeedingReviewRow => ({
+        id: r.id,
+        outletId: r.outletId,
+        outletName: r.outletName,
+        employeeId: r.employeeId,
+        employeeName: r.employeeName,
+        businessDate: r.businessDate,
+        status: "closed" as const,
+        reviewReason: "force_closed_awaiting_cash" as const,
+        openedAt: r.openedAt,
+        closedAt: r.closedAt,
+      })
+    ),
+  ];
 }
 
 /** Dipakai T15b untuk menolak menonaktifkan karyawan yang sedang bertugas. */
@@ -217,11 +384,6 @@ export async function openShiftWithDb(
   const data = parsed.data;
 
   try {
-    const existing = await getOpenShiftForDevice(db, businessId, data.deviceId);
-    if (existing) {
-      return { error: strings.shift.alreadyOpenError };
-    }
-
     const [business] = await db
       .select({ timezone: businesses.timezone })
       .from(businesses)
@@ -232,6 +394,20 @@ export async function openShiftWithDb(
       .where(and(eq(outlets.id, data.outletId), eq(outlets.businessId, businessId)));
     if (!business || !outlet) {
       return { error: strings.common.unexpectedError };
+    }
+
+    // Diambil LEBIH DULU (bukan sekadar "ada shift open -> tolak") supaya
+    // shift BASI (businessDate sudah bukan hari ini) TIDAK menghalangi
+    // shift baru dibuka -- itu justru jalan keluarnya (§14 prasyarat
+    // shift, 13 September 2026). Shift yang sedang mid-close
+    // (countedCash terkunci) TETAP menghalangi -- itu proses aktif hari
+    // ini, tidak boleh dilewati begitu saja dengan buka shift baru.
+    const existing = await getOpenShiftForDevice(db, businessId, data.deviceId);
+    const existingIssue = existing
+      ? checkShiftSellability(existing, business.timezone, outlet.dayCutoffTime)
+      : "no_shift";
+    if (existingIssue === null || existingIssue === "closing_in_progress") {
+      return { error: strings.shift.alreadyOpenError };
     }
 
     // verifyCashierPin() dari lib/auth/pin.ts (T07) -- belum pernah dipakai
@@ -732,4 +908,331 @@ export async function closeCashlessShiftWithDb(
     console.error("closeCashlessShiftWithDb gagal:", err);
     return { error: strings.common.unexpectedError };
   }
+}
+
+// ---------------------------------------------------------------------
+// Manajer menutup shift orang lain -- §14 prasyarat shift (13 September
+// 2026, temuan CEO). Shift basi (lihat checkShiftSellability) tidak lagi
+// bisa dipakai jualan, tapi tetap status='open' sampai SESEORANG
+// menutupnya -- ini jalan itu, untuk shift yang pemiliknya sendiri sudah
+// tidak bisa/tidak mungkin lagi menutupnya (mis. sudah pulang semalam).
+// ---------------------------------------------------------------------
+
+export const forceCloseShiftSchema = z.object({
+  shiftId: z.string().uuid(),
+  reason: z.string().min(1),
+});
+
+export type ForceCloseShiftResult = {
+  error?: string;
+  success?: { closedAt: string; needsReview: boolean };
+};
+
+/**
+ * Menutup shift MILIK ORANG LAIN. Alasan WAJIB, dicatat ke audit_logs
+ * (siapa menutup shift siapa, kapan, kenapa) -- bukan cuma disimpan di
+ * shifts.note. Izin dicek di Server Action pembungkus (shift.reconcile,
+ * owner/manajer/akuntan -- lihat lib/auth/permissions.ts, izin yang
+ * SUDAH ADA, tidak pernah dipasang ke mana pun sebelum ini).
+ *
+ * Kas TIDAK PERNAH dihitung di sini, bahkan untuk outlet bertunai --
+ * manajer yang menutup dari jauh belum tentu tahu isi laci kas outlet
+ * itu. Outlet CASHLESS: langsung selesai (tidak ada apa pun untuk
+ * direkonsiliasi). Outlet BERTUNAI: forceClosedAt menandai "perlu
+ * ditinjau" sampai reconcileForceClosedShiftWithDb() dipanggil
+ * belakangan oleh siapa pun yang tahu isi laci kasnya.
+ */
+export async function forceCloseShiftWithDb(
+  db: Db,
+  businessId: string,
+  actingUserId: string,
+  rawInput: unknown
+): Promise<ForceCloseShiftResult> {
+  const parsed = forceCloseShiftSchema.safeParse(rawInput);
+  if (!parsed.success) {
+    return { error: parsed.error.issues[0]?.message ?? strings.common.unexpectedError };
+  }
+  const data = parsed.data;
+
+  try {
+    const [shift] = await db
+      .select()
+      .from(shifts)
+      .where(and(eq(shifts.id, data.shiftId), eq(shifts.businessId, businessId)));
+    if (!shift) {
+      return { error: strings.common.unexpectedError };
+    }
+    if (shift.status !== "open") {
+      return { error: strings.shift.alreadyClosedError };
+    }
+
+    const [outlet] = await db
+      .select({ cashEnabled: outlets.cashEnabled })
+      .from(outlets)
+      .where(eq(outlets.id, shift.outletId));
+    if (!outlet) {
+      return { error: strings.common.unexpectedError };
+    }
+
+    const now = new Date();
+    const needsReview = outlet.cashEnabled;
+
+    const updated = await db
+      .update(shifts)
+      .set({
+        status: "closed",
+        closedAt: now,
+        forceClosedAt: now,
+        note: data.reason,
+      })
+      .where(and(eq(shifts.id, data.shiftId), eq(shifts.status, "open")))
+      .returning({ id: shifts.id });
+    if (updated.length === 0) {
+      return { error: strings.shift.alreadyClosedError };
+    }
+
+    await db.insert(auditLogs).values({
+      id: generateId(),
+      businessId,
+      outletId: shift.outletId,
+      // employees.id shift yang DITUTUP (bukan yang menutup) -- itu FK
+      // valid ke employees, manajer yang menutup (Supabase Auth,
+      // profiles.id) bukan employees.id sehingga ditaruh di metadata,
+      // bukan dipaksa ke kolom employeeId.
+      employeeId: shift.employeeId,
+      action: "shift_force_closed",
+      refType: "shift",
+      refId: shift.id,
+      reason: data.reason,
+      metadata: {
+        closedByProfileId: actingUserId,
+        shiftBusinessDate: shift.businessDate,
+        needsReview,
+      },
+      createdAt: now,
+    });
+
+    return { success: { closedAt: now.toISOString(), needsReview } };
+  } catch (err) {
+    console.error("forceCloseShiftWithDb gagal:", err);
+    return { error: strings.common.unexpectedError };
+  }
+}
+
+export const reconcileForceClosedShiftSchema = z.object({
+  shiftId: z.string().uuid(),
+  countedCash: z.string(),
+});
+
+export type ReconcileForceClosedShiftResult = {
+  error?: string;
+  success?: {
+    countedCash: string;
+    expectedCash: string;
+    cashVariance: string;
+    tolerance: string;
+    requiresReason: boolean;
+    reconciled: boolean;
+  };
+};
+
+/**
+ * Melengkapi rekonsiliasi kas shift yang sebelumnya ditutup paksa TANPA
+ * hitungan kas (forceCloseShiftWithDb, outlet bertunai). Pola SAMA
+ * PERSIS submitCountedCashWithDb (write-once, guard atomik di WHERE),
+ * bedanya shift ini sudah status='closed' (bukan 'open') menunggu kas.
+ * Kalau selisih masih dalam toleransi, langsung 'reconciled' di sini.
+ * Kalau di luar toleransi, tetap 'closed' menunggu
+ * confirmForceClosedReconciliationWithDb() dengan alasan tambahan --
+ * pola sama dua-langkah confirmShiftCloseWithDb.
+ */
+export async function reconcileForceClosedShiftWithDb(
+  db: Db,
+  businessId: string,
+  rawInput: unknown
+): Promise<ReconcileForceClosedShiftResult> {
+  const parsed = reconcileForceClosedShiftSchema.safeParse(rawInput);
+  if (!parsed.success) {
+    return { error: strings.common.unexpectedError };
+  }
+  const data = parsed.data;
+
+  try {
+    const [shift] = await db
+      .select()
+      .from(shifts)
+      .where(and(eq(shifts.id, data.shiftId), eq(shifts.businessId, businessId)));
+    if (!shift) {
+      return { error: strings.common.unexpectedError };
+    }
+    if (shift.status !== "closed" || shift.forceClosedAt === null) {
+      return { error: strings.shift.notAwaitingReconciliationError };
+    }
+    if (shift.countedCash !== null) {
+      return { error: strings.shift.countedCashAlreadySetError };
+    }
+
+    const [outlet] = await db
+      .select({ cashVarianceTolerance: outlets.cashVarianceTolerance })
+      .from(outlets)
+      .where(eq(outlets.id, shift.outletId));
+    if (!outlet) {
+      return { error: strings.common.unexpectedError };
+    }
+
+    const [cashPayments, changeGiven, cashIn, cashOut, cashRefunds] = await Promise.all([
+      getCashPaymentsTotal(db, shift.id),
+      getChangeGivenTotal(db, shift.id),
+      getCashMovementsTotal(db, shift.id, "cash_in"),
+      getCashMovementsTotal(db, shift.id, "cash_out"),
+      getCashRefundsTotal(db, shift.id),
+    ]);
+
+    const countedCash = new Decimal(data.countedCash);
+    const { expectedCash, cashVariance } = calculateShiftReconciliation({
+      openingCash: new Decimal(shift.openingCash),
+      cashPayments,
+      changeGiven,
+      cashIn,
+      cashOut,
+      cashRefunds,
+      countedCash,
+    });
+
+    const tolerance = new Decimal(outlet.cashVarianceTolerance);
+    const requiresReason = cashVariance.abs().greaterThan(tolerance);
+
+    const updated = await db
+      .update(shifts)
+      .set({
+        countedCash: countedCash.toFixed(2),
+        expectedCash: expectedCash.toFixed(2),
+        cashVariance: cashVariance.toFixed(2),
+        ...(requiresReason ? {} : { status: "reconciled" as const }),
+      })
+      .where(and(eq(shifts.id, shift.id), eq(shifts.status, "closed"), isNull(shifts.countedCash)))
+      .returning({ id: shifts.id });
+    if (updated.length === 0) {
+      return { error: strings.shift.countedCashAlreadySetError };
+    }
+
+    if (!requiresReason) {
+      await insertShiftReconciledAuditLog(db, {
+        businessId,
+        shift,
+        countedCash,
+        expectedCash,
+        cashVariance,
+        reason: null,
+      });
+    }
+
+    return {
+      success: {
+        countedCash: countedCash.toFixed(2),
+        expectedCash: expectedCash.toFixed(2),
+        cashVariance: cashVariance.toFixed(2),
+        tolerance: tolerance.toFixed(2),
+        requiresReason,
+        reconciled: !requiresReason,
+      },
+    };
+  } catch (err) {
+    console.error("reconcileForceClosedShiftWithDb gagal:", err);
+    return { error: strings.common.unexpectedError };
+  }
+}
+
+export const confirmForceClosedReconciliationSchema = z.object({
+  shiftId: z.string().uuid(),
+  reason: z.string().min(1),
+});
+
+export type ConfirmForceClosedReconciliationResult = { error?: string; success?: { reconciledAt: string } };
+
+/**
+ * Dipakai HANYA untuk melengkapi shift force-closed yang selisih kasnya
+ * di luar toleransi (reconcileForceClosedShiftWithDb sudah mengunci
+ * counted_cash tapi belum pindah ke 'reconciled'). Sama persis pola
+ * confirmShiftCloseWithDb -- TIDAK PERNAH menyentuh counted_cash/
+ * expected_cash/cash_variance lagi, cuma alasan lalu memindahkan status.
+ */
+export async function confirmForceClosedReconciliationWithDb(
+  db: Db,
+  businessId: string,
+  rawInput: unknown
+): Promise<ConfirmForceClosedReconciliationResult> {
+  const parsed = confirmForceClosedReconciliationSchema.safeParse(rawInput);
+  if (!parsed.success) {
+    return { error: strings.common.unexpectedError };
+  }
+  const data = parsed.data;
+
+  try {
+    const [shift] = await db
+      .select()
+      .from(shifts)
+      .where(and(eq(shifts.id, data.shiftId), eq(shifts.businessId, businessId)));
+    if (!shift) {
+      return { error: strings.common.unexpectedError };
+    }
+    if (shift.status !== "closed" || shift.forceClosedAt === null) {
+      return { error: strings.shift.notAwaitingReconciliationError };
+    }
+    if (shift.countedCash === null) {
+      return { error: strings.shift.countedCashRequiredError };
+    }
+
+    const updated = await db
+      .update(shifts)
+      .set({ status: "reconciled" })
+      .where(and(eq(shifts.id, data.shiftId), eq(shifts.status, "closed")))
+      .returning({ id: shifts.id });
+    if (updated.length === 0) {
+      return { error: strings.shift.alreadyClosedError };
+    }
+
+    await insertShiftReconciledAuditLog(db, {
+      businessId,
+      shift,
+      countedCash: new Decimal(shift.countedCash),
+      expectedCash: new Decimal(shift.expectedCash ?? "0"),
+      cashVariance: new Decimal(shift.cashVariance ?? "0"),
+      reason: data.reason,
+    });
+
+    return { success: { reconciledAt: new Date().toISOString() } };
+  } catch (err) {
+    console.error("confirmForceClosedReconciliationWithDb gagal:", err);
+    return { error: strings.common.unexpectedError };
+  }
+}
+
+async function insertShiftReconciledAuditLog(
+  db: Db,
+  params: {
+    businessId: string;
+    shift: { id: string; outletId: string; employeeId: string };
+    countedCash: Decimal;
+    expectedCash: Decimal;
+    cashVariance: Decimal;
+    reason: string | null;
+  }
+): Promise<void> {
+  await db.insert(auditLogs).values({
+    id: generateId(),
+    businessId: params.businessId,
+    outletId: params.shift.outletId,
+    employeeId: params.shift.employeeId,
+    action: "shift_reconciled",
+    refType: "shift",
+    refId: params.shift.id,
+    reason: params.reason,
+    metadata: {
+      countedCash: params.countedCash.toFixed(2),
+      expectedCash: params.expectedCash.toFixed(2),
+      cashVariance: params.cashVariance.toFixed(2),
+    },
+    createdAt: new Date(),
+  });
 }

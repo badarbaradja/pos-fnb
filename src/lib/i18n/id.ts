@@ -750,6 +750,8 @@ export const id = {
     changeDue: "Kembalian",
     insufficientPayment: "Pembayaran kurang dari total tagihan",
     noActiveShiftError: "Tidak ada shift terbuka untuk perangkat ini. Buka shift dulu.",
+    shiftClosingInProgressError: "Shift ini sedang dalam proses tutup (menunggu alasan selisih kas). Selesaikan penutupannya dulu.",
+    staleShiftError: "Shift kemarin belum ditutup. Buka shift baru dulu.",
     barangDuplikatDiKeranjangError: "Barang yang sama tidak bisa ada dua kali di satu keranjang -- ini barang unik satu potong.",
     barangTidakSiapJualError: "Barang {kode} sudah terjual atau belum ditandai siap jual -- tidak bisa dijual lagi.",
     barangSudahTerjualSaatBayarError: "Salah satu barang di keranjang baru saja terjual duluan (kemungkinan kasir lain memindainya bersamaan). Keluarkan dari keranjang lalu coba lagi.",
@@ -780,6 +782,7 @@ export const id = {
   shift: {
     openTitle: "Buka Shift",
     openHint: "Masukkan kode karyawan, PIN, dan modal awal untuk membuka shift.",
+    staleShiftHint: "Shift kemarin belum ditutup dan sudah tidak bisa dipakai jualan lagi -- buka shift baru untuk hari ini. Shift lama akan ditinjau manajer.",
     employeeCodeLabel: "Kode Karyawan",
     pinLabel: "PIN",
     openingCashLabel: "Modal Awal (Rp)",
@@ -844,6 +847,24 @@ export const id = {
     summaryOpeningCash: "Modal Awal",
     summaryPrintButton: "Cetak Ringkasan",
     backToPos: "Kembali ke Kasir",
+
+    // §14 prasyarat shift (13 September 2026) -- manajer menutup shift
+    // orang lain, lihat forceCloseShiftWithDb/reconcileForceClosedShiftWithDb.
+    notAwaitingReconciliationError: "Shift ini bukan shift yang ditutup paksa dan menunggu rekonsiliasi.",
+    forceCloseButton: "Tutup Paksa",
+    forceCloseDialogTitle: "Tutup Paksa Shift {employee}",
+    forceCloseDialogHint: "Dipakai untuk shift yang tertinggal terbuka dan pemiliknya sudah tidak bisa menutupnya sendiri. Kas TIDAK dihitung sekarang -- outlet bertunai akan ditandai perlu ditinjau.",
+    forceCloseReasonLabel: "Alasan (wajib)",
+    forceCloseReasonPlaceholder: "mis. shift kemarin malam tidak ditutup, karyawan sudah pulang",
+    forceCloseSubmitButton: "Tutup Paksa",
+    forceCloseSuccess: "Shift ditutup paksa.",
+    needsReviewBadge: "Perlu Ditinjau",
+    needsReviewHint: "Ditutup paksa tanpa hitungan kas -- hitung kas laci outlet ini untuk menyelesaikan.",
+    reconcileButton: "Hitung Kas & Selesaikan",
+    reconcileDialogTitle: "Hitung Kas -- Shift {employee}",
+    reconcileSubmitButton: "Hitung & Selesaikan",
+    reconcileSuccess: "Rekonsiliasi selesai.",
+    staleShiftListLabel: "Basi (belum ditutup)",
   },
   receipt: {
     reprintBadge: "CETAK ULANG",

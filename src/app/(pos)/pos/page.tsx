@@ -1,9 +1,11 @@
 import { redirect } from "next/navigation";
+import { eq } from "drizzle-orm";
 import { createServerSupabaseClient } from "@/lib/auth/supabase";
 import { requirePermissionDb } from "@/lib/auth/permissions";
+import { businesses } from "@/lib/db/schema";
 import { PosScreen } from "@/components/pos/pos-screen";
 import { getPosCatalog } from "./get-pos-catalog";
-import { getOpenShiftForDevice, isShiftSellable } from "@/lib/pos/shift";
+import { checkShiftSellability, getOpenShiftForDevice } from "@/lib/pos/shift";
 import { getPairedDevice } from "@/lib/pos/device-pairing";
 
 export default async function PosPage() {
@@ -40,10 +42,27 @@ export default async function PosPage() {
     if (!shift) {
       redirect("/pos/shift/open");
     }
-    if (!isShiftSellable(shift)) {
+
+    const [business] = await db
+      .select({ timezone: businesses.timezone })
+      .from(businesses)
+      .where(eq(businesses.id, businessId));
+    const shiftIssue = checkShiftSellability(
+      shift,
+      business?.timezone ?? "Asia/Jakarta",
+      paired.outlet.dayCutoffTime
+    );
+    if (shiftIssue === "closing_in_progress") {
       // counted_cash sudah terkunci (sedang proses tutup) -- tidak boleh
       // jualan lagi sampai proses tutup itu selesai.
       redirect("/pos/shift/close");
+    }
+    if (shiftIssue === "stale") {
+      // businessDate shift sudah bukan hari ini (§14 prasyarat shift, 13
+      // September 2026) -- shift lama tertinggal terbuka, TIDAK boleh
+      // menyerap transaksi baru. Arahkan ke layar buka shift yang sama,
+      // halaman itu sendiri yang menampilkan pesan jelasnya.
+      redirect("/pos/shift/open");
     }
 
     return (

@@ -23,7 +23,7 @@ import { calculateOrder, type CalcLine, type CalcSettings } from "@/lib/calc/ord
 import { assertRowsAffected } from "@/lib/db/errors";
 import { businessDate } from "@/lib/utils/business-date";
 import { generateId } from "@/lib/utils/id";
-import { getOpenShiftForDevice, isShiftSellable } from "@/lib/pos/shift";
+import { checkShiftSellability, getOpenShiftForDevice, getShiftSellabilityErrorMessage } from "@/lib/pos/shift";
 import { id as strings } from "@/lib/i18n/id";
 
 /**
@@ -149,13 +149,17 @@ export async function payOrderWithDb(
     // Diturunkan dari deviceId yang sudah divalidasi di atas (bukan dari
     // input klien -- "tidak percaya angka dari klien", sama prinsipnya
     // dengan field lain di fungsi ini). Kalau device sedang tidak punya
-    // shift yang bisa dipakai jualan (belum ada shift, atau shift sudah
-    // masuk proses tutup / counted_cash terkunci), pembayaran ditolak --
-    // pertahanan berlapis, bukan cuma andalkan gate UI di pos/page.tsx.
-    const activeShift = await getOpenShiftForDevice(db, businessId, data.deviceId);
-    if (!isShiftSellable(activeShift)) {
-      return { error: strings.pos.noActiveShiftError };
+    // shift yang bisa dipakai jualan (belum ada shift, shift sudah masuk
+    // proses tutup / counted_cash terkunci, atau shift-nya basi --
+    // businessDate bukan hari ini lagi, §14 prasyarat shift 13 September
+    // 2026), pembayaran ditolak -- pertahanan berlapis, bukan cuma
+    // andalkan gate UI di pos/page.tsx.
+    const rawActiveShift = await getOpenShiftForDevice(db, businessId, data.deviceId);
+    const sellabilityIssue = checkShiftSellability(rawActiveShift, business.timezone, outlet.dayCutoffTime);
+    if (sellabilityIssue !== null) {
+      return { error: getShiftSellabilityErrorMessage(sellabilityIssue) };
     }
+    const activeShift = rawActiveShift!;
 
     // --- Fetch ulang produk/varian/modifier/harga dari DB (bukan dari klien) ---
     const productIds = [...new Set(data.lines.map((l) => l.productId))];

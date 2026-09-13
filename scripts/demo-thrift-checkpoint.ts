@@ -300,8 +300,12 @@ async function main() {
   } else {
     console.log(`[shift] sudah terbuka untuk ${shift.employeeName} -- dibiarkan terbuka (bukan milik skrip ini)`);
   }
-  if (!shift || !isShiftSellable(shift)) {
-    throw new Error("Shift tidak dalam kondisi bisa jualan (sedang proses tutup?).");
+  const [demoBusiness] = await db
+    .select({ timezone: businesses.timezone })
+    .from(businesses)
+    .where(eq(businesses.id, businessId));
+  if (!shift || !isShiftSellable(shift, demoBusiness?.timezone ?? "Asia/Jakarta", outlet!.dayCutoffTime)) {
+    throw new Error("Shift tidak dalam kondisi bisa jualan (sedang proses tutup, atau basi?).");
   }
   const shiftId = shift.id;
 

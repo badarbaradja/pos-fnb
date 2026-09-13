@@ -3,9 +3,9 @@ import { and, eq } from "drizzle-orm";
 import { createServerSupabaseClient } from "@/lib/auth/supabase";
 import { requirePermissionDb } from "@/lib/auth/permissions";
 import { getPairedDevice } from "@/lib/pos/device-pairing";
-import { getOpenShiftForDevice, isShiftSellable } from "@/lib/pos/shift";
+import { checkShiftSellability, getOpenShiftForDevice } from "@/lib/pos/shift";
 import { getLabelSettingsWithDb } from "@/lib/labels/manage";
-import { barang, pemilik } from "@/lib/db/schema";
+import { barang, businesses, pemilik } from "@/lib/db/schema";
 import { LabelPrintArea } from "@/components/barang/label-print-area";
 import { Code128DebugPanel } from "@/components/barcode/code128-debug-panel";
 import { id as strings } from "@/lib/i18n/id";
@@ -40,8 +40,21 @@ export default async function ThriftLabelPage({
     if (!shift) {
       redirect("/pos/shift/open");
     }
-    if (!isShiftSellable(shift)) {
+
+    const [business] = await db
+      .select({ timezone: businesses.timezone })
+      .from(businesses)
+      .where(eq(businesses.id, businessId));
+    const shiftIssue = checkShiftSellability(
+      shift,
+      business?.timezone ?? "Asia/Jakarta",
+      paired.outlet.dayCutoffTime
+    );
+    if (shiftIssue === "closing_in_progress") {
       redirect("/pos/shift/close");
+    }
+    if (shiftIssue === "stale") {
+      redirect("/pos/shift/open");
     }
     if (shift.employeeRole !== "manager" && shift.employeeRole !== "owner") {
       redirect("/pos/thrift");
