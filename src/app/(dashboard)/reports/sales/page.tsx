@@ -1,6 +1,7 @@
 import { and, asc, eq } from "drizzle-orm";
 import { createServerSupabaseClient } from "@/lib/auth/supabase";
 import { requirePermissionDb } from "@/lib/auth/permissions";
+import { intersectOutletScope, outletScopeCondition } from "@/lib/auth/outlet-scope";
 import { businesses, outlets } from "@/lib/db/schema";
 import {
   getSalesByCashier,
@@ -39,7 +40,25 @@ export default async function SalesReportPage({
   const params = await searchParams;
 
   const supabase = await createServerSupabaseClient();
-  const { db, closeDb, businessId } = await requirePermissionDb(supabase, "report.sales");
+  const { db, closeDb, businessId, allowedOutletIds } = await requirePermissionDb(supabase, "report.sales");
+
+  // Pembatasan akses per outlet, Tahap 3 (13 September 2026, §24) --
+  // array KOSONG berarti tidak ada akses ke outlet manapun. Pesan
+  // eksplisit, bukan halaman kosong yang terlihat sama dengan "belum
+  // ada transaksi" -- keputusan CEO, sama pola Dashboard.
+  if (allowedOutletIds !== null && allowedOutletIds.length === 0) {
+    await closeDb();
+    return (
+      <div className="flex flex-col gap-6">
+        <div>
+          <h1 className="text-xl font-semibold">{strings.reports.title}</h1>
+        </div>
+        <p className="rounded-lg border border-destructive/50 bg-destructive/10 p-4 text-sm text-destructive">
+          {strings.common.noOutletAccess}
+        </p>
+      </div>
+    );
+  }
 
   try {
     const [business] = await db
@@ -48,10 +67,21 @@ export default async function SalesReportPage({
       .where(eq(businesses.id, businessId));
     const timezone = business?.timezone ?? "Asia/Jakarta";
 
+    // outletRows dipakai membangun dropdown filter di bawah -- SUDAH
+    // disaring allowedOutletIds di sini, supaya dropdown TIDAK PERNAH
+    // menampilkan outlet yang nanti ditolak server (keputusan CEO:
+    // dropdown yang menampilkan outlet terlarang lalu ditolak itu
+    // membingungkan, lebih baik tidak muncul sama sekali).
     const outletRows = await db
       .select({ id: outlets.id, name: outlets.name, dayCutoffTime: outlets.dayCutoffTime })
       .from(outlets)
-      .where(and(eq(outlets.businessId, businessId), eq(outlets.isActive, true)))
+      .where(
+        and(
+          eq(outlets.businessId, businessId),
+          eq(outlets.isActive, true),
+          outletScopeCondition(allowedOutletIds, outlets.id)
+        )
+      )
       .orderBy(asc(outlets.createdAt));
 
     // Default rentang tanggal = business_date "hari ini", dihitung dari
@@ -68,7 +98,13 @@ export default async function SalesReportPage({
     const search = params.q?.trim() ?? "";
     const page = Math.max(1, Number(params.page) || 1);
 
-    const filter: SalesReportFilter = { businessId, outletId, startDate, endDate };
+    // Filter dropdown milik halaman ini (satu outlet atau "semua") DAN
+    // allowedOutletIds membership WAJIB berlaku sekaligus -- outletId
+    // yang diketik langsung di URL untuk outlet di luar cakupan
+    // (bukan cuma dipilih dari dropdown) otomatis diirisan jadi array
+    // kosong di sini, bukan diam-diam diloloskan.
+    const effectiveOutletIds = intersectOutletScope(allowedOutletIds, outletId ? [outletId] : null);
+    const filter: SalesReportFilter = { businessId, outletId: effectiveOutletIds, startDate, endDate };
 
     const [
       summary,
