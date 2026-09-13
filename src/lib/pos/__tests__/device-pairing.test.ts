@@ -40,6 +40,8 @@ describe.skipIf(!hasEnv)("T22e — pairDeviceWithDb", () => {
   let deviceId: string;
   let otherBusinessId: string;
   let otherDeviceId: string;
+  let sameBusinessOtherOutletId: string;
+  let sameBusinessOtherOutletDeviceId: string;
 
   beforeAll(async () => {
     const [business] = await db
@@ -96,6 +98,23 @@ describe.skipIf(!hasEnv)("T22e — pairDeviceWithDb", () => {
       })
       .returning({ id: devices.id });
     otherDeviceId = otherDevice!.id;
+
+    const [sameBusinessOtherOutlet] = await db
+      .insert(outlets)
+      .values({ businessId, brandId: brand!.id, code: "DP3", name: `${PREFIX}_outlet_2` })
+      .returning({ id: outlets.id });
+    sameBusinessOtherOutletId = sameBusinessOtherOutlet!.id;
+
+    const [sameBusinessOtherOutletDevice] = await db
+      .insert(devices)
+      .values({
+        businessId,
+        outletId: sameBusinessOtherOutletId,
+        serialNumber: "DPDEV3",
+        name: "Kasir Uji Pairing Outlet 2",
+      })
+      .returning({ id: devices.id });
+    sameBusinessOtherOutletDeviceId = sameBusinessOtherOutletDevice!.id;
   });
 
   afterAll(async () => {
@@ -117,13 +136,13 @@ describe.skipIf(!hasEnv)("T22e — pairDeviceWithDb", () => {
   });
 
   it("device milik bisnis lain DITOLAK dengan pesan jelas", async () => {
-    const result = await pairDeviceWithDb(db, businessId, otherDeviceId);
+    const result = await pairDeviceWithDb(db, businessId, null, otherDeviceId);
     expect(result.error).toBeTruthy();
     expect(result.success).toBeUndefined();
   });
 
   it("device valid TANPA shift terbuka: berhasil, TANPA peringatan, last_paired_at terisi", async () => {
-    const result = await pairDeviceWithDb(db, businessId, deviceId);
+    const result = await pairDeviceWithDb(db, businessId, null, deviceId);
     expect(result.success).toBeTruthy();
     expect(result.success!.warning).toBeUndefined();
     expect(result.success!.outlet.id).toBe(outletId);
@@ -153,10 +172,31 @@ describe.skipIf(!hasEnv)("T22e — pairDeviceWithDb", () => {
     });
     expect(openResult.success).toBeTruthy();
 
-    const result = await pairDeviceWithDb(db, businessId, deviceId);
+    const result = await pairDeviceWithDb(db, businessId, null, deviceId);
     expect(result.success).toBeTruthy();
     expect(result.success!.warning).toBeTruthy();
     expect(result.success!.warning).toContain(`${PREFIX}_DPEMP`);
     expect(result.success!.warning).toMatch(/shift terbuka/i);
+  });
+
+  describe("Pembatasan akses per outlet, Tahap 4 (13 September 2026, §27) -- ditambahkan proaktif", () => {
+    it("allowedOutletIds TIDAK memuat outlet device ini -- DITOLAK, cookie tidak pernah disiapkan untuk dipasang", async () => {
+      const result = await pairDeviceWithDb(db, businessId, [outletId], sameBusinessOtherOutletDeviceId);
+      expect(result.error).toBeTruthy();
+      expect(result.success).toBeUndefined();
+
+      const [row] = await db.select().from(devices).where(eq(devices.id, sameBusinessOtherOutletDeviceId));
+      expect(row?.lastPairedAt).toBeNull(); // tidak pernah ditulis
+    });
+
+    it("allowedOutletIds memuat outlet device ini -- berhasil", async () => {
+      const result = await pairDeviceWithDb(db, businessId, [sameBusinessOtherOutletId], sameBusinessOtherOutletDeviceId);
+      expect(result.success).toBeTruthy();
+    });
+
+    it("allowedOutletIds array KOSONG -- DITOLAK juga", async () => {
+      const result = await pairDeviceWithDb(db, businessId, [], deviceId);
+      expect(result.error).toBeTruthy();
+    });
   });
 });

@@ -4,6 +4,7 @@ import type { UserDbHandle } from "@/lib/db/client";
 import { devices } from "@/lib/db/schema";
 import { assertRowsAffected, isUniqueViolation } from "@/lib/db/errors";
 import { generateId } from "@/lib/utils/id";
+import { isOutletAllowed, type OutletScope } from "@/lib/auth/outlet-scope";
 import { id as strings } from "@/lib/i18n/id";
 
 /**
@@ -46,6 +47,7 @@ export type DeviceActionResult = {
 export async function createDeviceWithDb(
   db: Db,
   businessId: string,
+  allowedOutletIds: OutletScope,
   rawInput: unknown
 ): Promise<DeviceActionResult> {
   const parsed = createDeviceSchema.safeParse(rawInput);
@@ -53,6 +55,10 @@ export async function createDeviceWithDb(
     return { error: parsed.error.issues[0]?.message ?? strings.common.unexpectedError };
   }
   const data = parsed.data;
+
+  if (!isOutletAllowed(allowedOutletIds, data.outletId)) {
+    return { error: strings.common.outletAccessDenied };
+  }
 
   const deviceId = generateId();
   try {
@@ -77,6 +83,7 @@ export async function createDeviceWithDb(
 export async function updateDeviceWithDb(
   db: Db,
   businessId: string,
+  allowedOutletIds: OutletScope,
   rawInput: unknown
 ): Promise<DeviceActionResult> {
   const parsed = updateDeviceSchema.safeParse(rawInput);
@@ -84,6 +91,24 @@ export async function updateDeviceWithDb(
     return { error: parsed.error.issues[0]?.message ?? strings.common.unexpectedError };
   }
   const data = parsed.data;
+
+  // Pembatasan akses per outlet, Tahap 4 -- DUA sumber diperiksa
+  // TERPISAH, pola sama employees (kasus jahat CEO: manajer memindahkan
+  // device outlet yang diizinkan ke outlet lain lewat input, ATAU
+  // mengubah device yang SUDAH di outlet lain lewat id langsung).
+  const [current] = await db
+    .select({ outletId: devices.outletId })
+    .from(devices)
+    .where(and(eq(devices.id, data.id), eq(devices.businessId, businessId)));
+  if (!current) {
+    return { error: strings.common.unexpectedError };
+  }
+  if (!isOutletAllowed(allowedOutletIds, current.outletId)) {
+    return { error: strings.common.outletAccessDenied };
+  }
+  if (!isOutletAllowed(allowedOutletIds, data.outletId)) {
+    return { error: strings.common.outletAccessDenied };
+  }
 
   const updated = await db
     .update(devices)

@@ -22,14 +22,14 @@ export type { PairDeviceResult };
  */
 export async function pairDevice(deviceId: unknown): Promise<PairDeviceResult> {
   const supabase = await createServerSupabaseClient();
-  const { db, closeDb, businessId } = await requirePermissionDb(
+  const { db, closeDb, businessId, allowedOutletIds } = await requirePermissionDb(
     supabase,
     "employee.manage"
   );
 
   let result: PairDeviceResult;
   try {
-    result = await pairDeviceWithDb(db, businessId, deviceId);
+    result = await pairDeviceWithDb(db, businessId, allowedOutletIds, deviceId);
   } finally {
     await closeDb();
   }

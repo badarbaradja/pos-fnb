@@ -27,21 +27,21 @@ export async function saveDevice(
   formData: FormData
 ): Promise<DeviceFormState> {
   const supabase = await createServerSupabaseClient();
-  const { db, closeDb, businessId } = await requirePermissionDb(supabase, "employee.manage");
+  const { db, closeDb, businessId, allowedOutletIds } = await requirePermissionDb(supabase, "employee.manage");
 
   const id = formData.get("id");
 
   try {
     let result: DeviceActionResult;
     if (typeof id === "string" && id) {
-      result = await updateDeviceWithDb(db, businessId, {
+      result = await updateDeviceWithDb(db, businessId, allowedOutletIds, {
         id,
         name: formData.get("name"),
         outletId: formData.get("outletId"),
         isActive: formData.get("isActive") === "on",
       });
     } else {
-      result = await createDeviceWithDb(db, businessId, {
+      result = await createDeviceWithDb(db, businessId, allowedOutletIds, {
         name: formData.get("name"),
         outletId: formData.get("outletId"),
         serialNumber: formData.get("serialNumber"),

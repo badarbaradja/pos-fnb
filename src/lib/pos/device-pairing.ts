@@ -5,6 +5,7 @@ import type { UserDbHandle } from "@/lib/db/client";
 import { devices, outlets } from "@/lib/db/schema";
 import { assertRowsAffected } from "@/lib/db/errors";
 import { getOpenShiftForDevice } from "./shift";
+import { isOutletAllowed, type OutletScope } from "@/lib/auth/outlet-scope";
 import { id as strings } from "@/lib/i18n/id";
 
 /**
@@ -120,6 +121,7 @@ export type PairDeviceResult = {
 export async function pairDeviceWithDb(
   db: Db,
   businessId: string,
+  allowedOutletIds: OutletScope,
   rawDeviceId: unknown
 ): Promise<PairDeviceResult> {
   const parsed = z.string().uuid().safeParse(rawDeviceId);
@@ -141,6 +143,17 @@ export async function pairDeviceWithDb(
     );
   if (!row) {
     return { error: strings.pos.setupDeviceNotFound };
+  }
+
+  // Pembatasan akses per outlet, Tahap 4 (13 September 2026, §27) --
+  // DITAMBAHKAN PROAKTIF, di luar "Devices" (create/update) yang
+  // eksplisit diminta CEO: pairing tablet ke device outlet lain
+  // membiarkan manajer yang dibatasi beroperasi (di layar, sebelum PIN
+  // karyawan dicek) seolah dia berwenang atas outlet itu. Ini JALUR
+  // TULIS (baris devices diperbarui di bawah), bukan halaman baca-by-id
+  // -- pesan MANUSIAWI standar Tahap 4, bukan pola notFound() Tahap 3.
+  if (!isOutletAllowed(allowedOutletIds, row.outlet.id)) {
+    return { error: strings.common.outletAccessDenied };
   }
 
   // Peringatan tabrakan (§ catatan Anda no. 2): device yang sama SEDANG

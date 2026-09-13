@@ -68,7 +68,7 @@ describe.skipIf(!hasEnv)("T15c — CRUD perangkat", () => {
   });
 
   it("serial number duplikat di bisnis sama ditolak dengan pesan jelas", async () => {
-    const first = await createDeviceWithDb(db, businessId, {
+    const first = await createDeviceWithDb(db, businessId, null, {
       name: "Kasir 1",
       outletId,
       serialNumber: "DUPSERIAL",
@@ -76,7 +76,7 @@ describe.skipIf(!hasEnv)("T15c — CRUD perangkat", () => {
     });
     expect(first.success).toBeTruthy();
 
-    const second = await createDeviceWithDb(db, businessId, {
+    const second = await createDeviceWithDb(db, businessId, null, {
       name: "Kasir 2",
       outletId,
       serialNumber: "DUPSERIAL",
@@ -87,7 +87,7 @@ describe.skipIf(!hasEnv)("T15c — CRUD perangkat", () => {
   });
 
   it("update nama/outlet/isActive berhasil", async () => {
-    const created = await createDeviceWithDb(db, businessId, {
+    const created = await createDeviceWithDb(db, businessId, null, {
       name: "Sebelum Ubah",
       outletId,
       serialNumber: "UPDME",
@@ -95,7 +95,7 @@ describe.skipIf(!hasEnv)("T15c — CRUD perangkat", () => {
     });
     const deviceId = created.success!.deviceId;
 
-    const result = await updateDeviceWithDb(db, businessId, {
+    const result = await updateDeviceWithDb(db, businessId, null, {
       id: deviceId,
       name: "Sesudah Ubah",
       outletId: otherOutletId,
@@ -109,7 +109,7 @@ describe.skipIf(!hasEnv)("T15c — CRUD perangkat", () => {
   });
 
   it("nonaktifkan device: tetap ada di tabel (bukan dihapus), isActive jadi false", async () => {
-    const created = await createDeviceWithDb(db, businessId, {
+    const created = await createDeviceWithDb(db, businessId, null, {
       name: "Akan Dinonaktifkan",
       outletId,
       serialNumber: "DEACTIVATEME",
@@ -117,7 +117,7 @@ describe.skipIf(!hasEnv)("T15c — CRUD perangkat", () => {
     });
     const deviceId = created.success!.deviceId;
 
-    const result = await updateDeviceWithDb(db, businessId, {
+    const result = await updateDeviceWithDb(db, businessId, null, {
       id: deviceId,
       name: "Akan Dinonaktifkan",
       outletId,
@@ -128,5 +128,91 @@ describe.skipIf(!hasEnv)("T15c — CRUD perangkat", () => {
     const [row] = await db.select().from(devices).where(eq(devices.id, deviceId));
     expect(row).toBeTruthy(); // masih ada, bukan dihapus
     expect(row?.isActive).toBe(false);
+  });
+
+  describe("Pembatasan akses per outlet, Tahap 4 (13 September 2026, §27)", () => {
+    it("createDeviceWithDb: allowedOutletIds TIDAK memuat outlet ini -- DITOLAK, TIDAK ADA baris baru", async () => {
+      const before = await db.select({ id: devices.id }).from(devices).where(eq(devices.outletId, otherOutletId));
+
+      const result = await createDeviceWithDb(db, businessId, [outletId], {
+        name: "Dipaksa ke Outlet Lain",
+        outletId: otherOutletId,
+        serialNumber: "SCOPECREATENO",
+        deviceType: "pos",
+      });
+      expect(result.error).toBeTruthy();
+      expect(result.error).not.toContain(otherOutletId);
+
+      const after = await db.select({ id: devices.id }).from(devices).where(eq(devices.outletId, otherOutletId));
+      expect(after.length).toBe(before.length);
+    });
+
+    it("updateDeviceWithDb: baris SAAT INI di outlet LAIN -- DITOLAK, baris TIDAK BERUBAH, walau input outletId diisi outlet yang diizinkan", async () => {
+      const created = await createDeviceWithDb(db, businessId, null, {
+        name: "Device Outlet Lain",
+        outletId: otherOutletId,
+        serialNumber: "SCOPEUPDCURR",
+        deviceType: "pos",
+      });
+      const deviceId = created.success!.deviceId;
+      const [before] = await db.select().from(devices).where(eq(devices.id, deviceId));
+
+      const result = await updateDeviceWithDb(db, businessId, [outletId], {
+        id: deviceId,
+        name: "DIUBAH PAKSA",
+        outletId, // mencoba "menarik" ke outlet yang diizinkan
+        isActive: true,
+      });
+      expect(result.error).toBeTruthy();
+
+      const [after] = await db.select().from(devices).where(eq(devices.id, deviceId));
+      expect(after?.name).toBe(before?.name);
+      expect(after?.outletId).toBe(otherOutletId); // tidak pernah "ditarik"
+    });
+
+    it("updateDeviceWithDb: baris di outlet yang diizinkan, TAPI input outletId memindahkan ke outlet LAIN -- DITOLAK, baris TETAP di outlet asal", async () => {
+      const created = await createDeviceWithDb(db, businessId, null, {
+        name: "Device Outlet Sendiri",
+        outletId,
+        serialNumber: "SCOPEUPDTARGET",
+        deviceType: "pos",
+      });
+      const deviceId = created.success!.deviceId;
+
+      const result = await updateDeviceWithDb(db, businessId, [outletId], {
+        id: deviceId,
+        name: "Device Outlet Sendiri",
+        outletId: otherOutletId, // mencoba memindahkan keluar
+        isActive: true,
+      });
+      expect(result.error).toBeTruthy();
+
+      const [after] = await db.select().from(devices).where(eq(devices.id, deviceId));
+      expect(after?.outletId).toBe(outletId); // tidak pernah pindah
+    });
+
+    it("allowedOutletIds array KOSONG -- DITOLAK juga (create maupun update)", async () => {
+      const createResult = await createDeviceWithDb(db, businessId, [], {
+        name: "X",
+        outletId,
+        serialNumber: "SCOPEEMPTYCREATE",
+        deviceType: "pos",
+      });
+      expect(createResult.error).toBeTruthy();
+
+      const created = await createDeviceWithDb(db, businessId, null, {
+        name: "Y",
+        outletId,
+        serialNumber: "SCOPEEMPTYUPD",
+        deviceType: "pos",
+      });
+      const updateResult = await updateDeviceWithDb(db, businessId, [], {
+        id: created.success!.deviceId,
+        name: "Y",
+        outletId,
+        isActive: true,
+      });
+      expect(updateResult.error).toBeTruthy();
+    });
   });
 });
