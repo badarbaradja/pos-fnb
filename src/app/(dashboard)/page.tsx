@@ -11,12 +11,13 @@ import {
   getSalesSummary,
   type SalesReportFilter,
 } from "@/lib/db/queries/sales-report";
-import { getOpenShiftsForBusiness } from "@/lib/pos/shift";
+import { getOpenShiftsForBusiness, getShiftsNeedingReview } from "@/lib/pos/shift";
 import { percentChange } from "@/lib/calc/kpi";
 import { businessDate } from "@/lib/utils/business-date";
 import { TodayKpiCards } from "@/components/dashboard/home/kpi-cards";
 import { BrandSummaryCards } from "@/components/dashboard/home/brand-summary-cards";
 import { ShiftStatusList } from "@/components/dashboard/home/shift-status";
+import { ShiftsNeedingReview } from "@/components/dashboard/home/shifts-needing-review";
 import { ProfitPlaceholder } from "@/components/dashboard/home/profit-placeholder";
 import { DashboardDeferredSections } from "@/components/dashboard/home/deferred-sections";
 import { DashboardSkeleton } from "@/components/dashboard/home/dashboard-skeleton";
@@ -45,6 +46,7 @@ export default async function DashboardHomePage({
   let today: string;
   let byBrand: Awaited<ReturnType<typeof getSalesByBrand>>;
   let openShifts: Awaited<ReturnType<typeof getOpenShiftsForBusiness>>;
+  let shiftsNeedingReview: Awaited<ReturnType<typeof getShiftsNeedingReview>>;
 
   try {
     const [business] = await db
@@ -64,9 +66,10 @@ export default async function DashboardHomePage({
       ? businessDate(new Date(), timezone, defaultOutlet.dayCutoffTime)
       : businessDate(new Date(), timezone, "04:00:00");
 
-    [byBrand, openShifts] = await Promise.all([
+    [byBrand, openShifts, shiftsNeedingReview] = await Promise.all([
       getSalesByBrand(db, { businessId, startDate: today, endDate: today }),
       getOpenShiftsForBusiness(db, businessId),
+      getShiftsNeedingReview(db, businessId, timezone),
     ]);
   } catch (err) {
     await closeDb();
@@ -153,6 +156,8 @@ export default async function DashboardHomePage({
       </div>
 
       <BrandSummaryCards rows={byBrand} selectedBrandId={selectedBrandId} />
+
+      <ShiftsNeedingReview shifts={shiftsNeedingReview} />
 
       {brandSummarySection}
 
