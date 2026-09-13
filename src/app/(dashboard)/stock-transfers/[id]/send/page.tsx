@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 import { and, asc, eq } from "drizzle-orm";
 import { createServerSupabaseClient } from "@/lib/auth/supabase";
 import { requirePermissionDb } from "@/lib/auth/permissions";
+import { isOutletAllowed } from "@/lib/auth/outlet-scope";
 import { employees, ingredients, stockTransferItems, stockTransfers } from "@/lib/db/schema";
 import { id as strings } from "@/lib/i18n/id";
 import { SendStockTransferForm, type SendItemOption } from "../../send-form";
@@ -13,7 +14,7 @@ export default async function SendStockTransferPage({
 }) {
   const { id: transferId } = await params;
   const supabase = await createServerSupabaseClient();
-  const { db, closeDb, businessId } = await requirePermissionDb(supabase, "stock.transfer");
+  const { db, closeDb, businessId, allowedOutletIds } = await requirePermissionDb(supabase, "stock.transfer");
 
   let transfer;
   let itemOptions: SendItemOption[];
@@ -23,7 +24,10 @@ export default async function SendStockTransferPage({
       .select()
       .from(stockTransfers)
       .where(and(eq(stockTransfers.id, transferId), eq(stockTransfers.businessId, businessId)));
-    if (!transfer || transfer.status !== "approved") {
+    // Pembatasan akses per outlet, Tahap 4 (13 September 2026, §28) --
+    // gerbang SEND ada di fromOutletId (gudang yang mengirim), digabung
+    // ke notFound() yang sudah ada.
+    if (!transfer || transfer.status !== "approved" || !isOutletAllowed(allowedOutletIds, transfer.fromOutletId)) {
       return notFound();
     }
 

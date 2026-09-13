@@ -17,7 +17,7 @@ loadEnv({ path: [".env.local", ".env"], quiet: true });
 import { and, eq } from "drizzle-orm";
 import { getAdminDb } from "@/lib/db/client";
 import { brands, businesses, outlets, stockTransfers } from "@/lib/db/schema";
-import { outletScopeCondition, outletScopeConditionForTransfer } from "@/lib/auth/outlet-scope";
+import { isOutletAllowed, outletScopeCondition, outletScopeConditionForTransfer } from "@/lib/auth/outlet-scope";
 import type { OutletScope } from "@/lib/auth/outlet-scope";
 
 const hasEnv = Boolean(
@@ -155,6 +155,69 @@ describe.skipIf(!hasEnv)("Pembatasan akses per outlet, Tahap 4 -- Stock Transfer
     it("scope array KOSONG: NOL outlet, bukan semua outlet retail", async () => {
       const rows = await listRequestableOutlets([]);
       expect(rows).toHaveLength(0);
+    });
+  });
+
+  describe("3/5 -- /[id]/send dan /[id]/receive: akses langsung by-id, digabung ke notFound()", () => {
+    let approvedTransferId: string;
+    let sentTransferId: string;
+
+    beforeAll(async () => {
+      const [approved] = await db
+        .insert(stockTransfers)
+        .values({ businessId, fromOutletId: gudangId, toOutletId: outletAId, status: "approved" })
+        .returning({ id: stockTransfers.id });
+      approvedTransferId = approved!.id;
+
+      const [sent] = await db
+        .insert(stockTransfers)
+        .values({ businessId, fromOutletId: gudangId, toOutletId: outletAId, status: "sent" })
+        .returning({ id: stockTransfers.id });
+      sentTransferId = sent!.id;
+    });
+
+    // Baca baris SUNGGUHAN dari DB lalu terapkan PERSIS kondisi if(...)
+    // return notFound() di halaman send/receive -- bukan meniru ulang
+    // isOutletAllowed(), memakai fungsi asli supaya komposisi status+outlet
+    // di halaman benar-benar terbukti, bukan cuma diasumsikan.
+    async function sendPageAllowsAccess(transferId: string, allowedOutletIds: OutletScope): Promise<boolean> {
+      const [transfer] = await db.select().from(stockTransfers).where(eq(stockTransfers.id, transferId));
+      return Boolean(transfer && transfer.status === "approved" && isOutletAllowed(allowedOutletIds, transfer.fromOutletId));
+    }
+    async function receivePageAllowsAccess(transferId: string, allowedOutletIds: OutletScope): Promise<boolean> {
+      const [transfer] = await db.select().from(stockTransfers).where(eq(stockTransfers.id, transferId));
+      return Boolean(transfer && transfer.status === "sent" && isOutletAllowed(allowedOutletIds, transfer.toOutletId));
+    }
+
+    it("data uji terbentuk (transfer approved dan sent)", () => {
+      expect(approvedTransferId).toBeTruthy();
+      expect(sentTransferId).toBeTruthy();
+    });
+
+    it("/send: scope [gudang] (fromOutletId) -- diizinkan", async () => {
+      expect(await sendPageAllowsAccess(approvedTransferId, [gudangId])).toBe(true);
+    });
+
+    it("/send: scope [outletA] (toOutletId, BUKAN gudang) -- DITOLAK (notFound), walau transfer memang ada", async () => {
+      expect(await sendPageAllowsAccess(approvedTransferId, [outletAId])).toBe(false);
+    });
+
+    it("/receive: scope [outletA] (toOutletId) -- diizinkan", async () => {
+      expect(await receivePageAllowsAccess(sentTransferId, [outletAId])).toBe(true);
+    });
+
+    it("/receive: scope [gudang] (fromOutletId, BUKAN outlet peminta) -- DITOLAK", async () => {
+      expect(await receivePageAllowsAccess(sentTransferId, [gudangId])).toBe(false);
+    });
+
+    it("scope array KOSONG -- DITOLAK di kedua halaman", async () => {
+      expect(await sendPageAllowsAccess(approvedTransferId, [])).toBe(false);
+      expect(await receivePageAllowsAccess(sentTransferId, [])).toBe(false);
+    });
+
+    it("scope null (owner/akuntan) -- diizinkan di kedua halaman", async () => {
+      expect(await sendPageAllowsAccess(approvedTransferId, null)).toBe(true);
+      expect(await receivePageAllowsAccess(sentTransferId, null)).toBe(true);
     });
   });
 });

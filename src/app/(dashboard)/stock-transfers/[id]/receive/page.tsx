@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 import { and, asc, eq } from "drizzle-orm";
 import { createServerSupabaseClient } from "@/lib/auth/supabase";
 import { requirePermissionDb } from "@/lib/auth/permissions";
+import { isOutletAllowed } from "@/lib/auth/outlet-scope";
 import { employees, ingredients, stockTransferItems, stockTransfers } from "@/lib/db/schema";
 import { id as strings } from "@/lib/i18n/id";
 import { ReceiveStockTransferForm, type ReceiveItemOption } from "../../receive-form";
@@ -13,7 +14,7 @@ export default async function ReceiveStockTransferPage({
 }) {
   const { id: transferId } = await params;
   const supabase = await createServerSupabaseClient();
-  const { db, closeDb, businessId } = await requirePermissionDb(supabase, "stock.transfer");
+  const { db, closeDb, businessId, allowedOutletIds } = await requirePermissionDb(supabase, "stock.transfer");
 
   let transfer;
   let itemOptions: ReceiveItemOption[];
@@ -23,7 +24,11 @@ export default async function ReceiveStockTransferPage({
       .select()
       .from(stockTransfers)
       .where(and(eq(stockTransfers.id, transferId), eq(stockTransfers.businessId, businessId)));
-    if (!transfer || transfer.status !== "sent") {
+    // Pembatasan akses per outlet, Tahap 4 (13 September 2026, §28) --
+    // gerbang RECEIVE ada di toOutletId (outlet peminta yang menerima),
+    // digabung ke notFound() yang sudah ada (pola sama barang/[id]/label
+    // -- tidak membedakan "transfer tidak ada" dari "di luar cakupan").
+    if (!transfer || transfer.status !== "sent" || !isOutletAllowed(allowedOutletIds, transfer.toOutletId)) {
       return notFound();
     }
 
