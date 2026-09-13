@@ -1299,18 +1299,30 @@ export const orders = pgTable(
     index("orders_active_status_idx")
       .on(t.status)
       .where(sql`${t.status} in ('draft', 'open', 'in_kitchen')`),
+    // Pembatasan akses per outlet, Tahap 5 (13 September 2026, §29) --
+    // auth_outlet_ids(business_id) BUKAN auth_business_ids() (fungsi itu
+    // TIDAK disentuh sama sekali). Guard "IS NULL OR" WAJIB di depan --
+    // auth_outlet_ids() balik NULL untuk owner/akuntan (dan membership
+    // yang outlet_ids kolomnya sendiri belum diatur), dan `x = any(NULL)`
+    // di Postgres adalah NULL (ditolak diam-diam di USING/WITH CHECK),
+    // BUKAN "semua diizinkan" seperti maksudnya di app layer -- tanpa
+    // guard ini, owner akan kehilangan SEMUA baris orders tanpa galat
+    // apa pun begitu policy ini dipasang. Array KOSONG (outlet_ids = '{}')
+    // tidak butuh guard tambahan -- `x = any('{}')` sudah terdefinisi
+    // FALSE (bukan NULL), otomatis menolak semua baris, konsisten dengan
+    // outletScopeCondition() kind "none" di app layer.
     pgPolicy("orders_select", {
       for: "select",
-      using: sql`${t.businessId} = any(auth_business_ids())`,
+      using: sql`${t.businessId} = any(auth_business_ids()) and (auth_outlet_ids(${t.businessId}) is null or ${t.outletId} = any(auth_outlet_ids(${t.businessId})))`,
     }),
     pgPolicy("orders_insert", {
       for: "insert",
-      withCheck: sql`${t.businessId} = any(auth_business_ids())`,
+      withCheck: sql`${t.businessId} = any(auth_business_ids()) and (auth_outlet_ids(${t.businessId}) is null or ${t.outletId} = any(auth_outlet_ids(${t.businessId})))`,
     }),
     pgPolicy("orders_update", {
       for: "update",
-      using: sql`${t.businessId} = any(auth_business_ids())`,
-      withCheck: sql`${t.businessId} = any(auth_business_ids())`,
+      using: sql`${t.businessId} = any(auth_business_ids()) and (auth_outlet_ids(${t.businessId}) is null or ${t.outletId} = any(auth_outlet_ids(${t.businessId})))`,
+      withCheck: sql`${t.businessId} = any(auth_business_ids()) and (auth_outlet_ids(${t.businessId}) is null or ${t.outletId} = any(auth_outlet_ids(${t.businessId})))`,
     }),
   ]
 ).enableRLS();
