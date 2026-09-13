@@ -24,9 +24,11 @@ export type LabelBarangData = {
 export function LabelView({
   settings,
   barang,
+  onBarcodeError,
 }: {
   settings: LabelSettingsValue;
   barang: LabelBarangData;
+  onBarcodeError?: (message: string | null) => void;
 }) {
   const widthMm = Number(settings.widthMm);
   const heightMm = Number(settings.heightMm);
@@ -58,7 +60,12 @@ export function LabelView({
         </div>
       ) : null}
       {settings.showBarcode ? (
-        <BarcodeCanvas data={barang.kode} widthMm={barcodeWidthMm} heightMm={barcodeHeightMm} />
+        <BarcodeCanvas
+          data={barang.kode}
+          widthMm={barcodeWidthMm}
+          heightMm={barcodeHeightMm}
+          onEncodeError={onBarcodeError}
+        />
       ) : null}
       <div className="w-full truncate text-center font-mono leading-tight" style={{ fontSize: "1.8mm" }}>
         {barang.kode}

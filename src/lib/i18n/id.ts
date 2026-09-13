@@ -509,6 +509,8 @@ export const id = {
     markDamagedButton: "Tandai Rusak",
     printLabelButton: "Cetak Label",
     alreadySoldError: "Barang ini sudah terjual, statusnya tidak bisa diubah lagi.",
+    barcodeErrorPrefix: "Barcode tidak bisa dibuat: ",
+    printBlockedHint: "Cetak dikunci -- barcode tidak bisa dibuat untuk kode ini. Kode barang ini tidak bisa dicetak ulang jadi label baru.",
   },
   priceTiers: {
     title: "Tingkat Harga",

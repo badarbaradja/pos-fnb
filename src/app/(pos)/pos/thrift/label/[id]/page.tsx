@@ -6,9 +6,8 @@ import { getPairedDevice } from "@/lib/pos/device-pairing";
 import { getOpenShiftForDevice, isShiftSellable } from "@/lib/pos/shift";
 import { getLabelSettingsWithDb } from "@/lib/labels/manage";
 import { barang, pemilik } from "@/lib/db/schema";
-import { LabelView } from "@/components/barang/label-view";
+import { LabelPrintArea } from "@/components/barang/label-print-area";
 import { Code128DebugPanel } from "@/components/barcode/code128-debug-panel";
-import { PrintButton } from "@/components/receipt/print-button";
 import { id as strings } from "@/lib/i18n/id";
 
 /**
@@ -93,24 +92,22 @@ export default async function ThriftLabelPage({
             }
           }
         `}</style>
-        <div id="label-print-area" className="border print:border-0">
-          <LabelView
-            settings={settings}
-            barang={{
-              kode: row.kode,
-              nama: row.nama,
-              ukuran: row.ukuran,
-              hargaJual: row.hargaJual,
-              pemilikKode: row.pemilikKode ?? row.pemilikNama,
-            }}
-          />
-        </div>
-        <div className="flex gap-2 print:hidden">
-          <PrintButton label={strings.barang.printLabelButton} />
-          <a href="/pos/thrift" className="text-sm text-muted-foreground hover:underline self-center">
-            {strings.statistikIta.backToKasir}
-          </a>
-        </div>
+        <LabelPrintArea
+          settings={settings}
+          barang={{
+            kode: row.kode,
+            nama: row.nama,
+            ukuran: row.ukuran,
+            hargaJual: row.hargaJual,
+            pemilikKode: row.pemilikKode ?? row.pemilikNama,
+          }}
+          printButtonLabel={strings.barang.printLabelButton}
+          extraActions={
+            <a href="/pos/thrift" className="text-sm text-muted-foreground hover:underline self-center">
+              {strings.statistikIta.backToKasir}
+            </a>
+          }
+        />
         <div className="print:hidden">
           <Code128DebugPanel kode={row.kode} />
         </div>
