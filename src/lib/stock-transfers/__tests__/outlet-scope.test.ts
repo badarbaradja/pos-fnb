@@ -17,7 +17,7 @@ loadEnv({ path: [".env.local", ".env"], quiet: true });
 import { and, eq } from "drizzle-orm";
 import { getAdminDb } from "@/lib/db/client";
 import { brands, businesses, outlets, stockTransfers } from "@/lib/db/schema";
-import { outletScopeConditionForTransfer } from "@/lib/auth/outlet-scope";
+import { outletScopeCondition, outletScopeConditionForTransfer } from "@/lib/auth/outlet-scope";
 import type { OutletScope } from "@/lib/auth/outlet-scope";
 
 const hasEnv = Boolean(
@@ -118,6 +118,42 @@ describe.skipIf(!hasEnv)("Pembatasan akses per outlet, Tahap 4 -- Stock Transfer
 
     it("scope array KOSONG: NOL transfer, bukan semua transfer", async () => {
       const rows = await listTransfers([]);
+      expect(rows).toHaveLength(0);
+    });
+  });
+
+  describe("2/5 -- dropdown 'outlet peminta' di /stock-transfers/new", () => {
+    async function listRequestableOutlets(allowedOutletIds: OutletScope) {
+      return db
+        .select({ id: outlets.id })
+        .from(outlets)
+        .where(
+          and(
+            eq(outlets.businessId, businessId),
+            eq(outlets.isActive, true),
+            eq(outlets.isCentralKitchen, false),
+            outletScopeCondition(allowedOutletIds, outlets.id)
+          )
+        );
+    }
+
+    it("scope null: KEDUA outlet retail muncul, gudang TETAP tidak ikut (filter isCentralKitchen tidak rusak)", async () => {
+      const rows = await listRequestableOutlets(null);
+      expect(rows.map((r) => r.id).sort()).toEqual([outletAId, outletBId].sort());
+    });
+
+    it("scope [outletA]: CUMA outlet A muncul", async () => {
+      const rows = await listRequestableOutlets([outletAId]);
+      expect(rows.map((r) => r.id)).toEqual([outletAId]);
+    });
+
+    it("scope [gudang] (bukan retail): NOL outlet retail muncul di dropdown", async () => {
+      const rows = await listRequestableOutlets([gudangId]);
+      expect(rows).toHaveLength(0);
+    });
+
+    it("scope array KOSONG: NOL outlet, bukan semua outlet retail", async () => {
+      const rows = await listRequestableOutlets([]);
       expect(rows).toHaveLength(0);
     });
   });

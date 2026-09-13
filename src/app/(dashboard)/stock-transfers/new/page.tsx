@@ -2,6 +2,7 @@ import Link from "next/link";
 import { and, asc, eq } from "drizzle-orm";
 import { createServerSupabaseClient } from "@/lib/auth/supabase";
 import { requirePermissionDb } from "@/lib/auth/permissions";
+import { outletScopeCondition } from "@/lib/auth/outlet-scope";
 import { employees, ingredients, outlets } from "@/lib/db/schema";
 import { getLastRequestForOutlet } from "@/lib/stock-transfers/manage";
 import { id as strings } from "@/lib/i18n/id";
@@ -9,7 +10,21 @@ import { RequestStockTransferForm, type LastRequestLine } from "../request-form"
 
 export default async function NewStockTransferPage() {
   const supabase = await createServerSupabaseClient();
-  const { db, closeDb, businessId } = await requirePermissionDb(supabase, "stock.transfer");
+  const { db, closeDb, businessId, allowedOutletIds } = await requirePermissionDb(supabase, "stock.transfer");
+
+  // Pembatasan akses per outlet, Tahap 4 (13 September 2026, §28) --
+  // dicek SEBELUM query lain apa pun.
+  if (allowedOutletIds !== null && allowedOutletIds.length === 0) {
+    await closeDb();
+    return (
+      <div className="flex flex-col gap-4">
+        <h1 className="text-xl font-semibold">{strings.stockTransfers.requestTitle}</h1>
+        <p className="rounded-lg border border-destructive/50 bg-destructive/10 p-4 text-sm text-destructive">
+          {strings.common.noOutletAccess}
+        </p>
+      </div>
+    );
+  }
 
   let outletRows;
   let ingredientRows;
@@ -17,11 +32,19 @@ export default async function NewStockTransferPage() {
   let hasCentralKitchen: boolean;
   const lastRequestByOutlet: Record<string, LastRequestLine[]> = {};
   try {
+    // Dropdown "outlet peminta" TIDAK PERNAH menampilkan outlet di luar
+    // cakupan (pola sama halaman Tahap 3 lain) -- lubang ini SUDAH
+    // terbuka hari ini sebelum perbaikan ini (dicatat di plan doc §28).
     outletRows = await db
       .select({ id: outlets.id, name: outlets.name })
       .from(outlets)
       .where(
-        and(eq(outlets.businessId, businessId), eq(outlets.isActive, true), eq(outlets.isCentralKitchen, false))
+        and(
+          eq(outlets.businessId, businessId),
+          eq(outlets.isActive, true),
+          eq(outlets.isCentralKitchen, false),
+          outletScopeCondition(allowedOutletIds, outlets.id)
+        )
       )
       .orderBy(asc(outlets.name));
 
