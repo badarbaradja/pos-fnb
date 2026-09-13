@@ -27,6 +27,20 @@ type Db = UserDbHandle["db"];
  * akun tamu SELALU 'cashier' (lihat scripts/demo-thrift-checkpoint.ts),
  * tidak pernah 'manager', jadi tidak perlu pengecekan isSharedAccount
  * terpisah.
+ *
+ * Pembatasan akses per outlet, Tahap 4 (13 September 2026, §27) --
+ * DITEMUKAN PROAKTIF saat memperbaiki saveBarangWithDb, bukan diminta
+ * CEO: identitas di jalur ini BUKAN membership Supabase Auth (lihat
+ * komentar di atas -- gerbangnya sengaja role EMPLOYEE shift, bukan
+ * role dashboard), jadi `allowedOutletIds` dari memberships TIDAK
+ * relevan sama sekali di sini. Skop yang relevan justru lebih sempit
+ * dan lebih pasti: shift ini SATU-SATUNYA outlet yang sah untuk aksi
+ * ini, apa pun outletId yang diklaim `rawInput` (dikirim klien, bisa
+ * disunting). Dipaksa lewat `[shift.outletId]` sebagai allowedOutletIds
+ * ke saveBarangWithDb -- menutup celah nyata: SEBELUM ini, kasir yang
+ * sedang shift di Outlet A bisa mengirim outletId Outlet B di body
+ * request dan barang akan tertambah di Outlet B walau dia fisik/shift
+ * di Outlet A.
  */
 export async function addBarangFromShiftWithDb(
   db: Db,
@@ -35,7 +49,7 @@ export async function addBarangFromShiftWithDb(
   rawInput: unknown
 ): Promise<BarangActionResult> {
   const [shift] = await db
-    .select({ status: shifts.status, employeeRole: employees.role })
+    .select({ status: shifts.status, employeeRole: employees.role, outletId: shifts.outletId })
     .from(shifts)
     .innerJoin(employees, eq(shifts.employeeId, employees.id))
     .where(and(eq(shifts.id, shiftId), eq(shifts.businessId, businessId)));
@@ -47,7 +61,7 @@ export async function addBarangFromShiftWithDb(
     return { error: strings.pos.tambahBarangAksesDitolakError };
   }
 
-  const result = await saveBarangWithDb(db, businessId, rawInput);
+  const result = await saveBarangWithDb(db, businessId, [shift.outletId], rawInput);
   if (result.error || !result.success) {
     return result;
   }

@@ -5,6 +5,7 @@ import { barang, outlets } from "@/lib/db/schema";
 import { assertRowsAffected, isUniqueViolation } from "@/lib/db/errors";
 import { generateId } from "@/lib/utils/id";
 import { generateBarangKode } from "./kode";
+import { isOutletAllowed, type OutletScope } from "@/lib/auth/outlet-scope";
 import { id as strings } from "@/lib/i18n/id";
 
 /**
@@ -48,6 +49,7 @@ export type BarangActionResult = {
 export async function saveBarangWithDb(
   db: Db,
   businessId: string,
+  allowedOutletIds: OutletScope,
   rawInput: unknown
 ): Promise<BarangActionResult> {
   const parsed = saveBarangSchema.safeParse(rawInput);
@@ -57,6 +59,24 @@ export async function saveBarangWithDb(
   const data = parsed.data;
 
   if (data.id) {
+    // Pembatasan akses per outlet, Tahap 4 (13 September 2026, §27) --
+    // outletId BARIS YANG SEDANG DIUBAH dicek di sini (BUKAN data.outletId
+    // dari input -- edit TIDAK PERNAH memindahkan outlet, lihat komentar
+    // di atas file, jadi input outletId tidak relevan untuk cabang ini
+    // sama sekali). Manajer dibatasi ke Outlet A tidak boleh mengedit
+    // barang Outlet B walau cuma ganti harga/nama, walau outletnya sendiri
+    // tidak pernah berubah lewat form ini.
+    const [current] = await db
+      .select({ outletId: barang.outletId })
+      .from(barang)
+      .where(and(eq(barang.id, data.id), eq(barang.businessId, businessId)));
+    if (!current) {
+      return { error: strings.common.unexpectedError };
+    }
+    if (!isOutletAllowed(allowedOutletIds, current.outletId)) {
+      return { error: strings.common.outletAccessDenied };
+    }
+
     // Edit TIDAK menyentuh kode sama sekali -- lihat komentar di atas file.
     const updated = await db
       .update(barang)
@@ -75,6 +95,14 @@ export async function saveBarangWithDb(
       .returning({ id: barang.id, kode: barang.kode });
     assertRowsAffected(updated, "barang");
     return { success: { barangId: data.id, kode: updated[0]!.kode } };
+  }
+
+  // Pembatasan akses per outlet, Tahap 4 -- CREATE, dicek dari
+  // data.outletId (input pengguna, satu-satunya sumber outlet untuk
+  // barang BARU). Dicek SEBELUM query outlet.code di bawah -- jangan
+  // sampai lookup apa pun jalan dulu baru ditolak.
+  if (!isOutletAllowed(allowedOutletIds, data.outletId)) {
+    return { error: strings.common.outletAccessDenied };
   }
 
   // Kode barang berprefiks kode outlet fisiknya -- diambil ULANG dari DB di
@@ -135,6 +163,7 @@ const setStatusSchema = z.object({
 export async function setBarangStatusWithDb(
   db: Db,
   businessId: string,
+  allowedOutletIds: OutletScope,
   rawInput: unknown
 ): Promise<BarangActionResult> {
   const parsed = setStatusSchema.safeParse(rawInput);
@@ -142,6 +171,25 @@ export async function setBarangStatusWithDb(
     return { error: parsed.error.issues[0]?.message ?? strings.common.unexpectedError };
   }
   const { id, status } = parsed.data;
+
+  // Pembatasan akses per outlet, Tahap 4 -- DITAMBAHKAN PROAKTIF (di luar
+  // saveBarangWithDb yang eksplisit diminta CEO): fungsi ini SAMA-SAMA
+  // menerima id barang langsung tanpa outletId, digerbang izin sama
+  // (barang.manage), risikonya identik. Dicek TERPISAH dari WHERE
+  // ne(status,'terjual') di bawah (bukan dilipat jadi satu kondisi) --
+  // supaya pesan errornya benar sesuai alasan sesungguhnya ("di luar
+  // akses Anda" vs "sudah terjual"), bukan salah satu pesan generik yang
+  // membingungkan untuk kasus yang satunya.
+  const [current] = await db
+    .select({ outletId: barang.outletId })
+    .from(barang)
+    .where(and(eq(barang.id, id), eq(barang.businessId, businessId)));
+  if (!current) {
+    return { error: strings.common.unexpectedError };
+  }
+  if (!isOutletAllowed(allowedOutletIds, current.outletId)) {
+    return { error: strings.common.outletAccessDenied };
+  }
 
   const updated = await db
     .update(barang)

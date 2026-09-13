@@ -14,7 +14,7 @@
  *    yang bisa diabaikan pemanggil.
  * 3. Transfer stok (dua kolom outlet) dites terpisah dari kolom tunggal.
  */
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { config as loadEnv } from "dotenv";
 loadEnv({ path: [".env.local", ".env"], quiet: true });
 
@@ -29,6 +29,7 @@ import {
   outletScopeCondition,
   outletScopeConditionForTransfer,
 } from "../outlet-scope";
+import { id as strings } from "@/lib/i18n/id";
 
 describe("intersectOutletScope — fungsi murni, tanpa DB", () => {
   const outletA = generateId();
@@ -89,8 +90,19 @@ describe("isOutletAllowed / assertOutletAllowed — fungsi murni, tanpa DB", () 
     expect(result).toBeUndefined();
   });
 
-  it("pesan error assertOutletAllowed menyertakan context yang diberikan pemanggil (mempermudah debug jalur non-UI)", () => {
-    expect(() => assertOutletAllowed([], outletA, "updateOrderWithDb")).toThrow(/updateOrderWithDb/);
+  it("pesan error assertOutletAllowed SELALU manusiawi (outletAccessDenied), TIDAK PERNAH menyebut context/outlet -- context cuma masuk console.error untuk debug (Tahap 4, 13 September 2026)", () => {
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    try {
+      expect(() => assertOutletAllowed([], outletA, "updateOrderWithDb")).toThrow(
+        strings.common.outletAccessDenied
+      );
+      // Pesan yang DILEMPAR tidak boleh menyebut context sama sekali --
+      // context cuma untuk log server.
+      expect(() => assertOutletAllowed([], outletA, "updateOrderWithDb")).not.toThrow(/updateOrderWithDb/);
+      expect(errorSpy).toHaveBeenCalledWith(expect.stringContaining("updateOrderWithDb"));
+    } finally {
+      errorSpy.mockRestore();
+    }
   });
 });
 

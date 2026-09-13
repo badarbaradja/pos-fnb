@@ -1,5 +1,6 @@
 import { and, inArray, or, sql, type Column, type SQL } from "drizzle-orm";
 import { userRoleEnum } from "@/lib/db/schema";
+import { id as strings } from "@/lib/i18n/id";
 
 type UserRole = (typeof userRoleEnum.enumValues)[number];
 
@@ -164,18 +165,24 @@ export function isOutletAllowed(scope: OutletScope, outletId: string): boolean {
  * assertOutletAllowed() — jaring terakhir di jalur TULIS (Server Action/
  * *WithDb). SELALU MELEMPAR kalau ditolak, TIDAK PERNAH mengembalikan
  * boolean (keputusan CEO eksplisit -- jalur tulis tidak boleh punya cara
- * gagal diam-diam kalau pemanggil lupa mengecek nilai baliknya). `context`
- * disisipkan ke pesan error, pola sama `assertRowsAffected()` di
- * lib/db/errors.ts -- pesan ini untuk log/debug (jalur ini seharusnya
- * TIDAK PERNAH tercapai lewat UI yang benar, cuma jaring untuk percobaan
- * lewat luar UI: URL langsung, panggilan Server Action manual dengan
- * outletId lain).
+ * gagal diam-diam kalau pemanggil lupa mengecek nilai baliknya).
+ *
+ * Pesan yang DILEMPAR (`error.message`) SELALU
+ * `strings.common.outletAccessDenied` -- MANUSIAWI, dan SENGAJA TIDAK
+ * menyebut outlet mana yang ditolak (keputusan CEO, Tahap 4, 13
+ * September 2026: menyebut nama/kode outlet lain di pesan penolakan itu
+ * sendiri kebocoran -- memberi tahu orang yang tidak berhak bahwa
+ * outlet itu ada/aktif). `context` HANYA masuk `console.error` (log
+ * server, tidak pernah sampai ke pengguna) -- dipakai untuk debug jalur
+ * mana yang menolak, pola sama `assertRowsAffected()` di lib/db/errors.ts
+ * tapi pesan pengguna & pesan log SENGAJA dipisah di sini (beda dari
+ * assertRowsAffected, yang pesannya untuk bug struktural, bukan
+ * penolakan akses yang sah).
  */
 export function assertOutletAllowed(scope: OutletScope, outletId: string, context: string): void {
   if (!isOutletAllowed(scope, outletId)) {
-    throw new Error(
-      `Akses ditolak -- outlet ini di luar cakupan akses Anda (${context}).`
-    );
+    console.error(`assertOutletAllowed: ditolak di "${context}" (outletId=${outletId})`);
+    throw new Error(strings.common.outletAccessDenied);
   }
 }
 

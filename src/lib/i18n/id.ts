@@ -32,6 +32,15 @@ export const id = {
     // beda kata-kata dari `empty` ("Belum ada data") -- ini masalah
     // akses, bukan toko yang sedang sepi, keputusan CEO eksplisit.
     noOutletAccess: "Anda tidak punya akses ke outlet manapun -- hubungi admin.",
+    // Pembatasan akses per outlet, Tahap 4 (13 September 2026, §27) --
+    // dipakai di SETIAP jalur TULIS yang ditolak karena outletId (baik
+    // dari input maupun dari baris yang sedang diubah) di luar
+    // allowedOutletIds pemanggil. SENGAJA TIDAK menyebut nama/kode
+    // outlet yang ditolak (keputusan CEO eksplisit -- itu sendiri bisa
+    // membocorkan outlet lain ada/aktif ke orang yang tidak berhak
+    // tahu). Satu pesan yang SAMA di semua jalur tulis -- satu-satunya
+    // pesan pengguna lihat untuk seluruh kelas penolakan ini.
+    outletAccessDenied: "Outlet ini di luar akses Anda -- hubungi admin.",
   },
   auth: {
     loginTitle: "Masuk ke dashboard",

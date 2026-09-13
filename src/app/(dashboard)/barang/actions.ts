@@ -29,13 +29,13 @@ export async function saveBarang(
   formData: FormData
 ): Promise<BarangFormState> {
   const supabase = await createServerSupabaseClient();
-  const { db, closeDb, businessId } = await requirePermissionDb(
+  const { db, closeDb, businessId, allowedOutletIds } = await requirePermissionDb(
     supabase,
     "barang.manage"
   );
 
   try {
-    const result = await saveBarangWithDb(db, businessId, {
+    const result = await saveBarangWithDb(db, businessId, allowedOutletIds, {
       id: formData.get("id") || undefined,
       outletId: formData.get("outletId"),
       categoryId: formData.get("categoryId") || undefined,
@@ -84,13 +84,13 @@ export async function setBarangStatus(
   status: "baru_masuk" | "siap_jual" | "rusak"
 ): Promise<BarangActionResult> {
   const supabase = await createServerSupabaseClient();
-  const { db, closeDb, businessId } = await requirePermissionDb(
+  const { db, closeDb, businessId, allowedOutletIds } = await requirePermissionDb(
     supabase,
     "barang.manage"
   );
 
   try {
-    const result = await setBarangStatusWithDb(db, businessId, { id, status });
+    const result = await setBarangStatusWithDb(db, businessId, allowedOutletIds, { id, status });
     if (!result.error) {
       revalidatePath("/barang");
     }
