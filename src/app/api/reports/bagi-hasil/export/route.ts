@@ -26,10 +26,16 @@ export async function GET(request: Request) {
   }
 
   const supabase = await createServerSupabaseClient();
-  const { db, closeDb, businessId } = await requirePermissionDb(supabase, "report.sales");
+  const { db, closeDb, businessId, allowedOutletIds } = await requirePermissionDb(supabase, "report.sales");
 
   try {
-    const result = await buildBagiHasilExport(db, { businessId, outletId, startDate, endDate });
+    const result = await buildBagiHasilExport(db, {
+      businessId,
+      outletId,
+      startDate,
+      endDate,
+      allowedOutletIds,
+    });
 
     if (result.status === "not_found") {
       return NextResponse.json({ error: strings.common.unexpectedError }, { status: 404 });

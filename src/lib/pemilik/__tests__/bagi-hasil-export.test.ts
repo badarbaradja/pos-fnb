@@ -69,6 +69,7 @@ describe.skipIf(!hasEnv)("TT11 — buildBagiHasilExport (gerbang SYARAT 3)", () 
       outletId,
       startDate: "2026-09-01",
       endDate: "2026-09-30",
+      allowedOutletIds: null,
     });
     expect(result.status).toBe("locked");
     if (result.status === "locked") {
@@ -84,6 +85,7 @@ describe.skipIf(!hasEnv)("TT11 — buildBagiHasilExport (gerbang SYARAT 3)", () 
       outletId,
       startDate: "2000-01-01",
       endDate: "2099-12-31",
+      allowedOutletIds: null,
     });
     expect(result.status).toBe("locked");
   });
@@ -96,6 +98,7 @@ describe.skipIf(!hasEnv)("TT11 — buildBagiHasilExport (gerbang SYARAT 3)", () 
       outletId,
       startDate: "2026-09-01",
       endDate: "2026-09-30",
+      allowedOutletIds: null,
     });
     expect(result.status).toBe("ok");
     if (result.status !== "ok") throw new Error("harus ok sesudah dikonfirmasi");
@@ -142,6 +145,29 @@ describe.skipIf(!hasEnv)("TT11 — buildBagiHasilExport (gerbang SYARAT 3)", () 
       outletId: "00000000-0000-0000-0000-000000000000",
       startDate: "2026-09-01",
       endDate: "2026-09-30",
+      allowedOutletIds: null,
+    });
+    expect(result.status).toBe("not_found");
+  });
+
+  it("Pembatasan akses per outlet, Tahap 3 -- allowedOutletIds TIDAK memuat outlet ini -- status not_found (SAMA dengan outlet yang benar-benar tidak ada, bukan status terpisah)", async () => {
+    const result = await buildBagiHasilExport(db, {
+      businessId,
+      outletId,
+      startDate: "2026-09-01",
+      endDate: "2026-09-30",
+      allowedOutletIds: ["00000000-0000-0000-0000-000000000099"],
+    });
+    expect(result.status).toBe("not_found");
+  });
+
+  it("Pembatasan akses per outlet, Tahap 3 -- allowedOutletIds array KOSONG -- status not_found juga (bukan tabel kosong)", async () => {
+    const result = await buildBagiHasilExport(db, {
+      businessId,
+      outletId,
+      startDate: "2026-09-01",
+      endDate: "2026-09-30",
+      allowedOutletIds: [],
     });
     expect(result.status).toBe("not_found");
   });

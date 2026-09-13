@@ -92,7 +92,7 @@ describe.skipIf(!hasEnv)("TT11 — recordPemilikPayoutWithDb", () => {
   });
 
   it("SYARAT 3 TT11 -- DITOLAK selama dayCutoffTime outlet belum dikonfirmasi, dengan pesan eksplisit", async () => {
-    const result = await recordPemilikPayoutWithDb(db, businessId, recorderProfileId, validInput());
+    const result = await recordPemilikPayoutWithDb(db, businessId, recorderProfileId, null, validInput());
     expect(result.error).toBeTruthy();
     expect(result.error).toContain("belum dikonfirmasi");
     expect(result.success).toBeUndefined();
@@ -104,7 +104,7 @@ describe.skipIf(!hasEnv)("TT11 — recordPemilikPayoutWithDb", () => {
   it("berhasil SESUDAH dayCutoffTime dikonfirmasi", async () => {
     await confirmDayCutoffWithDb(db, businessId, outletId);
 
-    const result = await recordPemilikPayoutWithDb(db, businessId, recorderProfileId, validInput());
+    const result = await recordPemilikPayoutWithDb(db, businessId, recorderProfileId, null, validInput());
     expect(result.success).toBeTruthy();
 
     const [row] = await db.select().from(pemilikPayouts).where(eq(pemilikPayouts.id, result.success!.payoutId));
@@ -112,8 +112,19 @@ describe.skipIf(!hasEnv)("TT11 — recordPemilikPayoutWithDb", () => {
     expect(row?.recordedByUserId).toBe(recorderProfileId);
   });
 
+  it("Pembatasan akses per outlet, Tahap 3 -- allowedOutletIds TIDAK memuat outlet ini -- MELEMPAR, tidak menulis apa pun", async () => {
+    const rowsBefore = await db.select().from(pemilikPayouts).where(eq(pemilikPayouts.outletId, outletId));
+
+    await expect(
+      recordPemilikPayoutWithDb(db, businessId, recorderProfileId, ["00000000-0000-0000-0000-000000000099"], validInput())
+    ).rejects.toThrow();
+
+    const rowsAfter = await db.select().from(pemilikPayouts).where(eq(pemilikPayouts.outletId, outletId));
+    expect(rowsAfter.length).toBe(rowsBefore.length);
+  });
+
   it("jumlah nol atau negatif ditolak", async () => {
-    const result = await recordPemilikPayoutWithDb(db, businessId, recorderProfileId, {
+    const result = await recordPemilikPayoutWithDb(db, businessId, recorderProfileId, null, {
       ...validInput(),
       jumlah: 0,
     });

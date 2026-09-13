@@ -4,6 +4,7 @@ import { Decimal } from "decimal.js";
 import type { UserDbHandle } from "@/lib/db/client";
 import { businesses, outlets } from "@/lib/db/schema";
 import { getBagiHasilLaporan } from "@/lib/db/queries/bagi-hasil-report";
+import { isOutletAllowed, type OutletScope } from "@/lib/auth/outlet-scope";
 import { calculateSisaDibayar } from "@/lib/calc/bagi-hasil-payout";
 import { formatTimezoneAbbreviation } from "@/lib/utils/business-date";
 import { id as strings } from "@/lib/i18n/id";
@@ -52,9 +53,15 @@ export type BagiHasilExportResult =
 
 export async function buildBagiHasilExport(
   db: Db,
-  params: { businessId: string; outletId: string; startDate: string; endDate: string }
+  params: {
+    businessId: string;
+    outletId: string;
+    startDate: string;
+    endDate: string;
+    allowedOutletIds: OutletScope;
+  }
 ): Promise<BagiHasilExportResult> {
-  const { businessId, outletId, startDate, endDate } = params;
+  const { businessId, outletId, startDate, endDate, allowedOutletIds } = params;
 
   const [outlet] = await db
     .select({
@@ -66,6 +73,19 @@ export async function buildBagiHasilExport(
     .where(and(eq(outlets.id, outletId), eq(outlets.businessId, businessId)));
 
   if (!outlet) {
+    return { status: "not_found" };
+  }
+
+  // Pembatasan akses per outlet, Tahap 3 (13 September 2026, §26) --
+  // dicek SEBELUM gerbang SYARAT 3 di bawah dan SEBELUM workbook
+  // dibangun (pola sama persis: tolak lebih dulu, jangan bangun dulu
+  // baru ditolak). Dilipat jadi status "not_found" YANG SAMA dengan
+  // outlet yang benar-benar tidak ada -- bukan status baru semacam
+  // "forbidden" -- supaya mengetik outletId outlet lain lewat URL
+  // ekspor tidak bisa dipakai membedakan "outlet ini tidak ada" dari
+  // "outlet ini ada tapi di luar cakupan Anda" (pola sama persis
+  // notFound() di barang/[id]/label, koreksi CEO 13 September 2026).
+  if (!isOutletAllowed(allowedOutletIds, outletId)) {
     return { status: "not_found" };
   }
 

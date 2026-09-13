@@ -1,6 +1,7 @@
 import { and, asc, eq } from "drizzle-orm";
 import { createServerSupabaseClient } from "@/lib/auth/supabase";
 import { requirePermissionDb } from "@/lib/auth/permissions";
+import { outletScopeCondition } from "@/lib/auth/outlet-scope";
 import { businesses, outlets } from "@/lib/db/schema";
 import { getBagiHasilLaporan } from "@/lib/db/queries/bagi-hasil-report";
 import { businessDate, formatTimezoneAbbreviation } from "@/lib/utils/business-date";
@@ -23,7 +24,23 @@ export default async function BagiHasilReportPage({
 }) {
   const params = await searchParams;
   const supabase = await createServerSupabaseClient();
-  const { db, closeDb, businessId } = await requirePermissionDb(supabase, "report.sales");
+  const { db, closeDb, businessId, allowedOutletIds } = await requirePermissionDb(supabase, "report.sales");
+
+  // Pembatasan akses per outlet, Tahap 3 (13 September 2026, §26) --
+  // dicek SEBELUM query outletRows, sama pola Laporan Stok: pesannya
+  // harus beda jelas dari "noThriftOutlet" ("bisnis ini tidak punya
+  // outlet thrifting sama sekali").
+  if (allowedOutletIds !== null && allowedOutletIds.length === 0) {
+    await closeDb();
+    return (
+      <div className="flex flex-col gap-2">
+        <h1 className="text-xl font-semibold">{strings.bagiHasil.title}</h1>
+        <p className="rounded-lg border border-destructive/50 bg-destructive/10 p-4 text-sm text-destructive">
+          {strings.common.noOutletAccess}
+        </p>
+      </div>
+    );
+  }
 
   try {
     const [business] = await db
@@ -50,7 +67,8 @@ export default async function BagiHasilReportPage({
         and(
           eq(outlets.businessId, businessId),
           eq(outlets.posMode, "thrifting"),
-          eq(outlets.isActive, true)
+          eq(outlets.isActive, true),
+          outletScopeCondition(allowedOutletIds, outlets.id)
         )
       )
       .orderBy(asc(outlets.createdAt));

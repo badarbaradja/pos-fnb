@@ -2,6 +2,7 @@ import { z } from "zod";
 import { and, eq } from "drizzle-orm";
 import type { UserDbHandle } from "@/lib/db/client";
 import { outlets, pemilikPayouts } from "@/lib/db/schema";
+import { assertOutletAllowed, type OutletScope } from "@/lib/auth/outlet-scope";
 import { id as strings } from "@/lib/i18n/id";
 
 type Db = UserDbHandle["db"];
@@ -30,6 +31,7 @@ export async function recordPemilikPayoutWithDb(
   db: Db,
   businessId: string,
   recordedByUserId: string,
+  allowedOutletIds: OutletScope,
   rawInput: unknown
 ): Promise<RecordPayoutResult> {
   const parsed = recordPayoutSchema.safeParse(rawInput);
@@ -37,6 +39,17 @@ export async function recordPemilikPayoutWithDb(
     return { error: parsed.error.issues[0]?.message ?? strings.common.unexpectedError };
   }
   const data = parsed.data;
+
+  // Pembatasan akses per outlet, Tahap 3 (13 September 2026, §26) --
+  // MELEMPAR (bukan mengembalikan {error}), keputusan CEO eksplisit
+  // untuk jalur tulis (lihat lib/auth/outlet-scope.ts). "payroll.
+  // process" (gerbang Server Action pembungkus) hari ini cuma owner/
+  // akuntan -- keduanya SELALU allowedOutletIds null (tidak pernah
+  // dibatasi) -- jadi baris ini SECARA PRAKTIS tidak pernah menolak
+  // siapa pun hari ini. Tetap dipasang untuk pertahanan berlapis: kalau
+  // matriks izin berubah nanti (mis. manajer diizinkan proses payroll),
+  // baris ini tetap menolak tanpa perlu diingat lagi terpisah.
+  assertOutletAllowed(allowedOutletIds, data.outletId, "recordPemilikPayoutWithDb");
 
   // SYARAT 3 TT11 -- terkunci sampai dayCutoffTime outlet ini
   // dikonfirmasi manusia. Batas hari yang salah menggeser transaksi dini
