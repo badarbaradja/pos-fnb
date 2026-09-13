@@ -23,6 +23,7 @@ const navItems = [
   { href: "/employees", label: id.nav.employees },
   { href: "/devices", label: id.nav.devices },
   { href: "/outlets", label: id.nav.outlets },
+  { href: "/team", label: id.nav.team },
   { href: "/pemilik", label: id.nav.pemilik },
   { href: "/barang", label: id.nav.barang },
   { href: "/label-settings", label: id.nav.labelSettings },

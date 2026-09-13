@@ -48,7 +48,8 @@ export type PermissionKey =
   | "settings.business"
   | "settings.tax"
   | "barang.manage"
-  | "pemilik.manage";
+  | "pemilik.manage"
+  | "membership.manage";
 
 type PermissionState = "on" | "off" | "na";
 
@@ -133,6 +134,13 @@ export const PERMISSIONS: Record<PermissionKey, RoleStates> = {
   // persentase bagi hasilnya) lebih dekat ke keputusan bisnis daripada
   // pekerjaan operasional harian.
   "pemilik.manage": row("on", "off", "na", "na", "na", "na", "na"),
+  // Pembatasan akses per outlet, Tahap 0 (13 September 2026) -- kelola
+  // siapa punya akses dashboard & outlet mana yang mereka lihat.
+  // OWNER-ONLY, TIDAK BISA dioverride (manager 'na', bukan 'off') --
+  // halaman ini yang menentukan siapa jadi manajer/kasir dan outlet
+  // mana yang mereka lihat, jadi tidak boleh ada jalan manajer
+  // memberi dirinya sendiri akses lebih lewat permissions_override.
+  "membership.manage": row("on", "na", "na", "na", "na", "na", "na"),
 };
 
 /**
@@ -159,6 +167,10 @@ export type PermissionContext = {
   userId: string;
   businessId: string;
   role: UserRole;
+  // Pembatasan akses per outlet, Tahap 1 -- MURNI ADITIF, belum dipakai
+  // menyaring halaman/Server Action mana pun (lihat lib/auth/outlet-scope.ts
+  // dan CurrentBusiness di lib/auth/session.ts).
+  allowedOutletIds: string[] | null;
 };
 
 /**
@@ -195,7 +207,12 @@ export async function requirePermission(
     );
   }
 
-  return { userId: session.userId, businessId: business.businessId, role: business.role };
+  return {
+    userId: session.userId,
+    businessId: business.businessId,
+    role: business.role,
+    allowedOutletIds: business.allowedOutletIds,
+  };
 }
 
 /**

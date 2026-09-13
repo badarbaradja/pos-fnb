@@ -225,6 +225,13 @@
       "when": 1789273862175,
       "tag": "0031_outlets_shift_warning_minutes",
       "breakpoints": true
+    },
+    {
+      "idx": 32,
+      "version": "7",
+      "when": 1789277010510,
+      "tag": "0032_tranquil_lady_bullseye",
+      "breakpoints": true
     }
   ]
 }

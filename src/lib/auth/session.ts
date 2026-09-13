@@ -1,6 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { userRoleEnum } from "../db/schema";
 import { createServerSupabaseClient } from "./supabase";
+import { computeAllowedOutletIds } from "./outlet-scope";
 
 export type UserRole = (typeof userRoleEnum.enumValues)[number];
 
@@ -12,6 +13,11 @@ export type CurrentSession = {
 export type CurrentBusiness = {
   businessId: string;
   role: UserRole;
+  // Pembatasan akses per outlet, Tahap 1 (13 September 2026) -- MURNI
+  // ADITIF, belum dipakai menyaring apa pun (lihat lib/auth/outlet-scope.ts).
+  // null = semua outlet (termasuk SELALU null untuk owner/akuntan, apa pun
+  // isi outlet_ids mereka di database); array = daftar outlet spesifik.
+  allowedOutletIds: string[] | null;
 };
 
 /**
@@ -65,7 +71,7 @@ export async function getCurrentBusinessFromClient(
 ): Promise<CurrentBusiness | null> {
   const { data, error } = await supabase
     .from("memberships")
-    .select("business_id, role")
+    .select("business_id, role, outlet_ids")
     .eq("user_id", userId)
     .eq("is_active", true)
     .limit(1)
@@ -74,5 +80,10 @@ export async function getCurrentBusinessFromClient(
   if (error || !data) {
     return null;
   }
-  return { businessId: data.business_id as string, role: data.role as UserRole };
+  const role = data.role as UserRole;
+  return {
+    businessId: data.business_id as string,
+    role,
+    allowedOutletIds: computeAllowedOutletIds(role, data.outlet_ids as string[] | null),
+  };
 }

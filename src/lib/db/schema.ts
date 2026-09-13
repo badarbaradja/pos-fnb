@@ -271,6 +271,25 @@ export const profiles = pgTable(
       for: "select",
       using: sql`${t.id} = auth.uid()`,
     }),
+    // Pembatasan akses per outlet, Tahap 0 (13 September 2026) -- halaman
+    // kelola tim (/team) perlu menampilkan NAMA anggota LAIN, bukan cuma
+    // profil sendiri. Sengaja dibatasi ke owner (bukan "siapa pun
+    // sebisnis") -- itu SATU-SATUNYA role yang digerbang izin
+    // "membership.manage" (permissions.ts), jadi kebocoran nama lintas
+    // anggota tetap sesempit halaman yang memakainya. EXISTS memakai
+    // memberships langsung (bukan auth_business_ids(), yang cuma
+    // mengembalikan business_id, tidak cukup untuk cek ROLE pemanggil).
+    pgPolicy("profiles_select_business_owner", {
+      for: "select",
+      using: sql`exists (
+        select 1 from memberships caller
+        join memberships target on target.business_id = caller.business_id
+        where caller.user_id = auth.uid()
+          and caller.role = 'owner'
+          and caller.is_active = true
+          and target.user_id = ${t.id}
+      )`,
+    }),
   ]
 ).enableRLS();
 
@@ -293,6 +312,42 @@ export const memberships = pgTable(
     pgPolicy("memberships_select", {
       for: "select",
       using: sql`${t.businessId} = any(auth_business_ids())`,
+    }),
+    // Pembatasan akses per outlet, Tahap 0 -- sebelum ini memberships TIDAK
+    // PUNYA policy INSERT/UPDATE sama sekali (baris cuma pernah ditulis
+    // lewat getAdminDb() di skrip bootstrap/seed). Halaman /team menulis
+    // lewat db user asli (RLS beneran berlaku, bukan cuma dicek di app
+    // layer) -- EXISTS mengecek pemanggil adalah owner AKTIF di BISNIS
+    // YANG SAMA dengan baris yang ditulis, bukan cuma anggota bisnis itu.
+    // Ini jaring kedua: lib/memberships/manage.ts sudah menolak non-owner
+    // lewat requirePermissionDb, tapi kalau app layer salah/di-bypass,
+    // baris ini tetap tidak akan pernah tertulis.
+    pgPolicy("memberships_insert", {
+      for: "insert",
+      withCheck: sql`${t.businessId} = any(auth_business_ids()) and exists (
+        select 1 from memberships owner_row
+        where owner_row.business_id = ${t.businessId}
+          and owner_row.user_id = auth.uid()
+          and owner_row.role = 'owner'
+          and owner_row.is_active = true
+      )`,
+    }),
+    pgPolicy("memberships_update", {
+      for: "update",
+      using: sql`${t.businessId} = any(auth_business_ids()) and exists (
+        select 1 from memberships owner_row
+        where owner_row.business_id = ${t.businessId}
+          and owner_row.user_id = auth.uid()
+          and owner_row.role = 'owner'
+          and owner_row.is_active = true
+      )`,
+      withCheck: sql`${t.businessId} = any(auth_business_ids()) and exists (
+        select 1 from memberships owner_row
+        where owner_row.business_id = ${t.businessId}
+          and owner_row.user_id = auth.uid()
+          and owner_row.role = 'owner'
+          and owner_row.is_active = true
+      )`,
     }),
   ]
 ).enableRLS();

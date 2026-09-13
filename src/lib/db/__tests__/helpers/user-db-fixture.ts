@@ -102,6 +102,12 @@ export type UserDbFixture = {
   businessId: string;
   userId: string;
   db: UserDbHandle["db"];
+  // Ditambahkan Tahap 1 pembatasan akses per outlet (13 September 2026) --
+  // testable lewat requirePermission()/getCurrentBusinessFromClient() yang
+  // butuh SupabaseClient (bukan koneksi Drizzle), bukan cuma db. Aditif --
+  // fixture lama yang destructure {businessId, userId, db, cleanup} saja
+  // tidak terpengaruh.
+  accessToken: string;
   cleanup: () => Promise<void>;
 };
 
@@ -148,6 +154,7 @@ export async function createUserDbFixture(namePrefix: string): Promise<UserDbFix
     businessId,
     userId,
     db,
+    accessToken: signIn.session.access_token,
     cleanup: async () => {
       await close();
       await deleteBlockingRowsForBusiness(adminDb, businessId);
