@@ -2,6 +2,7 @@ import Link from "next/link";
 import { and, asc, desc, eq } from "drizzle-orm";
 import { createServerSupabaseClient } from "@/lib/auth/supabase";
 import { hasPermission, requirePermissionDb } from "@/lib/auth/permissions";
+import { isOutletAllowed, outletScopeConditionForTransfer } from "@/lib/auth/outlet-scope";
 import { businesses, employees, outlets, stockTransfers } from "@/lib/db/schema";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -44,18 +45,43 @@ const statusVariants: Record<string, "default" | "secondary" | "destructive" | "
 
 export default async function StockTransfersPage() {
   const supabase = await createServerSupabaseClient();
-  const { db, closeDb, businessId, role } = await requirePermissionDb(supabase, "stock.transfer");
+  const { db, closeDb, businessId, role, allowedOutletIds } = await requirePermissionDb(
+    supabase,
+    "stock.transfer"
+  );
   const canApprove = hasPermission(role, "stock.transfer_approve");
+
+  // Pembatasan akses per outlet, Tahap 4 (13 September 2026, §28) --
+  // dicek SEBELUM query lain apa pun, pola sama halaman lain.
+  if (allowedOutletIds !== null && allowedOutletIds.length === 0) {
+    await closeDb();
+    return (
+      <div className="flex flex-col gap-2">
+        <h1 className="text-xl font-semibold">{strings.stockTransfers.title}</h1>
+        <p className="rounded-lg border border-destructive/50 bg-destructive/10 p-4 text-sm text-destructive">
+          {strings.common.noOutletAccess}
+        </p>
+      </div>
+    );
+  }
 
   let rows;
   let outletRows;
   let employeeRows;
   let alertHours = 4;
   try {
+    // Daftar transfer disaring OR (fromOutletId ATAU toOutletId) --
+    // VISIBILITAS, bukan gerbang aksi (lihat lib/stock-transfers/manage.ts
+    // untuk gerbang per-aksi yang satu-kolom).
     rows = await db
       .select()
       .from(stockTransfers)
-      .where(eq(stockTransfers.businessId, businessId))
+      .where(
+        and(
+          eq(stockTransfers.businessId, businessId),
+          outletScopeConditionForTransfer(allowedOutletIds, stockTransfers.fromOutletId, stockTransfers.toOutletId)
+        )
+      )
       .orderBy(desc(stockTransfers.createdAt));
 
     outletRows = await db
@@ -139,7 +165,18 @@ export default async function StockTransfersPage() {
                   </TableCell>
                   <TableCell className="text-right">
                     <div className="flex items-center justify-end gap-1">
-                      {row.status === "requested" && canApprove ? (
+                      {/* Pembatasan akses per outlet, Tahap 4 (13 September
+                          2026, §28) -- tombol Approve/Reject DISEMBUNYIKAN
+                          kalau outlet gudang (fromOutletId) tidak ada di
+                          allowedOutletIds, bukan cuma diserahkan ke gerbang
+                          server (keputusan CEO: kontrol yang terlihat lalu
+                          gagal saat diklik itu membingungkan). Gerbang
+                          server TETAP ada di approveStockTransferWithDb/
+                          rejectStockTransferWithDb -- ini murni penyembunyian
+                          tampilan. */}
+                      {row.status === "requested" &&
+                      canApprove &&
+                      isOutletAllowed(allowedOutletIds, row.fromOutletId) ? (
                         <ApproveRejectButtons transferId={row.id} employees={employeeRows} />
                       ) : null}
                       {row.status === "approved" ? (
