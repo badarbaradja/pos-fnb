@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 import { and, eq } from "drizzle-orm";
 import { createServerSupabaseClient } from "@/lib/auth/supabase";
 import { requirePermissionDb } from "@/lib/auth/permissions";
+import { isOutletAllowed } from "@/lib/auth/outlet-scope";
 import { getLabelSettingsWithDb } from "@/lib/labels/manage";
 import { barang, pemilik } from "@/lib/db/schema";
 import { LabelPrintArea } from "@/components/barang/label-print-area";
@@ -15,11 +16,12 @@ export default async function BarangLabelPage({
 }) {
   const { id } = await params;
   const supabase = await createServerSupabaseClient();
-  const { db, closeDb, businessId } = await requirePermissionDb(supabase, "barang.manage");
+  const { db, closeDb, businessId, allowedOutletIds } = await requirePermissionDb(supabase, "barang.manage");
 
   try {
     const [row] = await db
       .select({
+        outletId: barang.outletId,
         kode: barang.kode,
         nama: barang.nama,
         ukuran: barang.ukuran,
@@ -31,7 +33,13 @@ export default async function BarangLabelPage({
       .leftJoin(pemilik, eq(barang.pemilikId, pemilik.id))
       .where(and(eq(barang.id, id), eq(barang.businessId, businessId)));
 
-    if (!row) {
+    // Pembatasan akses per outlet, Tahap 3 (13 September 2026, §24) --
+    // diakses langsung lewat URL by-id (bukan lewat daftar yang sudah
+    // disaring), jalur PERSIS yang CEO minta diuji ("panggil dengan id
+    // outlet lain lewat URL langsung"). notFound() (bukan melempar
+    // error) -- konsisten dengan "baris tidak ada" di atas, dan tidak
+    // membocorkan bahwa kode ini ADA tapi di luar cakupan.
+    if (!row || !isOutletAllowed(allowedOutletIds, row.outletId)) {
       notFound();
     }
 

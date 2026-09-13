@@ -1,6 +1,7 @@
 import { and, desc, eq } from "drizzle-orm";
 import { createServerSupabaseClient } from "@/lib/auth/supabase";
 import { requirePermissionDb } from "@/lib/auth/permissions";
+import { outletScopeCondition } from "@/lib/auth/outlet-scope";
 import { barang, categories, outlets, pemilik } from "@/lib/db/schema";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -33,14 +34,36 @@ const statusVariant: Record<string, "default" | "secondary" | "outline"> = {
 
 export default async function BarangPage() {
   const supabase = await createServerSupabaseClient();
-  const { db, closeDb, businessId } = await requirePermissionDb(
+  const { db, closeDb, businessId, allowedOutletIds } = await requirePermissionDb(
     supabase,
     "barang.manage"
   );
 
+  // Pembatasan akses per outlet, Tahap 3 (13 September 2026, §24) --
+  // MEMOTONG SELURUH halaman termasuk form intake (bukan cuma daftar):
+  // kalau scope kosong, dropdown outlet form intake juga akan kosong,
+  // membingungkan tanpa pesan jelas. "Barang (daftar + cetak label)" --
+  // halaman tulis (Server Action intake) SENGAJA TIDAK disentuh (Tahap
+  // 3 cuma baca-saja); ini murni memotong RENDER, bukan mengubah izin.
+  if (allowedOutletIds !== null && allowedOutletIds.length === 0) {
+    await closeDb();
+    return (
+      <div className="flex flex-col gap-2">
+        <h1 className="text-xl font-semibold">{strings.barang.title}</h1>
+        <p className="rounded-lg border border-destructive/50 bg-destructive/10 p-4 text-sm text-destructive">
+          {strings.common.noOutletAccess}
+        </p>
+      </div>
+    );
+  }
+
   let outletOptions, categoryOptions, pemilikOptions, rows;
   try {
     [outletOptions, categoryOptions, pemilikOptions] = await Promise.all([
+      // Dropdown form intake TIDAK PERNAH menampilkan outlet di luar
+      // cakupan (keputusan CEO: outlet yang muncul lalu ditolak server
+      // itu membingungkan) -- Server Action intake-nya sendiri TETAP
+      // TIDAK disentuh, ini murni narrowing tampilan.
       db
         .select({ id: outlets.id, name: outlets.name })
         .from(outlets)
@@ -48,7 +71,8 @@ export default async function BarangPage() {
           and(
             eq(outlets.businessId, businessId),
             eq(outlets.posMode, "thrifting"),
-            eq(outlets.isActive, true)
+            eq(outlets.isActive, true),
+            outletScopeCondition(allowedOutletIds, outlets.id)
           )
         ),
       db
@@ -83,7 +107,7 @@ export default async function BarangPage() {
       .from(barang)
       .leftJoin(categories, eq(barang.categoryId, categories.id))
       .leftJoin(pemilik, eq(barang.pemilikId, pemilik.id))
-      .where(eq(barang.businessId, businessId))
+      .where(and(eq(barang.businessId, businessId), outletScopeCondition(allowedOutletIds, barang.outletId)))
       .orderBy(desc(barang.masukPada))
       .limit(200);
   } finally {
