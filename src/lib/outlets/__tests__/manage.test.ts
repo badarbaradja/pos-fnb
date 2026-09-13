@@ -123,7 +123,7 @@ describe.skipIf(!hasEnv)("T22b — CRUD outlet", () => {
     expect(created.success).toBeTruthy();
     const outletId = created.success!.outletId;
 
-    const result = await updateOutletWithDb(db, businessId, {
+    const result = await updateOutletWithDb(db, businessId, null, {
       id: outletId,
       ...validOutletInput("IGNORED_CODE"),
       name: "Nama Baru",
@@ -168,7 +168,7 @@ describe.skipIf(!hasEnv)("T22b — CRUD outlet", () => {
     });
     expect(openResult.success).toBeTruthy();
 
-    const result = await updateOutletWithDb(db, businessId, {
+    const result = await updateOutletWithDb(db, businessId, null, {
       id: outletId,
       ...validOutletInput("IGNORED_CODE"),
       isActive: false,
@@ -183,7 +183,7 @@ describe.skipIf(!hasEnv)("T22b — CRUD outlet", () => {
     const created = await createOutletWithDb(db, businessId, validOutletInput("NOSHIFTOUT"));
     const outletId = created.success!.outletId;
 
-    const result = await updateOutletWithDb(db, businessId, {
+    const result = await updateOutletWithDb(db, businessId, null, {
       id: outletId,
       ...validOutletInput("IGNORED_CODE"),
       isActive: false,
@@ -210,7 +210,7 @@ describe.skipIf(!hasEnv)("T22b — CRUD outlet", () => {
       const created = await createOutletWithDb(db, businessId, validOutletInput("CUTOFFCONFIRM"));
       const outletId = created.success!.outletId;
 
-      const result = await confirmDayCutoffWithDb(db, businessId, outletId);
+      const result = await confirmDayCutoffWithDb(db, businessId, null, outletId);
       expect(result.success).toBeTruthy();
 
       const [row] = await db.select().from(outlets).where(eq(outlets.id, outletId));
@@ -221,9 +221,9 @@ describe.skipIf(!hasEnv)("T22b — CRUD outlet", () => {
     it("mengubah dayCutoffTime ke nilai BERBEDA mereset konfirmasi ke false", async () => {
       const created = await createOutletWithDb(db, businessId, validOutletInput("CUTOFFRESET"));
       const outletId = created.success!.outletId;
-      await confirmDayCutoffWithDb(db, businessId, outletId);
+      await confirmDayCutoffWithDb(db, businessId, null, outletId);
 
-      const result = await updateOutletWithDb(db, businessId, {
+      const result = await updateOutletWithDb(db, businessId, null, {
         id: outletId,
         ...validOutletInput("IGNORED_CODE"),
         dayCutoffTime: "03:00:00",
@@ -239,9 +239,9 @@ describe.skipIf(!hasEnv)("T22b — CRUD outlet", () => {
     it("submit ulang form dengan dayCutoffTime SAMA (walau beda format string, \"04:00\" vs \"04:00:00\") TIDAK mereset konfirmasi", async () => {
       const created = await createOutletWithDb(db, businessId, validOutletInput("CUTOFFKEEP"));
       const outletId = created.success!.outletId;
-      await confirmDayCutoffWithDb(db, businessId, outletId);
+      await confirmDayCutoffWithDb(db, businessId, null, outletId);
 
-      const result = await updateOutletWithDb(db, businessId, {
+      const result = await updateOutletWithDb(db, businessId, null, {
         id: outletId,
         ...validOutletInput("IGNORED_CODE"),
         dayCutoffTime: "04:00", // sama nilainya dengan "04:00:00", beda string
@@ -253,6 +253,73 @@ describe.skipIf(!hasEnv)("T22b — CRUD outlet", () => {
       const [row] = await db.select().from(outlets).where(eq(outlets.id, outletId));
       expect(row?.name).toBe("Nama Diubah Tanpa Sentuh Cutoff");
       expect(row?.dayCutoffConfirmed).toBe(true); // TETAP terkonfirmasi
+    });
+  });
+
+  describe("Pembatasan akses per outlet, Tahap 4 (13 September 2026, §27)", () => {
+    it("updateOutletWithDb: allowedOutletIds memuat outlet ini -- berhasil", async () => {
+      const created = await createOutletWithDb(db, businessId, validOutletInput("SCOPEUPDOK"));
+      const outletId = created.success!.outletId;
+
+      const result = await updateOutletWithDb(db, businessId, [outletId], {
+        id: outletId,
+        ...validOutletInput("IGNORED_CODE"),
+        name: "Nama Diizinkan",
+        isActive: true,
+      });
+      expect(result.success).toBeTruthy();
+    });
+
+    it("updateOutletWithDb: allowedOutletIds outlet LAIN -- DITOLAK, baris TIDAK BERUBAH, pesan tidak menyebut outlet", async () => {
+      const created = await createOutletWithDb(db, businessId, validOutletInput("SCOPEUPDNO"));
+      const outletId = created.success!.outletId;
+      const other = await createOutletWithDb(db, businessId, validOutletInput("SCOPEUPDOTHER"));
+      const [before] = await db.select().from(outlets).where(eq(outlets.id, outletId));
+
+      const result = await updateOutletWithDb(db, businessId, [other.success!.outletId], {
+        id: outletId,
+        ...validOutletInput("IGNORED_CODE"),
+        name: "DIUBAH PAKSA",
+        isActive: true,
+      });
+      expect(result.error).toBeTruthy();
+      expect(result.error).not.toContain(outletId);
+
+      const [after] = await db.select().from(outlets).where(eq(outlets.id, outletId));
+      expect(after?.name).toBe(before?.name);
+    });
+
+    it("updateOutletWithDb: allowedOutletIds array KOSONG -- DITOLAK juga", async () => {
+      const created = await createOutletWithDb(db, businessId, validOutletInput("SCOPEUPDEMPTY"));
+      const outletId = created.success!.outletId;
+
+      const result = await updateOutletWithDb(db, businessId, [], {
+        id: outletId,
+        ...validOutletInput("IGNORED_CODE"),
+        name: "DIUBAH PAKSA",
+        isActive: true,
+      });
+      expect(result.error).toBeTruthy();
+    });
+
+    it("confirmDayCutoffWithDb: allowedOutletIds outlet LAIN -- DITOLAK, dayCutoffConfirmed TIDAK berubah", async () => {
+      const created = await createOutletWithDb(db, businessId, validOutletInput("SCOPECUTOFFNO"));
+      const outletId = created.success!.outletId;
+      const other = await createOutletWithDb(db, businessId, validOutletInput("SCOPECUTOFFOTHER"));
+
+      const result = await confirmDayCutoffWithDb(db, businessId, [other.success!.outletId], outletId);
+      expect(result.error).toBeTruthy();
+
+      const [row] = await db.select().from(outlets).where(eq(outlets.id, outletId));
+      expect(row?.dayCutoffConfirmed).toBe(false);
+    });
+
+    it("confirmDayCutoffWithDb: allowedOutletIds memuat outlet ini -- berhasil", async () => {
+      const created = await createOutletWithDb(db, businessId, validOutletInput("SCOPECUTOFFOK"));
+      const outletId = created.success!.outletId;
+
+      const result = await confirmDayCutoffWithDb(db, businessId, [outletId], outletId);
+      expect(result.success).toBeTruthy();
     });
   });
 });

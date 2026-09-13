@@ -123,7 +123,7 @@ describe.skipIf(!hasEnv)("Pembatasan akses per outlet, Tahap 3 -- Laporan Bagi H
       .returning({ id: outlets.id });
     otherOutletId = other!.id;
 
-    await confirmDayCutoffWithDb(db, businessId, bthrOutletId);
+    await confirmDayCutoffWithDb(db, businessId, null, bthrOutletId);
 
     const [device] = await db
       .insert(devices)

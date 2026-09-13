@@ -68,8 +68,8 @@ describe.skipIf(!hasEnv)("TT11 koreksi — updateBusinessTimezoneWithDb", () => 
 
     // Konfirmasi KEDUA outlet dulu -- supaya perubahan timezone yang
     // mereset keduanya benar-benar teruji (bukan kebetulan sudah false).
-    await confirmDayCutoffWithDb(db, businessId, outletAId);
-    await confirmDayCutoffWithDb(db, businessId, outletBId);
+    await confirmDayCutoffWithDb(db, businessId, null, outletAId);
+    await confirmDayCutoffWithDb(db, businessId, null, outletBId);
   });
 
   afterAll(async () => {

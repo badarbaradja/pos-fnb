@@ -41,7 +41,7 @@ export async function saveOutlet(
   const isCreate = !(typeof id === "string" && id);
   const creatingNewBrand = formData.get("brandId") === NEW_BRAND_VALUE;
 
-  const { db, closeDb, businessId } = await requirePermissionDb(
+  const { db, closeDb, businessId, allowedOutletIds } = await requirePermissionDb(
     supabase,
     isCreate || creatingNewBrand ? "settings.business" : "outlet.manage"
   );
@@ -84,7 +84,7 @@ export async function saveOutlet(
         ...sharedFields,
       });
     } else {
-      result = await updateOutletWithDb(db, businessId, {
+      result = await updateOutletWithDb(db, businessId, allowedOutletIds, {
         id,
         ...sharedFields,
         isActive: formData.get("isActive") === "on",
@@ -110,10 +110,10 @@ export async function saveOutlet(
  */
 export async function confirmDayCutoff(outletId: string): Promise<OutletActionResult> {
   const supabase = await createServerSupabaseClient();
-  const { db, closeDb, businessId } = await requirePermissionDb(supabase, "outlet.manage");
+  const { db, closeDb, businessId, allowedOutletIds } = await requirePermissionDb(supabase, "outlet.manage");
 
   try {
-    const result = await confirmDayCutoffWithDb(db, businessId, outletId);
+    const result = await confirmDayCutoffWithDb(db, businessId, allowedOutletIds, outletId);
     if (result.error) {
       return { error: result.error };
     }

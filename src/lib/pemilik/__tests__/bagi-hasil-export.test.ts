@@ -91,7 +91,7 @@ describe.skipIf(!hasEnv)("TT11 — buildBagiHasilExport (gerbang SYARAT 3)", () 
   });
 
   it("berhasil membangun file .xlsx SUNGGUHAN (bisa dibaca ulang oleh ExcelJS) SESUDAH dayCutoffTime dikonfirmasi (SYARAT 3 terpenuhi)", async () => {
-    await confirmDayCutoffWithDb(db, businessId, outletId);
+    await confirmDayCutoffWithDb(db, businessId, null, outletId);
 
     const result = await buildBagiHasilExport(db, {
       businessId,

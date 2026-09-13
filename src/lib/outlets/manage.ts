@@ -6,6 +6,7 @@ import { assertRowsAffected, isUniqueViolation } from "@/lib/db/errors";
 import { generateId } from "@/lib/utils/id";
 import { CUTOFF_PATTERN, parseCutoffSeconds } from "@/lib/utils/business-date";
 import { hasOpenShiftForOutlet } from "@/lib/pos/shift";
+import { isOutletAllowed, type OutletScope } from "@/lib/auth/outlet-scope";
 import { id as strings } from "@/lib/i18n/id";
 
 /**
@@ -168,6 +169,7 @@ export async function createOutletWithDb(
 export async function updateOutletWithDb(
   db: Db,
   businessId: string,
+  allowedOutletIds: OutletScope,
   rawInput: unknown
 ): Promise<OutletActionResult> {
   const parsed = updateOutletSchema.safeParse(rawInput);
@@ -175,6 +177,14 @@ export async function updateOutletWithDb(
     return { error: parsed.error.issues[0]?.message ?? strings.common.unexpectedError };
   }
   const data = parsed.data;
+
+  // Pembatasan akses per outlet, Tahap 4 (13 September 2026, §27) --
+  // outlet TIDAK PUNYA "outletId induk" seperti employees/devices (baris
+  // ini ADALAH outletnya sendiri) -- jadi cuma SATU sumber untuk dicek:
+  // data.id. Dicek SEBELUM validateBrand/query lain apa pun.
+  if (!isOutletAllowed(allowedOutletIds, data.id)) {
+    return { error: strings.common.outletAccessDenied };
+  }
 
   const brandError = await validateBrand(db, businessId, data.brandId);
   if (brandError) {
@@ -246,8 +256,18 @@ export async function updateOutletWithDb(
 export async function confirmDayCutoffWithDb(
   db: Db,
   businessId: string,
+  allowedOutletIds: OutletScope,
   outletId: string
 ): Promise<OutletActionResult> {
+  // Pembatasan akses per outlet, Tahap 4 -- DITAMBAHKAN PROAKTIF, di
+  // luar tiga jalur ("Outlets"/"Employees"/"Devices") yang eksplisit
+  // diminta CEO: fungsi tulis terpisah, gerbang izin sama
+  // ("outlet.manage"), menerima outletId langsung tanpa scope apa pun
+  // sampai sekarang.
+  if (!isOutletAllowed(allowedOutletIds, outletId)) {
+    return { error: strings.common.outletAccessDenied };
+  }
+
   const updated = await db
     .update(outlets)
     .set({ dayCutoffConfirmed: true })

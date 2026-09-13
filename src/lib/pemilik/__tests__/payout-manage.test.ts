@@ -102,7 +102,7 @@ describe.skipIf(!hasEnv)("TT11 — recordPemilikPayoutWithDb", () => {
   });
 
   it("berhasil SESUDAH dayCutoffTime dikonfirmasi", async () => {
-    await confirmDayCutoffWithDb(db, businessId, outletId);
+    await confirmDayCutoffWithDb(db, businessId, null, outletId);
 
     const result = await recordPemilikPayoutWithDb(db, businessId, recorderProfileId, null, validInput());
     expect(result.success).toBeTruthy();
