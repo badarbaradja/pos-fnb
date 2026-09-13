@@ -27,7 +27,7 @@ export async function saveEmployee(
   formData: FormData
 ): Promise<EmployeeFormState> {
   const supabase = await createServerSupabaseClient();
-  const { db, closeDb, businessId } = await requirePermissionDb(supabase, "employee.manage");
+  const { db, closeDb, businessId, allowedOutletIds } = await requirePermissionDb(supabase, "employee.manage");
 
   const id = formData.get("id");
   const outletIdRaw = formData.get("outletId");
@@ -35,7 +35,7 @@ export async function saveEmployee(
   try {
     let result: EmployeeActionResult;
     if (typeof id === "string" && id) {
-      result = await updateEmployeeWithDb(db, businessId, {
+      result = await updateEmployeeWithDb(db, businessId, allowedOutletIds, {
         id,
         fullName: formData.get("fullName"),
         role: formData.get("role"),
@@ -43,7 +43,7 @@ export async function saveEmployee(
         isActive: formData.get("isActive") === "on",
       });
     } else {
-      result = await createEmployeeWithDb(db, businessId, {
+      result = await createEmployeeWithDb(db, businessId, allowedOutletIds, {
         code: formData.get("code"),
         fullName: formData.get("fullName"),
         role: formData.get("role"),
@@ -65,9 +65,9 @@ export async function saveEmployee(
 
 export async function resetEmployeePin(input: unknown): Promise<EmployeeActionResult> {
   const supabase = await createServerSupabaseClient();
-  const { db, closeDb, businessId } = await requirePermissionDb(supabase, "employee.manage");
+  const { db, closeDb, businessId, allowedOutletIds } = await requirePermissionDb(supabase, "employee.manage");
   try {
-    const result = await resetPinWithDb(db, businessId, input);
+    const result = await resetPinWithDb(db, businessId, allowedOutletIds, input);
     if (!result.error) {
       revalidatePath("/employees");
     }
@@ -79,9 +79,9 @@ export async function resetEmployeePin(input: unknown): Promise<EmployeeActionRe
 
 export async function unlockEmployee(input: unknown): Promise<EmployeeActionResult> {
   const supabase = await createServerSupabaseClient();
-  const { db, closeDb, businessId } = await requirePermissionDb(supabase, "employee.manage");
+  const { db, closeDb, businessId, allowedOutletIds } = await requirePermissionDb(supabase, "employee.manage");
   try {
-    const result = await unlockEmployeeWithDb(db, businessId, input);
+    const result = await unlockEmployeeWithDb(db, businessId, allowedOutletIds, input);
     if (!result.error) {
       revalidatePath("/employees");
     }

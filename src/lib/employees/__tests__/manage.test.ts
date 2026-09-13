@@ -41,6 +41,7 @@ describe.skipIf(!hasEnv)("T15b — CRUD karyawan", () => {
 
   let businessId: string;
   let outletId: string;
+  let outletBId: string;
   let deviceId: string;
 
   async function insertEmployee(code: string, pin: string) {
@@ -76,6 +77,12 @@ describe.skipIf(!hasEnv)("T15b — CRUD karyawan", () => {
       .returning({ id: outlets.id });
     outletId = outlet!.id;
 
+    const [outletB] = await db
+      .insert(outlets)
+      .values({ businessId, brandId: brand!.id, code: "EMP2", name: `${PREFIX}_outletB` })
+      .returning({ id: outlets.id });
+    outletBId = outletB!.id;
+
     const [device] = await db
       .insert(devices)
       .values({ businessId, outletId, serialNumber: "EMPDEV1", name: "Kasir Uji Karyawan" })
@@ -100,7 +107,7 @@ describe.skipIf(!hasEnv)("T15b — CRUD karyawan", () => {
   });
 
   it("kode duplikat di bisnis sama ditolak dengan pesan jelas", async () => {
-    const first = await createEmployeeWithDb(db, businessId, {
+    const first = await createEmployeeWithDb(db, businessId, null, {
       code: "DUPCODE",
       fullName: "Karyawan Pertama",
       role: "cashier",
@@ -109,7 +116,7 @@ describe.skipIf(!hasEnv)("T15b — CRUD karyawan", () => {
     });
     expect(first.success).toBeTruthy();
 
-    const second = await createEmployeeWithDb(db, businessId, {
+    const second = await createEmployeeWithDb(db, businessId, null, {
       code: "DUPCODE",
       fullName: "Karyawan Kedua",
       role: "cashier",
@@ -123,7 +130,7 @@ describe.skipIf(!hasEnv)("T15b — CRUD karyawan", () => {
   it("update nama/role/outlet berhasil", async () => {
     const employeeId = await insertEmployee("UPDME", "333333");
 
-    const result = await updateEmployeeWithDb(db, businessId, {
+    const result = await updateEmployeeWithDb(db, businessId, null, {
       id: employeeId,
       fullName: "Nama Baru",
       role: "manager",
@@ -152,7 +159,7 @@ describe.skipIf(!hasEnv)("T15b — CRUD karyawan", () => {
     });
     expect(openResult.success).toBeTruthy();
 
-    const result = await updateEmployeeWithDb(db, businessId, {
+    const result = await updateEmployeeWithDb(db, businessId, null, {
       id: employeeId,
       fullName: `${PREFIX}_${code}`,
       role: "cashier",
@@ -168,7 +175,7 @@ describe.skipIf(!hasEnv)("T15b — CRUD karyawan", () => {
   it("nonaktifkan karyawan TANPA shift terbuka berhasil", async () => {
     const employeeId = await insertEmployee("NOSHIFT", "555555");
 
-    const result = await updateEmployeeWithDb(db, businessId, {
+    const result = await updateEmployeeWithDb(db, businessId, null, {
       id: employeeId,
       fullName: `${PREFIX}_NOSHIFT`,
       role: "cashier",
@@ -194,7 +201,7 @@ describe.skipIf(!hasEnv)("T15b — CRUD karyawan", () => {
       .set({ failedAttempts: 5, lockedUntil: new Date(Date.now() + 15 * 60_000) })
       .where(eq(employees.id, employeeId));
 
-    const resetResult = await resetPinWithDb(db, businessId, { employeeId, newPin });
+    const resetResult = await resetPinWithDb(db, businessId, null, { employeeId, newPin });
     expect(resetResult.success).toBeTruthy();
 
     await expect(
@@ -217,7 +224,7 @@ describe.skipIf(!hasEnv)("T15b — CRUD karyawan", () => {
     }
     await expect(verifyCashierPin({ outletId, code, pin })).rejects.toThrow(/terkunci/i);
 
-    const unlockResult = await unlockEmployeeWithDb(db, businessId, { employeeId });
+    const unlockResult = await unlockEmployeeWithDb(db, businessId, null, { employeeId });
     expect(unlockResult.success).toBeTruthy();
 
     const identity = await verifyCashierPin({ outletId, code, pin });
@@ -229,7 +236,7 @@ describe.skipIf(!hasEnv)("T15b — CRUD karyawan", () => {
     const pin = "999999";
     const employeeId = await insertEmployee(code, pin);
 
-    await updateEmployeeWithDb(db, businessId, {
+    await updateEmployeeWithDb(db, businessId, null, {
       id: employeeId,
       fullName: `${PREFIX}_${code}`,
       role: "cashier",
@@ -238,5 +245,122 @@ describe.skipIf(!hasEnv)("T15b — CRUD karyawan", () => {
     });
 
     await expect(verifyCashierPin({ outletId, code, pin })).rejects.toThrow(/salah/i);
+  });
+
+  describe("Pembatasan akses per outlet, Tahap 4 (13 September 2026, §27)", () => {
+    it("createEmployeeWithDb: allowedOutletIds TIDAK memuat outlet ini -- DITOLAK, TIDAK ADA baris baru", async () => {
+      const before = await db.select({ id: employees.id }).from(employees).where(eq(employees.outletId, outletBId));
+
+      const result = await createEmployeeWithDb(db, businessId, [outletId], {
+        code: "SCOPECREATENO",
+        fullName: "Karyawan Scope",
+        role: "cashier",
+        outletId: outletBId,
+        pin: "121212",
+      });
+      expect(result.error).toBeTruthy();
+      expect(result.error).not.toContain(outletBId);
+
+      const after = await db.select({ id: employees.id }).from(employees).where(eq(employees.outletId, outletBId));
+      expect(after.length).toBe(before.length);
+    });
+
+    it("createEmployeeWithDb: allowedOutletIds memuat outlet ini -- berhasil", async () => {
+      const result = await createEmployeeWithDb(db, businessId, [outletId], {
+        code: "SCOPECREATEOK",
+        fullName: "Karyawan Scope OK",
+        role: "cashier",
+        outletId,
+        pin: "232323",
+      });
+      expect(result.success).toBeTruthy();
+    });
+
+    it("updateEmployeeWithDb: baris SAAT INI di outlet LAIN (di luar cakupan) -- DITOLAK, baris TIDAK BERUBAH, walau input outletId diisi outlet yang diizinkan", async () => {
+      const employeeId = await insertEmployee("SCOPEUPDCURR", "343434"); // outlet A (outletId)
+      // pindahkan manual ke outlet B dulu (simulasikan baris SUDAH di outlet
+      // di luar cakupan manajer yang mencoba mengubahnya)
+      await db.update(employees).set({ outletId: outletBId }).where(eq(employees.id, employeeId));
+      const [before] = await db.select().from(employees).where(eq(employees.id, employeeId));
+
+      // Manajer cuma diizinkan outletId (A) -- mencoba mengubah karyawan
+      // yang SEKARANG di outletB, walau input outletId diisi outletA
+      // (mencoba "menarik" karyawan itu ke outlet sendiri).
+      const result = await updateEmployeeWithDb(db, businessId, [outletId], {
+        id: employeeId,
+        fullName: "DIUBAH PAKSA",
+        role: "cashier",
+        outletId,
+        isActive: true,
+      });
+      expect(result.error).toBeTruthy();
+
+      const [after] = await db.select().from(employees).where(eq(employees.id, employeeId));
+      expect(after?.fullName).toBe(before?.fullName);
+      expect(after?.outletId).toBe(outletBId); // tidak pernah "ditarik"
+    });
+
+    it("updateEmployeeWithDb: baris di outlet yang diizinkan, TAPI input outletId memindahkan ke outlet LAIN -- DITOLAK, baris TETAP di outlet asal", async () => {
+      const employeeId = await insertEmployee("SCOPEUPDTARGET", "454545"); // outlet A (outletId)
+      const [before] = await db.select().from(employees).where(eq(employees.id, employeeId));
+
+      // Manajer cuma diizinkan outletId (A), baris ini MEMANG di outlet A --
+      // tapi mencoba memindahkannya ke outletB lewat input.
+      const result = await updateEmployeeWithDb(db, businessId, [outletId], {
+        id: employeeId,
+        fullName: before!.fullName,
+        role: "cashier",
+        outletId: outletBId,
+        isActive: true,
+      });
+      expect(result.error).toBeTruthy();
+
+      const [after] = await db.select().from(employees).where(eq(employees.id, employeeId));
+      expect(after?.outletId).toBe(outletId); // tidak pernah pindah ke outletB
+    });
+
+    it("updateEmployeeWithDb: baris DAN outletId tujuan sama-sama di outlet yang diizinkan -- berhasil", async () => {
+      const employeeId = await insertEmployee("SCOPEUPDOK", "565656");
+
+      const result = await updateEmployeeWithDb(db, businessId, [outletId], {
+        id: employeeId,
+        fullName: "Nama Diizinkan",
+        role: "cashier",
+        outletId,
+        isActive: true,
+      });
+      expect(result.success).toBeTruthy();
+    });
+
+    it("resetPinWithDb: karyawan di outlet LAIN -- DITOLAK, PIN lama TETAP berfungsi", async () => {
+      const code = "SCOPERESETNO";
+      const oldPin = "676767";
+      const employeeId = await insertEmployee(code, oldPin);
+      await db.update(employees).set({ outletId: outletBId }).where(eq(employees.id, employeeId));
+
+      const result = await resetPinWithDb(db, businessId, [outletId], { employeeId, newPin: "787878" });
+      expect(result.error).toBeTruthy();
+
+      const identity = await verifyCashierPin({ outletId: outletBId, code, pin: oldPin });
+      expect(identity.employeeId).toBe(employeeId); // PIN lama tetap berfungsi
+    });
+
+    it("unlockEmployeeWithDb: karyawan di outlet LAIN -- DITOLAK, tetap terkunci", async () => {
+      const code = "SCOPEUNLOCKNO";
+      const pin = "898989";
+      const employeeId = await insertEmployee(code, pin);
+      await db.update(employees).set({ outletId: outletBId }).where(eq(employees.id, employeeId));
+
+      for (let i = 0; i < 5; i++) {
+        await expect(
+          verifyCashierPin({ outletId: outletBId, code, pin: "000000" })
+        ).rejects.toThrow(/salah/i);
+      }
+
+      const result = await unlockEmployeeWithDb(db, businessId, [outletId], { employeeId });
+      expect(result.error).toBeTruthy();
+
+      await expect(verifyCashierPin({ outletId: outletBId, code, pin })).rejects.toThrow(/terkunci/i);
+    });
   });
 });
