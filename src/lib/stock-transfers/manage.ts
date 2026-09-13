@@ -942,8 +942,21 @@ export type LastRequestLine = { ingredientId: string; ingredientName: string; un
 export async function getLastRequestForOutlet(
   db: Db,
   businessId: string,
+  allowedOutletIds: OutletScope,
   toOutletId: string
 ): Promise<LastRequestLine[]> {
+  // Pembatasan akses per outlet, Tahap 4 (13 September 2026, §28) --
+  // gerbang sendiri, TIDAK mengandalkan pemanggil sudah menyaring
+  // toOutletId (pemanggil saat ini memang sudah menyaring lewat
+  // outletScopeCondition di dropdown, tapi fungsi ini dipakai langsung
+  // dengan toOutletId sebagai parameter -- kalau suatu hari dipanggil
+  // dari tempat lain tanpa penyaringan itu, lubangnya harus tetap
+  // tertutup di sini). Di luar cakupan = dianggap "tidak ada riwayat",
+  // konsisten dengan tipe kembalian array kosong yang sudah ada.
+  if (!isOutletAllowed(allowedOutletIds, toOutletId)) {
+    return [];
+  }
+
   const [last] = await db
     .select({ id: stockTransfers.id })
     .from(stockTransfers)

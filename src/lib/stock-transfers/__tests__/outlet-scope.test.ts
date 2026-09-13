@@ -22,6 +22,7 @@ import type { OutletScope } from "@/lib/auth/outlet-scope";
 import {
   approveStockTransferWithDb,
   cancelStockTransferWithDb,
+  getLastRequestForOutlet,
   receiveStockTransferWithDb,
   rejectStockTransferWithDb,
   requestStockTransferWithDb,
@@ -470,6 +471,28 @@ describe.skipIf(!hasEnv)("Pembatasan akses per outlet, Tahap 4 -- Stock Transfer
         .returning({ id: stockTransfers.id });
       const result = await approveStockTransferWithDb(db, businessId, [], { transferId: row!.id, actorId: employeeId });
       expect(result.error).toBe(strings.common.outletAccessDenied);
+    });
+  });
+
+  describe("5/5 -- getLastRequestForOutlet: gerbang sendiri, tidak mengandalkan pemanggil sudah menyaring", () => {
+    it("toOutletId di luar cakupan -- balik array KOSONG walau riwayat sungguhan ada", async () => {
+      const rows = await getLastRequestForOutlet(db, businessId, [outletBId], outletAId);
+      expect(rows).toEqual([]);
+    });
+
+    it("toOutletId di dalam cakupan -- balik hasil normal (array, boleh kosong kalau memang belum pernah ada riwayat baris utuh)", async () => {
+      const rows = await getLastRequestForOutlet(db, businessId, [outletAId], outletAId);
+      expect(Array.isArray(rows)).toBe(true);
+    });
+
+    it("scope array KOSONG -- balik array KOSONG, bukan error", async () => {
+      const rows = await getLastRequestForOutlet(db, businessId, [], outletAId);
+      expect(rows).toEqual([]);
+    });
+
+    it("scope null (owner/akuntan) -- balik hasil normal", async () => {
+      const rows = await getLastRequestForOutlet(db, businessId, null, outletAId);
+      expect(Array.isArray(rows)).toBe(true);
     });
   });
 });

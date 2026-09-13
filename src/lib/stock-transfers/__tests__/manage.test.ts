@@ -515,7 +515,7 @@ describe.skipIf(!hasEnv)("stock-transfers/manage", () => {
       lines: [{ ingredientId: ingId2, unitChoice: "base", qty: 7 }],
     });
 
-    const last = await getLastRequestForOutlet(db, businessId, retailOutletId);
+    const last = await getLastRequestForOutlet(db, businessId, null, retailOutletId);
     expect(last.length).toBe(1);
     expect(last[0]!.ingredientId).toBe(ingId2);
     expect(last[0]!.qty).toBe("7.0000");

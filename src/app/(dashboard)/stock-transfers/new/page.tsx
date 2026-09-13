@@ -67,7 +67,7 @@ export default async function NewStockTransferPage() {
       .orderBy(asc(employees.fullName));
 
     for (const outlet of outletRows) {
-      lastRequestByOutlet[outlet.id] = await getLastRequestForOutlet(db, businessId, outlet.id);
+      lastRequestByOutlet[outlet.id] = await getLastRequestForOutlet(db, businessId, allowedOutletIds, outlet.id);
     }
   } finally {
     await closeDb();
