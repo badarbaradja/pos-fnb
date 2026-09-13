@@ -1,6 +1,7 @@
 import { and, asc, eq } from "drizzle-orm";
 import { createServerSupabaseClient } from "@/lib/auth/supabase";
 import { requirePermissionDb } from "@/lib/auth/permissions";
+import { outletScopeCondition } from "@/lib/auth/outlet-scope";
 import { outlets } from "@/lib/db/schema";
 import { getStokByCategory } from "@/lib/db/queries/barang-report";
 import {
@@ -30,9 +31,30 @@ export default async function StockReportPage({
 }) {
   const params = await searchParams;
   const supabase = await createServerSupabaseClient();
-  const { db, closeDb, businessId } = await requirePermissionDb(supabase, "report.sales");
+  const { db, closeDb, businessId, allowedOutletIds } = await requirePermissionDb(supabase, "report.sales");
+
+  // Pembatasan akses per outlet, Tahap 3 (13 September 2026, §24) --
+  // dicek SEBELUM query outletRows di bawah supaya pesannya jelas beda
+  // dari "noThriftOutlet": ini masalah akses (hubungi admin), bukan
+  // "bisnis ini memang tidak punya outlet thrifting".
+  if (allowedOutletIds !== null && allowedOutletIds.length === 0) {
+    await closeDb();
+    return (
+      <div className="flex flex-col gap-2">
+        <h1 className="text-xl font-semibold">{strings.stockReport.title}</h1>
+        <p className="rounded-lg border border-destructive/50 bg-destructive/10 p-4 text-sm text-destructive">
+          {strings.common.noOutletAccess}
+        </p>
+      </div>
+    );
+  }
 
   try {
+    // Disaring allowedOutletIds di query -- dropdown TIDAK PERNAH
+    // menampilkan outlet di luar cakupan, dan selectedOutlet di bawah
+    // (yang jatuh balik ke outletRows[0] kalau outletId di URL tidak
+    // ketemu) otomatis tidak mungkin memilih outlet terlarang karena
+    // sumbernya sendiri sudah bersih.
     const outletRows = await db
       .select({ id: outlets.id, name: outlets.name })
       .from(outlets)
@@ -40,7 +62,8 @@ export default async function StockReportPage({
         and(
           eq(outlets.businessId, businessId),
           eq(outlets.posMode, "thrifting"),
-          eq(outlets.isActive, true)
+          eq(outlets.isActive, true),
+          outletScopeCondition(allowedOutletIds, outlets.id)
         )
       )
       .orderBy(asc(outlets.createdAt));
