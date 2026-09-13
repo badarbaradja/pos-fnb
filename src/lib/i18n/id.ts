@@ -969,6 +969,7 @@ export const id = {
     cutoffNotConfirmed: "BELUM dikonfirmasi",
     cutoffWarning: "Batas hari outlet ini belum dikonfirmasi -- angka periode bisa bergeser. Konfirmasi di halaman Outlet dulu.",
     cutoffBelumDikonfirmasiError: "Batas hari outlet ini belum dikonfirmasi -- angka periode bisa bergeser. Konfirmasi di halaman Outlet dulu.",
+    payoutBlockedZeroSisaHint: "Sisa dibayar sudah nol -- tidak ada yang perlu dicatat.",
     colPemilik: "Pemilik",
     colDititipkan: "Dititipkan",
     colTerjual: "Terjual",

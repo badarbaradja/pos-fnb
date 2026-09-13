@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { Decimal } from "decimal.js";
 import { toast } from "sonner";
 import { fetchPayoutHistory, recordPemilikPayout, type PemilikPayoutHistoryRow } from "@/app/(dashboard)/reports/bagi-hasil/actions";
+import { calculateSisaDibayar } from "@/lib/calc/bagi-hasil-payout";
 import { formatIDR } from "@/lib/utils/money";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -25,6 +26,14 @@ import { id as strings } from "@/lib/i18n/id";
  * dibayar". Terkunci (tombol disabled) selama outlet.dayCutoffConfirmed
  * false -- pertahanan lapis UI, server (recordPemilikPayoutWithDb) TETAP
  * menolak juga kalau ada yang memaksa lewat jalur lain (CLAUDE.md §3.4).
+ *
+ * Terkunci JUGA (13 September 2026, temuan CEO) kalau sisa dibayar PERSIS
+ * nol -- mencatat pembayaran nol tidak berarti apa-apa, cuma mengotori
+ * tabel pemilik_payouts. SENGAJA CUMA nol persis (isZero()), BUKAN "nol
+ * atau kurang" -- sisa NEGATIF (kelebihan bayar) harus TETAP bisa dicatat
+ * (calculateSisaDibayar sengaja tidak meng-clamp negatif ke nol, lihat
+ * __tests__/bagi-hasil-payout.test.ts), supaya jalur koreksi kelebihan
+ * bayar tidak pernah tertutup.
  */
 export function PayoutDialog({
   outletId,
@@ -33,6 +42,8 @@ export function PayoutDialog({
   startDate,
   endDate,
   cutoffConfirmed,
+  bagianPemilik,
+  sudahDibayar,
 }: {
   outletId: string;
   pemilikId: string;
@@ -40,7 +51,17 @@ export function PayoutDialog({
   startDate: string;
   endDate: string;
   cutoffConfirmed: boolean;
+  bagianPemilik: string;
+  sudahDibayar: string;
 }) {
+  const sisa = calculateSisaDibayar(new Decimal(bagianPemilik), new Decimal(sudahDibayar));
+  const isZeroSisa = sisa.isZero();
+  const isTriggerDisabled = !cutoffConfirmed || isZeroSisa;
+  const triggerDisabledReason = !cutoffConfirmed
+    ? strings.bagiHasil.cutoffBelumDikonfirmasiError
+    : isZeroSisa
+      ? strings.bagiHasil.payoutBlockedZeroSisaHint
+      : undefined;
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [isLoadingHistory, setIsLoadingHistory] = useState(false);
@@ -106,7 +127,12 @@ export function PayoutDialog({
     <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogTrigger
         render={
-          <Button variant="outline" size="sm" disabled={!cutoffConfirmed}>
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={isTriggerDisabled}
+            title={triggerDisabledReason}
+          >
             {strings.bagiHasil.tandaiSudahDibayarButton}
           </Button>
         }

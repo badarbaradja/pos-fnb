@@ -175,6 +175,8 @@ export function BagiHasilView({
                         startDate={startDate}
                         endDate={endDate}
                         cutoffConfirmed={dayCutoffConfirmed}
+                        bagianPemilik={row.bagianPemilik}
+                        sudahDibayar={row.sudahDibayar}
                       />
                     </td>
                   </tr>
