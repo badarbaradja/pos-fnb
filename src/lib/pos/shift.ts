@@ -1467,6 +1467,14 @@ export async function closeAndReopenShiftWithDb(
     const oldShiftOutletId = oldShift.outletId;
     const oldShiftId = oldShift.id;
 
+    // raceLost (bukan throw+catch) -- shift lama sudah ditutup pihak lain
+    // di antara pengecekan awal dan transaksi ini adalah race BISNIS biasa
+    // (pesan spesifik yang aman ditampilkan), BUKAN error tak terduga --
+    // dipisah dari catch-all di bawah supaya catch-all itu bisa konsisten
+    // selalu pesan generik seperti 8 fungsi lain di file ini (pola sama
+    // shift.ts, bukan meneruskan err.message mentah yang bisa membocorkan
+    // detail internal seperti error RLS/DB).
+    let raceLost = false;
     await db.transaction(async (tx) => {
       const updated = await tx
         .update(shifts)
@@ -1474,7 +1482,8 @@ export async function closeAndReopenShiftWithDb(
         .where(and(eq(shifts.id, oldShiftId), eq(shifts.status, "open")))
         .returning({ id: shifts.id });
       if (updated.length === 0) {
-        throw new Error(strings.shift.alreadyClosedError);
+        raceLost = true;
+        return;
       }
 
       await tx.insert(shifts).values({
@@ -1491,6 +1500,10 @@ export async function closeAndReopenShiftWithDb(
       });
     });
 
+    if (raceLost) {
+      return { error: strings.shift.alreadyClosedError };
+    }
+
     return {
       success: {
         newShiftId: data.newShift.id,
@@ -1503,6 +1516,6 @@ export async function closeAndReopenShiftWithDb(
     };
   } catch (err) {
     console.error("closeAndReopenShiftWithDb gagal:", err);
-    return { error: err instanceof Error ? err.message : strings.common.unexpectedError };
+    return { error: strings.common.unexpectedError };
   }
 }
