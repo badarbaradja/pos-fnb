@@ -29,6 +29,7 @@ export type OutletFormValue = {
   address: string | null;
   phone: string | null;
   dayCutoffTime: string;
+  shiftWarningMinutes: number;
   isCentralKitchen: boolean;
   taxPercent: string;
   taxInclusive: boolean;
@@ -166,6 +167,20 @@ export function OutletFormDialog({
                   {strings.outlets.dayCutoffTimeChangeWarning}
                 </p>
               ) : null}
+            </div>
+
+            <div className="flex flex-col gap-2">
+              <Label htmlFor="shiftWarningMinutes">{strings.outlets.shiftWarningMinutes}</Label>
+              <Input
+                id="shiftWarningMinutes"
+                name="shiftWarningMinutes"
+                type="number"
+                min={1}
+                step={1}
+                defaultValue={outlet?.shiftWarningMinutes ?? 30}
+                required
+              />
+              <p className="text-xs text-muted-foreground">{strings.outlets.shiftWarningMinutesHint}</p>
             </div>
 
             <div className="flex flex-col gap-3 rounded-lg border border-destructive/50 bg-destructive/10 p-3">

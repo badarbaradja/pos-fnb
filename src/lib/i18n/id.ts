@@ -178,6 +178,9 @@ export const id = {
     dayCutoffTime: "Jam Tutup Hari Operasional",
     dayCutoffTimeHint: "Transaksi sebelum jam ini masuk laporan hari sebelumnya. Cafe yang tutup jam 2 pagi biasanya pakai 04:00.",
     dayCutoffTimeChangeWarning: "Outlet ini sudah punya transaksi. Mengubah jam cutoff TIDAK mengubah business_date transaksi lama -- transaksi lama tetap dihitung dengan jam cutoff yang lama saat itu. Laporan yang membentang lintas tanggal perubahan ini bisa terlihat tidak konsisten. Ini bukan bug -- pastikan Anda memahami konsekuensinya sebelum menyimpan.",
+    shiftWarningMinutes: "Peringatan Pergantian Hari (menit sebelum jam tutup)",
+    shiftWarningMinutesHint: "Berapa menit sebelum jam tutup operasional, layar kasir menampilkan peringatan supaya bersiap tutup/buka shift baru -- berguna untuk outlet yang buka 24 jam dan tidak punya jeda alami untuk tutup shift.",
+    shiftWarningMinutesMustBePositive: "Menit peringatan harus lebih besar dari 0",
     fiscalWarningTitle: "Berdampak ke struk dan legal",
     fiscalWarning: "Pajak, jenis pajak (termasuk/tidak termasuk harga), dan service charge di bawah ini langsung menentukan angka yang tercetak di struk pelanggan dan punya konsekuensi legal/pajak. Jangan ubah tanpa konfirmasi eksplisit dari pemilik usaha.",
     taxPercent: "Pajak (%)",
@@ -865,6 +868,20 @@ export const id = {
     reconcileSubmitButton: "Hitung & Selesaikan",
     reconcileSuccess: "Rekonsiliasi selesai.",
     staleShiftListLabel: "Basi (belum ditutup)",
+
+    // §14 prasyarat shift, poin Indokopi 24 jam (13 September 2026) --
+    // peringatan pergantian hari bisnis + alur "tutup & buka shift baru"
+    // satu langkah.
+    cutoverWarning: "Hari bisnis akan berganti dalam {minutes} menit -- siap-siap tutup shift.",
+    cutoverWarningUrgent: "Hari bisnis sudah berganti -- tutup & buka shift baru sekarang.",
+    cutoverButton: "Tutup & Buka Shift Baru",
+    cutoverDialogTitle: "Tutup & Buka Shift Baru",
+    cutoverDialogHint: "Hitung uang fisik SEKALI -- dipakai untuk menutup shift ini DAN sebagai modal awal shift baru.",
+    cutoverNewShiftSectionTitle: "Shift Baru",
+    cutoverSubmitButton: "Tutup & Buka Shift Baru",
+    cutoverSubmitting: "Memproses...",
+    cutoverSuccess: "Shift ditutup, shift baru dibuka.",
+    cutoverVarianceHint: "Selisih di luar toleransi -- boleh tetap lanjut, isi alasan dulu.",
   },
   receipt: {
     reprintBadge: "CETAK ULANG",

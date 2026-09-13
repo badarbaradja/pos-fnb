@@ -218,6 +218,13 @@
       "when": 1789271938032,
       "tag": "0030_shift_force_close",
       "breakpoints": true
+    },
+    {
+      "idx": 31,
+      "version": "7",
+      "when": 1789273862175,
+      "tag": "0031_outlets_shift_warning_minutes",
+      "breakpoints": true
     }
   ]
 }

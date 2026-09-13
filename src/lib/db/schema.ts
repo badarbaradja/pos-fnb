@@ -158,6 +158,13 @@ export const outlets = pgTable(
     // salah -- mengubah jumlah uang yang harus dibayarkan ke pemilik
     // titipan.
     dayCutoffConfirmed: boolean("day_cutoff_confirmed").notNull().default(false),
+    // §14 prasyarat shift, poin Indokopi 24 jam (13 September 2026) --
+    // berapa menit sebelum dayCutoffTime peringatan pergantian hari
+    // bisnis muncul di layar kasir. Kolom setting, BUKAN angka mati
+    // (instruksi eksplisit CEO) -- dipakai lib/utils/business-date.ts
+    // nextCutoffInstant() + components/pos/shift/shift-cutover-bar.tsx.
+    // Bawaan 30 menit untuk SEMUA outlet, termasuk yang sudah ada.
+    shiftWarningMinutes: integer("shift_warning_minutes").notNull().default(30),
     isCentralKitchen: boolean("is_central_kitchen").notNull().default(false),
     // numeric(7,4) sesuai BLUEPRINT §3.0 (kolom persentase)
     taxPercent: numeric("tax_percent", { precision: 7, scale: 4 })

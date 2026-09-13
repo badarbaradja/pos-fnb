@@ -37,6 +37,7 @@ import { generateId } from "@/lib/utils/id";
 import {
   addCashMovementWithDb,
   checkShiftSellability,
+  closeAndReopenShiftWithDb,
   confirmForceClosedReconciliationWithDb,
   confirmShiftCloseWithDb,
   forceCloseShiftWithDb,
@@ -797,6 +798,197 @@ describe.skipIf(!hasEnv)("T15 — siklus shift", () => {
       await db.delete(shifts).where(eq(shifts.id, fcShiftId));
       await db.delete(devices).where(eq(devices.id, staleDeviceId));
       await db.delete(devices).where(eq(devices.id, fcDeviceId));
+    });
+  });
+
+  describe("closeAndReopenShiftWithDb -- §14 prasyarat shift, poin Indokopi 24 jam (13 September 2026)", () => {
+    async function openIsolatedShiftWithOpeningCash(serialSuffix: string, openingCash: string) {
+      const [device] = await db
+        .insert(devices)
+        .values({ businessId, outletId, serialNumber: `SHIFTDEV_CR_${serialSuffix}`, name: `Kasir Uji CR ${serialSuffix}` })
+        .returning({ id: devices.id });
+      const opened = await openShiftWithDb(db, businessId, {
+        id: generateId(),
+        outletId,
+        deviceId: device!.id,
+        employeeCode: EMPLOYEE_CODE,
+        pin: CORRECT_PIN,
+        openingCash,
+      });
+      if (!opened.success) {
+        throw new Error(`Gagal buka shift uji close-and-reopen: ${opened.error}`);
+      }
+      return { deviceId: device!.id, shiftId: opened.success.shiftId };
+    }
+
+    it("selisih kas KECIL (dalam toleransi) -> langsung sukses, angka fisik yang SAMA jadi countedCash shift lama DAN openingCash shift baru -- selisih TETAP tercatat, bukan nol yang tidak berarti apa-apa", async () => {
+      // openingCash 100000, tidak ada transaksi sama sekali -> expectedCash
+      // = 100000 persis. countedCash 105000 -> selisih +5000, DI DALAM
+      // toleransi fixture (20000), TAPI SENGAJA BUKAN NOL -- CEO eksplisit:
+      // "kalau selisih selalu nol di test, berarti tidak ada yang diuji".
+      const { deviceId: oldDeviceId, shiftId: oldShiftId } = await openIsolatedShiftWithOpeningCash("A", "100000");
+
+      const result = await closeAndReopenShiftWithDb(db, businessId, {
+        oldShiftId,
+        countedCash: "105000",
+        newShift: { id: generateId(), employeeCode: EMPLOYEE_CODE, pin: CORRECT_PIN, servedByName: "" },
+      });
+      expect(result.error).toBeUndefined();
+      expect(result.needsReason).toBeUndefined();
+      expect(result.success).toBeTruthy();
+      expect(result.success?.cashVariance).toBe("5000.00");
+
+      const [oldRow] = await db.select().from(shifts).where(eq(shifts.id, oldShiftId));
+      expect(oldRow?.status).toBe("closed");
+      expect(oldRow?.countedCash).toBe("105000.00");
+      expect(oldRow?.expectedCash).toBe("100000.00");
+      // SELISIH TETAP TERCATAT di shift LAMA -- ini yang dibuktikan, bukan
+      // sekadar "berhasil".
+      expect(oldRow?.cashVariance).toBe("5000.00");
+
+      const [newRow] = await db.select().from(shifts).where(eq(shifts.id, result.success!.newShiftId));
+      expect(newRow?.status).toBe("open");
+      // Angka fisik yang SAMA (105000) -- BUKAN dihitung ulang -- jadi
+      // saldo awal shift baru.
+      expect(newRow?.openingCash).toBe("105000.00");
+      expect(newRow?.countedCash).toBeNull();
+      expect(newRow?.businessDate).toBe(oldRow?.businessDate);
+
+      await db.delete(shifts).where(eq(shifts.id, oldShiftId));
+      await db.delete(shifts).where(eq(shifts.id, result.success!.newShiftId));
+      await db.delete(devices).where(eq(devices.id, oldDeviceId));
+    });
+
+    it("selisih kas BESAR (di luar toleransi) TANPA alasan -> needsReason, TIDAK ADA yang ditulis (shift lama tetap open, shift baru tidak pernah tercipta)", async () => {
+      const { deviceId: oldDeviceId, shiftId: oldShiftId } = await openIsolatedShiftWithOpeningCash("B", "100000");
+      const newShiftId = generateId();
+
+      const result = await closeAndReopenShiftWithDb(db, businessId, {
+        oldShiftId,
+        countedCash: "50000", // selisih -50000, jauh di luar toleransi 20000
+        newShift: { id: newShiftId, employeeCode: EMPLOYEE_CODE, pin: CORRECT_PIN, servedByName: "" },
+      });
+      expect(result.error).toBeUndefined();
+      expect(result.success).toBeUndefined();
+      expect(result.needsReason).toBeTruthy();
+      expect(result.needsReason?.cashVariance).toBe("-50000.00");
+
+      const [oldRow] = await db.select().from(shifts).where(eq(shifts.id, oldShiftId));
+      expect(oldRow?.status).toBe("open"); // TIDAK disentuh sama sekali
+      expect(oldRow?.countedCash).toBeNull();
+
+      const [newRow] = await db.select().from(shifts).where(eq(shifts.id, newShiftId));
+      expect(newRow).toBeUndefined(); // shift baru TIDAK PERNAH tercipta
+
+      await db.delete(shifts).where(eq(shifts.id, oldShiftId));
+      await db.delete(devices).where(eq(devices.id, oldDeviceId));
+    });
+
+    it("selisih di luar toleransi DENGAN alasan -> TETAP LANJUT (tidak diblokir), shift baru tetap terbuka, selisih besar tercatat apa adanya", async () => {
+      const { deviceId: oldDeviceId, shiftId: oldShiftId } = await openIsolatedShiftWithOpeningCash("C", "100000");
+
+      const result = await closeAndReopenShiftWithDb(db, businessId, {
+        oldShiftId,
+        countedCash: "50000",
+        reason: "Uang dipakai bayar supplier mendadak, belum dicatat kas keluar",
+        newShift: { id: generateId(), employeeCode: EMPLOYEE_CODE, pin: CORRECT_PIN, servedByName: "" },
+      });
+      expect(result.error).toBeUndefined();
+      expect(result.needsReason).toBeUndefined();
+      expect(result.success).toBeTruthy();
+      expect(result.success?.cashVariance).toBe("-50000.00");
+
+      const [oldRow] = await db.select().from(shifts).where(eq(shifts.id, oldShiftId));
+      expect(oldRow?.status).toBe("closed"); // TETAP ditutup, TIDAK diblokir
+      expect(oldRow?.cashVariance).toBe("-50000.00"); // selisih besar TETAP tercatat
+      expect(oldRow?.note).toBe("Uang dipakai bayar supplier mendadak, belum dicatat kas keluar");
+
+      const [newRow] = await db.select().from(shifts).where(eq(shifts.id, result.success!.newShiftId));
+      expect(newRow?.status).toBe("open"); // shift baru TETAP terbuka, tidak diblokir
+      expect(newRow?.openingCash).toBe("50000.00");
+
+      await db.delete(shifts).where(eq(shifts.id, oldShiftId));
+      await db.delete(shifts).where(eq(shifts.id, result.success!.newShiftId));
+      await db.delete(devices).where(eq(devices.id, oldDeviceId));
+    });
+
+    it("PIN shift baru SALAH -> shift lama TIDAK ditutup sama sekali (gagal sebelum transaksi DB apa pun)", async () => {
+      const { deviceId: oldDeviceId, shiftId: oldShiftId } = await openIsolatedShiftWithOpeningCash("D", "100000");
+
+      const result = await closeAndReopenShiftWithDb(db, businessId, {
+        oldShiftId,
+        countedCash: "100000",
+        newShift: { id: generateId(), employeeCode: EMPLOYEE_CODE, pin: WRONG_PIN, servedByName: "" },
+      });
+      expect(result.error).toBeTruthy();
+      expect(result.success).toBeUndefined();
+
+      const [oldRow] = await db.select().from(shifts).where(eq(shifts.id, oldShiftId));
+      expect(oldRow?.status).toBe("open"); // TETAP open, tidak setengah-jalan
+
+      await db.delete(shifts).where(eq(shifts.id, oldShiftId));
+      await db.delete(devices).where(eq(devices.id, oldDeviceId));
+    });
+
+    it("outlet CASHLESS: tutup-dan-buka langsung tanpa hitungan apa pun, countedCash/expectedCash/cashVariance tetap null di shift lama", async () => {
+      const [brand] = await db
+        .insert(brands)
+        .values({ businessId, name: `${PREFIX}_brand_cr_cashless` })
+        .returning({ id: brands.id });
+      const [cashlessOutlet] = await db
+        .insert(outlets)
+        .values({ businessId, brandId: brand!.id, code: "SHF3", name: `${PREFIX}_outlet_cr_cashless`, cashEnabled: false })
+        .returning({ id: outlets.id });
+      const cashlessEmployeeCode = `${EMPLOYEE_CODE}_CRCL`;
+      const cashlessPinHash = await hashPin(CORRECT_PIN);
+      await db.insert(employees).values({
+        businessId,
+        outletId: cashlessOutlet!.id,
+        code: cashlessEmployeeCode,
+        fullName: `${PREFIX}_employee_cr_cashless`,
+        role: "cashier",
+        pinHash: cashlessPinHash,
+      });
+      const [device] = await db
+        .insert(devices)
+        .values({ businessId, outletId: cashlessOutlet!.id, serialNumber: "SHIFTDEV_CR_CASHLESS", name: "Kasir Uji CR Cashless" })
+        .returning({ id: devices.id });
+      const opened = await openShiftWithDb(db, businessId, {
+        id: generateId(),
+        outletId: cashlessOutlet!.id,
+        deviceId: device!.id,
+        employeeCode: cashlessEmployeeCode,
+        pin: CORRECT_PIN,
+        openingCash: "0",
+      });
+      expect(opened.success).toBeTruthy();
+      const oldShiftId = opened.success!.shiftId;
+
+      const result = await closeAndReopenShiftWithDb(db, businessId, {
+        oldShiftId,
+        // countedCash TIDAK dikirim sama sekali -- outlet cashless
+        // melewati seluruh langkah kas.
+        newShift: { id: generateId(), employeeCode: cashlessEmployeeCode, pin: CORRECT_PIN, servedByName: "" },
+      });
+      expect(result.error).toBeUndefined();
+      expect(result.needsReason).toBeUndefined();
+      expect(result.success).toBeTruthy();
+
+      const [oldRow] = await db.select().from(shifts).where(eq(shifts.id, oldShiftId));
+      expect(oldRow?.status).toBe("closed");
+      expect(oldRow?.countedCash).toBeNull();
+      expect(oldRow?.expectedCash).toBeNull();
+      expect(oldRow?.cashVariance).toBeNull();
+
+      const [newRow] = await db.select().from(shifts).where(eq(shifts.id, result.success!.newShiftId));
+      expect(newRow?.openingCash).toBe("0.00");
+
+      await db.delete(shifts).where(eq(shifts.id, oldShiftId));
+      await db.delete(shifts).where(eq(shifts.id, result.success!.newShiftId));
+      await db.delete(employees).where(eq(employees.code, cashlessEmployeeCode));
+      await db.delete(devices).where(eq(devices.id, device!.id));
+      await db.delete(outlets).where(eq(outlets.id, cashlessOutlet!.id));
+      await db.delete(brands).where(eq(brands.id, brand!.id));
     });
   });
 });

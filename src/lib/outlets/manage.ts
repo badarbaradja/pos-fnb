@@ -43,6 +43,18 @@ const editableOutletFields = {
     .string()
     .trim()
     .regex(CUTOFF_PATTERN, strings.outlets.cutoffTimeFormatError),
+  // §14 prasyarat shift, poin Indokopi 24 jam (13 September 2026) --
+  // menit sebelum dayCutoffTime peringatan pergantian hari bisnis
+  // muncul di layar kasir. Kolom setting, bukan angka mati. .default(30)
+  // -- SAMA dengan default kolom DB -- supaya pemanggil lama (test
+  // fixture, skrip seed) yang belum tahu field ini tidak pernah menolak
+  // gara-gara field yang wajar tidak diisi, sama pola isCentralKitchen/
+  // cashEnabled di bawah.
+  shiftWarningMinutes: z.coerce
+    .number()
+    .int()
+    .positive(strings.outlets.shiftWarningMinutesMustBePositive)
+    .default(30),
   isCentralKitchen: z.coerce.boolean().default(false),
   taxPercent: z.coerce.number().min(0, strings.outlets.percentMustBeNonNegative),
   taxInclusive: z.coerce.boolean().default(false),
@@ -131,6 +143,7 @@ export async function createOutletWithDb(
       address: data.address || null,
       phone: data.phone || null,
       dayCutoffTime: data.dayCutoffTime,
+      shiftWarningMinutes: data.shiftWarningMinutes,
       isCentralKitchen: data.isCentralKitchen,
       taxPercent: String(data.taxPercent),
       taxInclusive: data.taxInclusive,
@@ -203,6 +216,7 @@ export async function updateOutletWithDb(
       phone: data.phone || null,
       dayCutoffTime: data.dayCutoffTime,
       ...(cutoffChanged ? { dayCutoffConfirmed: false } : {}),
+      shiftWarningMinutes: data.shiftWarningMinutes,
       isCentralKitchen: data.isCentralKitchen,
       taxPercent: String(data.taxPercent),
       taxInclusive: data.taxInclusive,

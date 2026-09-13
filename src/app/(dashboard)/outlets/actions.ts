@@ -64,6 +64,7 @@ export async function saveOutlet(
       address: formData.get("address"),
       phone: formData.get("phone"),
       dayCutoffTime: formData.get("dayCutoffTime"),
+      shiftWarningMinutes: formData.get("shiftWarningMinutes"),
       isCentralKitchen: formData.get("isCentralKitchen") === "on",
       taxPercent: formData.get("taxPercent"),
       taxInclusive: formData.get("taxInclusive") === "on",

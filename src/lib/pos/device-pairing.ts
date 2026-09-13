@@ -42,6 +42,7 @@ export type PairedOutlet = {
   cashEnabled: boolean;
   cashVarianceTolerance: string;
   dayCutoffTime: string;
+  shiftWarningMinutes: number;
   // TT06 (10 September 2026) -- satu-satunya pembeda routing /pos (grid
   // produk F&B) vs /pos/thrift (barcode-first barang titipan). Lihat
   // komentar posModeEnum di schema.ts.
@@ -97,6 +98,7 @@ export async function getPairedDevice(
       cashEnabled: row.outlet.cashEnabled,
       cashVarianceTolerance: row.outlet.cashVarianceTolerance,
       dayCutoffTime: row.outlet.dayCutoffTime,
+      shiftWarningMinutes: row.outlet.shiftWarningMinutes,
       posMode: row.outlet.posMode,
     },
     device: { id: row.device.id, name: row.device.name },
@@ -175,6 +177,7 @@ export async function pairDeviceWithDb(
         cashEnabled: row.outlet.cashEnabled,
         cashVarianceTolerance: row.outlet.cashVarianceTolerance,
         dayCutoffTime: row.outlet.dayCutoffTime,
+        shiftWarningMinutes: row.outlet.shiftWarningMinutes,
         posMode: row.outlet.posMode,
       },
       device: { id: row.device.id, name: row.device.name },

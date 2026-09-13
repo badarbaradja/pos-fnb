@@ -1,5 +1,5 @@
-import { toZonedTime } from "date-fns-tz";
-import { format, subDays } from "date-fns";
+import { fromZonedTime, toZonedTime } from "date-fns-tz";
+import { addDays, format, parseISO, subDays } from "date-fns";
 
 // Diekspor supaya form outlet (T22b) bisa validasi format yang sama persis
 // sebelum tersimpan, bukan cuma menduplikasi regex di tempat terpisah.
@@ -37,6 +37,27 @@ export function businessDate(
     localSeconds < cutoffSeconds ? subDays(localDate, 1) : localDate;
 
   return format(businessDay, "yyyy-MM-dd");
+}
+
+/**
+ * §14 prasyarat shift, poin Indokopi 24 jam (13 September 2026) -- instant
+ * UTC persis kapan hari bisnis SEKARANG akan berakhir (dayCutoffTime
+ * berikutnya). Dipakai peringatan pergantian shift di layar kasir.
+ *
+ * businessDate(now) = X berarti hari bisnis X SEDANG berjalan, dan
+ * berakhir di dayCutoffTime pada KALENDER besoknya X (bukan kalender
+ * hari ini) -- businessDate() sendiri mundur satu hari kalender kalau
+ * jam lokal < cutoff, jadi cutoff yang MENGAKHIRI hari bisnis X selalu
+ * jatuh di X+1 pada kalender.
+ */
+export function nextCutoffInstant(
+  now: Date,
+  timezone: string,
+  dayCutoffTime: string
+): Date {
+  const currentBusinessDate = businessDate(now, timezone, dayCutoffTime);
+  const nextCalendarDate = format(addDays(parseISO(currentBusinessDate), 1), "yyyy-MM-dd");
+  return fromZonedTime(`${nextCalendarDate}T${dayCutoffTime}`, timezone);
 }
 
 // Diekspor supaya lib/outlets/manage.ts bisa membandingkan dayCutoffTime

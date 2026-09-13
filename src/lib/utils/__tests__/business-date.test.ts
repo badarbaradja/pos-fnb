@@ -5,7 +5,7 @@
  * berjalan di Asia/Bangkok, bukan UTC — lihat catatan di CALC-SPEC).
  */
 import { describe, it, expect } from "vitest";
-import { businessDate } from "../business-date";
+import { businessDate, nextCutoffInstant } from "../business-date";
 
 describe("businessDate — TC-15 (cutoff 04:00, tz Asia/Jakarta / WIB)", () => {
   const tz = "Asia/Jakarta";
@@ -76,5 +76,34 @@ describe("businessDate — format dayCutoffTime tidak valid", () => {
     const createdAt = new Date("2026-08-11T18:30:00Z");
     expect(() => businessDate(createdAt, "Asia/Jakarta", "4:00")).toThrow();
     expect(() => businessDate(createdAt, "Asia/Jakarta", "invalid")).toThrow();
+  });
+});
+
+describe("nextCutoffInstant -- §14 prasyarat shift, poin Indokopi 24 jam (13 September 2026)", () => {
+  const tz = "Asia/Jakarta";
+
+  it("SEBELUM cutoff (masih pagi buta, hari bisnis KEMARIN sedang berjalan) -> cutoff berikutnya HARI INI jam cutoff", () => {
+    // 2026-08-12 02:00 WIB = 2026-08-11 19:00 UTC -- businessDate = 2026-08-11
+    const now = new Date("2026-08-11T19:00:00Z");
+    const result = nextCutoffInstant(now, tz, "04:00:00");
+    // Cutoff berikutnya: 2026-08-12 04:00 WIB = 2026-08-11 21:00 UTC
+    expect(result.toISOString()).toBe("2026-08-11T21:00:00.000Z");
+  });
+
+  it("SESUDAH cutoff (siang/malam, hari bisnis HARI INI sedang berjalan) -> cutoff berikutnya BESOK jam cutoff", () => {
+    // 2026-08-12 10:00 WIB = 2026-08-12 03:00 UTC -- businessDate = 2026-08-12
+    const now = new Date("2026-08-12T03:00:00Z");
+    const result = nextCutoffInstant(now, tz, "04:00:00");
+    // Cutoff berikutnya: 2026-08-13 04:00 WIB = 2026-08-12 21:00 UTC
+    expect(result.toISOString()).toBe("2026-08-12T21:00:00.000Z");
+  });
+
+  it("TEPAT di detik cutoff -> businessDate sudah berganti (>= cutoff, bukan >), cutoff berikutnya BESOK", () => {
+    // 2026-08-12 04:00:00 WIB TEPAT = 2026-08-11 21:00:00 UTC
+    const now = new Date("2026-08-11T21:00:00Z");
+    const result = nextCutoffInstant(now, tz, "04:00:00");
+    // businessDate(now) sudah "2026-08-12" (>= cutoff dihitung SUDAH hari
+    // itu, lihat businessDate()) -- cutoff berikutnya 2026-08-13 04:00 WIB.
+    expect(result.toISOString()).toBe("2026-08-12T21:00:00.000Z");
   });
 });

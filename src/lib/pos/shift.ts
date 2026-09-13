@@ -1236,3 +1236,247 @@ async function insertShiftReconciledAuditLog(
     createdAt: new Date(),
   });
 }
+
+// ---------------------------------------------------------------------
+// Tutup + buka shift baru satu langkah -- §14 prasyarat shift, poin
+// Indokopi 24 jam (13 September 2026, keputusan CEO). Outlet yang tidak
+// pernah tutup tidak punya jeda alami untuk mengganti shift di batas
+// hari bisnis -- alur dua langkah terpisah (tutup, LALU navigasi ke
+// buka shift baru) membuat penjaga bingung sementara pembeli menunggu.
+// ---------------------------------------------------------------------
+
+export const closeAndReopenShiftSchema = z.object({
+  oldShiftId: z.string().uuid(),
+  // Wajib diisi kalau outlet cashEnabled -- divalidasi DI DALAM fungsi
+  // (bukan Zod) karena tergantung outlet, sama pola submitCountedCashWithDb
+  // yang membaca cashEnabled sesudah tahu shift-nya.
+  countedCash: z.string().optional(),
+  reason: z.string().optional(),
+  newShift: z.object({
+    id: z.string().uuid(),
+    employeeCode: z.string().min(1),
+    pin: z.string().min(1),
+    servedByName: z.string().optional(),
+  }),
+});
+
+export type CloseAndReopenShiftResult = {
+  error?: string;
+  // Terisi HANYA kalau outlet bertunai DAN selisih di luar toleransi DAN
+  // reason belum diisi -- TIDAK ADA yang ditulis ke DB sama sekali pada
+  // respons ini (murni pratinjau). Client menampilkan selisihnya, minta
+  // alasan, lalu memanggil ULANG fungsi ini dengan reason terisi.
+  needsReason?: { expectedCash: string; cashVariance: string; tolerance: string };
+  success?: {
+    newShiftId: string;
+    employeeName: string;
+    closedAt: string;
+    openedAt: string;
+    expectedCash?: string;
+    cashVariance?: string;
+  };
+};
+
+/**
+ * Satu tombol: tutup shift LAMA + buka shift BARU, atomik (satu
+ * transaksi DB -- tidak pernah ada keadaan "lama tertutup tapi baru
+ * gagal dibuka", yang akan menstrandakan kasir).
+ *
+ * KEPUTUSAN CEO EKSPLISIT soal kas (13 September 2026) -- SATU angka
+ * TIDAK BOLEH jadi penutup shift lama SEKALIGUS saldo awal shift baru
+ * secara membabi buta: "kalau satu angka jadi penutup shift lama
+ * SEKALIGUS saldo awal shift baru, selisih kas hilang sepenuhnya --
+ * sistem menganggap angka itu benar menurut definisi, shift lama SELALU
+ * pas." Yang benar: penjaga menghitung SEKALI, angka itu dipakai DUA
+ * KALI dengan ARTI BERBEDA -- (1) dibandingkan dengan expectedCash shift
+ * LAMA (selisih dihitung & dicatat SEPERTI BIASA, termasuk alasan wajib
+ * kalau di luar toleransi) BARU KEMUDIAN (2) disalin jadi openingCash
+ * shift BARU. Uang fisik tidak dihitung dua kali, tapi pemeriksaannya
+ * TIDAK hilang.
+ *
+ * Selisih DI LUAR toleransi TETAP boleh lanjut (pembeli menunggu, toko
+ * 24 jam) -- TIDAK PERNAH memblokir penjualan karena urusan rekonsiliasi,
+ * beda dari alur tutup shift normal yang menahan status 'open' sampai
+ * confirmShiftCloseWithDb() terpisah. Di sini alasan cukup diisi di
+ * form yang sama (satu layar) dan shift baru TETAP terbuka.
+ *
+ * Outlet CASHLESS: seluruh langkah kas di atas dilewati -- langsung
+ * tutup-dan-buka tanpa hitungan apa pun, sama seperti closeCashlessShiftWithDb.
+ */
+export async function closeAndReopenShiftWithDb(
+  db: Db,
+  businessId: string,
+  rawInput: unknown
+): Promise<CloseAndReopenShiftResult> {
+  const parsed = closeAndReopenShiftSchema.safeParse(rawInput);
+  if (!parsed.success) {
+    return { error: strings.common.unexpectedError };
+  }
+  const data = parsed.data;
+
+  try {
+    const [oldShift] = await db
+      .select()
+      .from(shifts)
+      .where(and(eq(shifts.id, data.oldShiftId), eq(shifts.businessId, businessId)));
+    if (!oldShift) {
+      return { error: strings.common.unexpectedError };
+    }
+    if (oldShift.status !== "open") {
+      return { error: strings.shift.alreadyClosedError };
+    }
+    if (!oldShift.deviceId) {
+      return { error: strings.common.unexpectedError };
+    }
+
+    const [outlet] = await db
+      .select()
+      .from(outlets)
+      .where(eq(outlets.id, oldShift.outletId));
+    if (!outlet) {
+      return { error: strings.common.unexpectedError };
+    }
+
+    const [business] = await db
+      .select({ timezone: businesses.timezone })
+      .from(businesses)
+      .where(eq(businesses.id, businessId));
+    if (!business) {
+      return { error: strings.common.unexpectedError };
+    }
+
+    // --- Bagian kas (dilewati sepenuhnya untuk outlet cashless) ---
+    let closeCashFields: Partial<{
+      countedCash: string;
+      expectedCash: string;
+      cashVariance: string;
+      note: string;
+    }> = {};
+    let newOpeningCash = "0";
+    let expectedCashOut: string | undefined;
+    let cashVarianceOut: string | undefined;
+
+    if (outlet.cashEnabled) {
+      if (!data.countedCash) {
+        return { error: strings.shift.countedCashRequiredError };
+      }
+
+      const [cashPayments, changeGiven, cashIn, cashOut, cashRefunds] = await Promise.all([
+        getCashPaymentsTotal(db, oldShift.id),
+        getChangeGivenTotal(db, oldShift.id),
+        getCashMovementsTotal(db, oldShift.id, "cash_in"),
+        getCashMovementsTotal(db, oldShift.id, "cash_out"),
+        getCashRefundsTotal(db, oldShift.id),
+      ]);
+
+      const countedCash = new Decimal(data.countedCash);
+      const { expectedCash, cashVariance } = calculateShiftReconciliation({
+        openingCash: new Decimal(oldShift.openingCash),
+        cashPayments,
+        changeGiven,
+        cashIn,
+        cashOut,
+        cashRefunds,
+        countedCash,
+      });
+
+      const tolerance = new Decimal(outlet.cashVarianceTolerance);
+      const requiresReason = cashVariance.abs().greaterThan(tolerance);
+
+      if (requiresReason && !data.reason?.trim()) {
+        // TIDAK MENULIS APA PUN -- pratinjau murni, lihat komentar tipe
+        // needsReason di atas.
+        return {
+          needsReason: {
+            expectedCash: expectedCash.toFixed(2),
+            cashVariance: cashVariance.toFixed(2),
+            tolerance: tolerance.toFixed(2),
+          },
+        };
+      }
+
+      closeCashFields = {
+        countedCash: countedCash.toFixed(2),
+        expectedCash: expectedCash.toFixed(2),
+        cashVariance: cashVariance.toFixed(2),
+        ...(data.reason?.trim() ? { note: data.reason.trim() } : {}),
+      };
+      // KEPUTUSAN CEO: angka fisik yang SAMA, arti KEDUA (saldo awal
+      // shift baru) -- bukan dihitung ulang, bukan angka baru.
+      newOpeningCash = countedCash.toFixed(2);
+      expectedCashOut = expectedCash.toFixed(2);
+      cashVarianceOut = cashVariance.toFixed(2);
+    }
+
+    // --- Identitas shift BARU (PIN) -- diverifikasi SEBELUM transaksi DB
+    // apa pun, supaya PIN salah tidak pernah menutup shift lama walau
+    // gagal membuka yang baru (sama urutan openShiftWithDb). ---
+    let identity;
+    try {
+      identity = await verifyCashierPin({
+        outletId: oldShift.outletId,
+        code: data.newShift.employeeCode,
+        pin: data.newShift.pin,
+      });
+    } catch (err) {
+      return { error: err instanceof Error ? err.message : strings.common.unexpectedError };
+    }
+    if (identity.businessId !== businessId) {
+      return { error: strings.common.unexpectedError };
+    }
+
+    const [employeeRow] = await db
+      .select({ isSharedAccount: employees.isSharedAccount })
+      .from(employees)
+      .where(eq(employees.id, identity.employeeId));
+    const servedByNameTrimmed = data.newShift.servedByName?.trim() || "";
+    if (employeeRow?.isSharedAccount && servedByNameTrimmed === "") {
+      return { error: strings.shift.servedByNameRequiredError };
+    }
+    const servedByName = employeeRow?.isSharedAccount ? servedByNameTrimmed : null;
+
+    const now = new Date();
+    const newBusinessDate = businessDate(now, business.timezone, outlet.dayCutoffTime);
+    const oldShiftDeviceId = oldShift.deviceId;
+    const oldShiftOutletId = oldShift.outletId;
+    const oldShiftId = oldShift.id;
+
+    await db.transaction(async (tx) => {
+      const updated = await tx
+        .update(shifts)
+        .set({ status: "closed", closedAt: now, ...closeCashFields })
+        .where(and(eq(shifts.id, oldShiftId), eq(shifts.status, "open")))
+        .returning({ id: shifts.id });
+      if (updated.length === 0) {
+        throw new Error(strings.shift.alreadyClosedError);
+      }
+
+      await tx.insert(shifts).values({
+        id: data.newShift.id,
+        businessId,
+        outletId: oldShiftOutletId,
+        deviceId: oldShiftDeviceId,
+        employeeId: identity.employeeId,
+        servedByName,
+        status: "open",
+        openedAt: now,
+        businessDate: newBusinessDate,
+        openingCash: newOpeningCash,
+      });
+    });
+
+    return {
+      success: {
+        newShiftId: data.newShift.id,
+        employeeName: servedByName ?? identity.fullName,
+        closedAt: now.toISOString(),
+        openedAt: now.toISOString(),
+        expectedCash: expectedCashOut,
+        cashVariance: cashVarianceOut,
+      },
+    };
+  } catch (err) {
+    console.error("closeAndReopenShiftWithDb gagal:", err);
+    return { error: err instanceof Error ? err.message : strings.common.unexpectedError };
+  }
+}

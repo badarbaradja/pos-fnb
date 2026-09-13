@@ -4,11 +4,13 @@ import { createServerSupabaseClient } from "@/lib/auth/supabase";
 import { requirePermissionDb } from "@/lib/auth/permissions";
 import {
   addCashMovementWithDb,
+  closeAndReopenShiftWithDb,
   closeCashlessShiftWithDb,
   confirmShiftCloseWithDb,
   openShiftWithDb,
   submitCountedCashWithDb,
   type AddCashMovementResult,
+  type CloseAndReopenShiftResult,
   type CloseCashlessShiftResult,
   type ConfirmShiftCloseResult,
   type OpenShiftResult,
@@ -17,6 +19,7 @@ import {
 
 export type {
   AddCashMovementResult,
+  CloseAndReopenShiftResult,
   CloseCashlessShiftResult,
   ConfirmShiftCloseResult,
   OpenShiftResult,
@@ -73,6 +76,16 @@ export async function closeCashlessShift(input: unknown): Promise<CloseCashlessS
   const { db, closeDb, businessId } = await requirePermissionDb(supabase, "shift.open_close");
   try {
     return await closeCashlessShiftWithDb(db, businessId, input);
+  } finally {
+    await closeDb();
+  }
+}
+
+export async function closeAndReopenShift(input: unknown): Promise<CloseAndReopenShiftResult> {
+  const supabase = await createServerSupabaseClient();
+  const { db, closeDb, businessId } = await requirePermissionDb(supabase, "shift.open_close");
+  try {
+    return await closeAndReopenShiftWithDb(db, businessId, input);
   } finally {
     await closeDb();
   }

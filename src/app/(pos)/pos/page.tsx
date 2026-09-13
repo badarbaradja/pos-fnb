@@ -4,9 +4,11 @@ import { createServerSupabaseClient } from "@/lib/auth/supabase";
 import { requirePermissionDb } from "@/lib/auth/permissions";
 import { businesses } from "@/lib/db/schema";
 import { PosScreen } from "@/components/pos/pos-screen";
+import { ShiftCutoverBar } from "@/components/pos/shift/shift-cutover-bar";
 import { getPosCatalog } from "./get-pos-catalog";
 import { checkShiftSellability, getOpenShiftForDevice } from "@/lib/pos/shift";
 import { getPairedDevice } from "@/lib/pos/device-pairing";
+import { nextCutoffInstant } from "@/lib/utils/business-date";
 
 export default async function PosPage() {
   const supabase = await createServerSupabaseClient();
@@ -65,17 +67,31 @@ export default async function PosPage() {
       redirect("/pos/shift/open");
     }
 
+    const cutoffInstant = nextCutoffInstant(
+      new Date(),
+      business?.timezone ?? "Asia/Jakarta",
+      paired.outlet.dayCutoffTime
+    );
+
     return (
-      <PosScreen
-        outlet={catalog.outlet}
-        device={catalog.device}
-        paymentMethods={catalog.paymentMethods}
-        priceTiers={catalog.priceTiers}
-        defaultPriceTierId={catalog.defaultPriceTierId}
-        categories={catalog.categories}
-        products={catalog.products}
-        shift={{ id: shift.id, employeeName: shift.employeeName }}
-      />
+      <>
+        <ShiftCutoverBar
+          shiftId={shift.id}
+          cashEnabled={paired.outlet.cashEnabled}
+          nextCutoffInstant={cutoffInstant.toISOString()}
+          warningMinutes={paired.outlet.shiftWarningMinutes}
+        />
+        <PosScreen
+          outlet={catalog.outlet}
+          device={catalog.device}
+          paymentMethods={catalog.paymentMethods}
+          priceTiers={catalog.priceTiers}
+          defaultPriceTierId={catalog.defaultPriceTierId}
+          categories={catalog.categories}
+          products={catalog.products}
+          shift={{ id: shift.id, employeeName: shift.employeeName }}
+        />
+      </>
     );
   } finally {
     await closeDb();

@@ -1,0 +1,1 @@
+ALTER TABLE "outlets" ADD COLUMN "shift_warning_minutes" integer DEFAULT 30 NOT NULL;

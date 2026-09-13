@@ -3,10 +3,12 @@ import { and, eq } from "drizzle-orm";
 import { createServerSupabaseClient } from "@/lib/auth/supabase";
 import { requirePermissionDb } from "@/lib/auth/permissions";
 import { ThriftPosScreen } from "@/components/pos/thrift/thrift-pos-screen";
+import { ShiftCutoverBar } from "@/components/pos/shift/shift-cutover-bar";
 import { getThriftCatalog } from "./get-thrift-catalog";
 import { checkShiftSellability, getOpenShiftForDevice } from "@/lib/pos/shift";
 import { getPairedDevice } from "@/lib/pos/device-pairing";
 import { businesses, categories, pemilik } from "@/lib/db/schema";
+import { nextCutoffInstant } from "@/lib/utils/business-date";
 
 /**
  * app/(pos)/pos/thrift/page.tsx — TT06. Padanan app/(pos)/pos/page.tsx
@@ -87,16 +89,30 @@ export default async function ThriftPosPage() {
       ]);
     }
 
+    const cutoffInstant = nextCutoffInstant(
+      new Date(),
+      business?.timezone ?? "Asia/Jakarta",
+      paired.outlet.dayCutoffTime
+    );
+
     return (
-      <ThriftPosScreen
-        outlet={catalog.outlet}
-        device={catalog.device}
-        paymentMethods={catalog.paymentMethods}
-        shift={{ id: shift.id, employeeName: shift.servedByName ?? shift.employeeName }}
-        canAddBarang={canAddBarang}
-        categories={categoryOptions}
-        pemilikList={pemilikOptions}
-      />
+      <>
+        <ShiftCutoverBar
+          shiftId={shift.id}
+          cashEnabled={paired.outlet.cashEnabled}
+          nextCutoffInstant={cutoffInstant.toISOString()}
+          warningMinutes={paired.outlet.shiftWarningMinutes}
+        />
+        <ThriftPosScreen
+          outlet={catalog.outlet}
+          device={catalog.device}
+          paymentMethods={catalog.paymentMethods}
+          shift={{ id: shift.id, employeeName: shift.servedByName ?? shift.employeeName }}
+          canAddBarang={canAddBarang}
+          categories={categoryOptions}
+          pemilikList={pemilikOptions}
+        />
+      </>
     );
   } finally {
     await closeDb();

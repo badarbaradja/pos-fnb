@@ -101,6 +101,7 @@ export default async function OutletsPage() {
                 address: row.address,
                 phone: row.phone,
                 dayCutoffTime: row.dayCutoffTime,
+                shiftWarningMinutes: row.shiftWarningMinutes,
                 isCentralKitchen: row.isCentralKitchen,
                 taxPercent: row.taxPercent,
                 taxInclusive: row.taxInclusive,
