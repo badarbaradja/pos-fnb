@@ -120,7 +120,7 @@ describe.skipIf(!hasEnv)("stock-transfers/manage", () => {
         return ing!.id;
       })();
 
-      const result = await requestStockTransferWithDb(db, businessId, {
+      const result = await requestStockTransferWithDb(db, businessId, null, {
         toOutletId: retail!.id,
         requestedBy: emp!.id,
         lines: [{ ingredientId: ingId, unitChoice: "purchase", qty: 1 }],
@@ -137,7 +137,7 @@ describe.skipIf(!hasEnv)("stock-transfers/manage", () => {
     const { db, businessId } = fixture;
     const ingId = await insertIngredient("Cup 12oz Siklus Penuh", "12");
 
-    const requested = await requestStockTransferWithDb(db, businessId, {
+    const requested = await requestStockTransferWithDb(db, businessId, null, {
       toOutletId: retailOutletId,
       requestedBy: employeeId,
       lines: [{ ingredientId: ingId, unitChoice: "purchase", qty: 5 }], // 5 dus = 60 pcs
@@ -149,7 +149,7 @@ describe.skipIf(!hasEnv)("stock-transfers/manage", () => {
     expect(afterRequest!.status).toBe("requested");
     expect(afterRequest!.requestedBy).toBe(employeeId);
 
-    const approved = await approveStockTransferWithDb(db, businessId, { transferId, actorId: employeeId });
+    const approved = await approveStockTransferWithDb(db, businessId, null, { transferId, actorId: employeeId });
     expect(approved.success).toBeTruthy();
     const [afterApprove] = await db.select().from(stockTransfers).where(eq(stockTransfers.id, transferId));
     expect(afterApprove!.status).toBe("approved");
@@ -160,7 +160,7 @@ describe.skipIf(!hasEnv)("stock-transfers/manage", () => {
       .from(stockTransferItems)
       .where(eq(stockTransferItems.transferId, transferId));
 
-    const sent = await sendStockTransferWithDb(db, businessId, {
+    const sent = await sendStockTransferWithDb(db, businessId, null, {
       transferId,
       sentBy: employeeId,
       lines: [{ itemId: item!.id, unitChoice: "purchase", qty: 5, unitCost: 24000 }], // sesuai permintaan
@@ -179,7 +179,7 @@ describe.skipIf(!hasEnv)("stock-transfers/manage", () => {
       .where(and(eq(stockMovements.refId, transferId), eq(stockMovements.movementType, "transfer_out")));
     expect(Number(outMovement!.qty)).toBe(-60);
 
-    const received = await receiveStockTransferWithDb(db, businessId, {
+    const received = await receiveStockTransferWithDb(db, businessId, null, {
       transferId,
       receivedBy: employeeId,
       lines: [{ itemId: item!.id, receivedQty: 5 }], // sesuai kiriman (satuan sama: dus)
@@ -208,16 +208,16 @@ describe.skipIf(!hasEnv)("stock-transfers/manage", () => {
     const { db, businessId } = fixture;
     const ingId = await insertIngredient("Bahan Send Tanpa Alasan");
 
-    const requested = await requestStockTransferWithDb(db, businessId, {
+    const requested = await requestStockTransferWithDb(db, businessId, null, {
       toOutletId: retailOutletId,
       requestedBy: employeeId,
       lines: [{ ingredientId: ingId, unitChoice: "base", qty: 20 }],
     });
     const transferId = requested.success!.transferId;
-    await approveStockTransferWithDb(db, businessId, { transferId, actorId: employeeId });
+    await approveStockTransferWithDb(db, businessId, null, { transferId, actorId: employeeId });
     const [item] = await db.select().from(stockTransferItems).where(eq(stockTransferItems.transferId, transferId));
 
-    const sent = await sendStockTransferWithDb(db, businessId, {
+    const sent = await sendStockTransferWithDb(db, businessId, null, {
       transferId,
       sentBy: employeeId,
       lines: [{ itemId: item!.id, unitChoice: "base", qty: 15, unitCost: 1000 }], // beda dari 20, tanpa diffReason
@@ -229,16 +229,16 @@ describe.skipIf(!hasEnv)("stock-transfers/manage", () => {
     const { db, businessId } = fixture;
     const ingId = await insertIngredient("Bahan Send Dengan Alasan");
 
-    const requested = await requestStockTransferWithDb(db, businessId, {
+    const requested = await requestStockTransferWithDb(db, businessId, null, {
       toOutletId: retailOutletId,
       requestedBy: employeeId,
       lines: [{ ingredientId: ingId, unitChoice: "base", qty: 20 }],
     });
     const transferId = requested.success!.transferId;
-    await approveStockTransferWithDb(db, businessId, { transferId, actorId: employeeId });
+    await approveStockTransferWithDb(db, businessId, null, { transferId, actorId: employeeId });
     const [item] = await db.select().from(stockTransferItems).where(eq(stockTransferItems.transferId, transferId));
 
-    const sent = await sendStockTransferWithDb(db, businessId, {
+    const sent = await sendStockTransferWithDb(db, businessId, null, {
       transferId,
       sentBy: employeeId,
       lines: [
@@ -261,21 +261,21 @@ describe.skipIf(!hasEnv)("stock-transfers/manage", () => {
   it("receive beda dari sent TANPA alasan -- DITOLAK server", async () => {
     const { db, businessId } = fixture;
     const ingId = await insertIngredient("Bahan Receive Tanpa Alasan");
-    const requested = await requestStockTransferWithDb(db, businessId, {
+    const requested = await requestStockTransferWithDb(db, businessId, null, {
       toOutletId: retailOutletId,
       requestedBy: employeeId,
       lines: [{ ingredientId: ingId, unitChoice: "base", qty: 10 }],
     });
     const transferId = requested.success!.transferId;
-    await approveStockTransferWithDb(db, businessId, { transferId, actorId: employeeId });
+    await approveStockTransferWithDb(db, businessId, null, { transferId, actorId: employeeId });
     const [item] = await db.select().from(stockTransferItems).where(eq(stockTransferItems.transferId, transferId));
-    await sendStockTransferWithDb(db, businessId, {
+    await sendStockTransferWithDb(db, businessId, null, {
       transferId,
       sentBy: employeeId,
       lines: [{ itemId: item!.id, unitChoice: "base", qty: 10, unitCost: 1000 }],
     });
 
-    const received = await receiveStockTransferWithDb(db, businessId, {
+    const received = await receiveStockTransferWithDb(db, businessId, null, {
       transferId,
       receivedBy: employeeId,
       lines: [{ itemId: item!.id, receivedQty: 7 }], // beda dari 10, tanpa alasan
@@ -286,21 +286,21 @@ describe.skipIf(!hasEnv)("stock-transfers/manage", () => {
   it("receive beda dari sent DENGAN alasan -- transfer_loss tercatat TAPI TIDAK mengubah saldo lagi (sudah benar dari transfer_in)", async () => {
     const { db, businessId } = fixture;
     const ingId = await insertIngredient("Bahan Selisih Kirim Terima");
-    const requested = await requestStockTransferWithDb(db, businessId, {
+    const requested = await requestStockTransferWithDb(db, businessId, null, {
       toOutletId: retailOutletId,
       requestedBy: employeeId,
       lines: [{ ingredientId: ingId, unitChoice: "base", qty: 20 }],
     });
     const transferId = requested.success!.transferId;
-    await approveStockTransferWithDb(db, businessId, { transferId, actorId: employeeId });
+    await approveStockTransferWithDb(db, businessId, null, { transferId, actorId: employeeId });
     const [item] = await db.select().from(stockTransferItems).where(eq(stockTransferItems.transferId, transferId));
-    await sendStockTransferWithDb(db, businessId, {
+    await sendStockTransferWithDb(db, businessId, null, {
       transferId,
       sentBy: employeeId,
       lines: [{ itemId: item!.id, unitChoice: "base", qty: 20, unitCost: 1000 }],
     });
 
-    const received = await receiveStockTransferWithDb(db, businessId, {
+    const received = await receiveStockTransferWithDb(db, businessId, null, {
       transferId,
       receivedBy: employeeId,
       lines: [{ itemId: item!.id, receivedQty: 15, diffReason: "3 pecah, 2 hilang di jalan" }],
@@ -335,14 +335,14 @@ describe.skipIf(!hasEnv)("stock-transfers/manage", () => {
   it("reject: status requested -> rejected, alasan wajib, tidak bisa di-approve setelahnya", async () => {
     const { db, businessId } = fixture;
     const ingId = await insertIngredient("Bahan Ditolak");
-    const requested = await requestStockTransferWithDb(db, businessId, {
+    const requested = await requestStockTransferWithDb(db, businessId, null, {
       toOutletId: retailOutletId,
       requestedBy: employeeId,
       lines: [{ ingredientId: ingId, unitChoice: "base", qty: 5 }],
     });
     const transferId = requested.success!.transferId;
 
-    const rejected = await rejectStockTransferWithDb(db, businessId, {
+    const rejected = await rejectStockTransferWithDb(db, businessId, null, {
       transferId,
       actorId: employeeId,
       reason: "Tidak perlu, sudah dikirim outlet lain",
@@ -353,21 +353,21 @@ describe.skipIf(!hasEnv)("stock-transfers/manage", () => {
     expect(row!.status).toBe("rejected");
     expect(row!.rejectedReason).toBe("Tidak perlu, sudah dikirim outlet lain");
 
-    const approveAfterReject = await approveStockTransferWithDb(db, businessId, { transferId, actorId: employeeId });
+    const approveAfterReject = await approveStockTransferWithDb(db, businessId, null, { transferId, actorId: employeeId });
     expect(approveAfterReject.error).toBeTruthy();
   });
 
   it("cancel dari requested/approved -- murni status, TIDAK ada movement ditulis", async () => {
     const { db, businessId } = fixture;
     const ingId = await insertIngredient("Bahan Cancel Awal");
-    const requested = await requestStockTransferWithDb(db, businessId, {
+    const requested = await requestStockTransferWithDb(db, businessId, null, {
       toOutletId: retailOutletId,
       requestedBy: employeeId,
       lines: [{ ingredientId: ingId, unitChoice: "base", qty: 5 }],
     });
     const transferId = requested.success!.transferId;
 
-    const cancelled = await cancelStockTransferWithDb(db, businessId, {
+    const cancelled = await cancelStockTransferWithDb(db, businessId, null, {
       transferId,
       reason: "Salah minta bahan",
       cancelledBy: employeeId,
@@ -382,21 +382,21 @@ describe.skipIf(!hasEnv)("stock-transfers/manage", () => {
   it("cancel TIDAK BISA dari status 'sent'", async () => {
     const { db, businessId } = fixture;
     const ingId = await insertIngredient("Bahan Cancel Dari Sent");
-    const requested = await requestStockTransferWithDb(db, businessId, {
+    const requested = await requestStockTransferWithDb(db, businessId, null, {
       toOutletId: retailOutletId,
       requestedBy: employeeId,
       lines: [{ ingredientId: ingId, unitChoice: "base", qty: 5 }],
     });
     const transferId = requested.success!.transferId;
-    await approveStockTransferWithDb(db, businessId, { transferId, actorId: employeeId });
+    await approveStockTransferWithDb(db, businessId, null, { transferId, actorId: employeeId });
     const [item] = await db.select().from(stockTransferItems).where(eq(stockTransferItems.transferId, transferId));
-    await sendStockTransferWithDb(db, businessId, {
+    await sendStockTransferWithDb(db, businessId, null, {
       transferId,
       sentBy: employeeId,
       lines: [{ itemId: item!.id, unitChoice: "base", qty: 5, unitCost: 1000 }],
     });
 
-    const cancelled = await cancelStockTransferWithDb(db, businessId, {
+    const cancelled = await cancelStockTransferWithDb(db, businessId, null, {
       transferId,
       reason: "Coba batalkan padahal sudah sent",
       cancelledBy: employeeId,
@@ -407,20 +407,20 @@ describe.skipIf(!hasEnv)("stock-transfers/manage", () => {
   it("cancel dari received -- reversal penuh di outlet, peringatan kalau saldo jadi minus", async () => {
     const { db, businessId } = fixture;
     const ingId = await insertIngredient("Bahan Cancel Dari Received");
-    const requested = await requestStockTransferWithDb(db, businessId, {
+    const requested = await requestStockTransferWithDb(db, businessId, null, {
       toOutletId: retailOutletId,
       requestedBy: employeeId,
       lines: [{ ingredientId: ingId, unitChoice: "base", qty: 10 }],
     });
     const transferId = requested.success!.transferId;
-    await approveStockTransferWithDb(db, businessId, { transferId, actorId: employeeId });
+    await approveStockTransferWithDb(db, businessId, null, { transferId, actorId: employeeId });
     const [item] = await db.select().from(stockTransferItems).where(eq(stockTransferItems.transferId, transferId));
-    await sendStockTransferWithDb(db, businessId, {
+    await sendStockTransferWithDb(db, businessId, null, {
       transferId,
       sentBy: employeeId,
       lines: [{ itemId: item!.id, unitChoice: "base", qty: 10, unitCost: 2000 }],
     });
-    await receiveStockTransferWithDb(db, businessId, {
+    await receiveStockTransferWithDb(db, businessId, null, {
       transferId,
       receivedBy: employeeId,
       lines: [{ itemId: item!.id, receivedQty: 10 }],
@@ -432,7 +432,7 @@ describe.skipIf(!hasEnv)("stock-transfers/manage", () => {
       .set({ qtyOnHand: "2" })
       .where(and(eq(stockLevels.ingredientId, ingId), eq(stockLevels.outletId, retailOutletId)));
 
-    const cancelled = await cancelStockTransferWithDb(db, businessId, {
+    const cancelled = await cancelStockTransferWithDb(db, businessId, null, {
       transferId,
       reason: "Ternyata rusak, batal terima",
       cancelledBy: employeeId,
@@ -447,7 +447,7 @@ describe.skipIf(!hasEnv)("stock-transfers/manage", () => {
       .where(and(eq(stockLevels.ingredientId, ingId), eq(stockLevels.outletId, retailOutletId)));
     expect(Number(levelAfter!.qtyOnHand)).toBe(-8); // 2 - 10 (dibalik penuh)
 
-    const second = await cancelStockTransferWithDb(db, businessId, {
+    const second = await cancelStockTransferWithDb(db, businessId, null, {
       transferId,
       reason: "Coba batalkan lagi",
       cancelledBy: employeeId,
@@ -458,7 +458,7 @@ describe.skipIf(!hasEnv)("stock-transfers/manage", () => {
   it("trigger check_stock_transfer_transition menolak transisi status yang tidak valid (requested -> received langsung)", async () => {
     const { db, businessId } = fixture;
     const ingId = await insertIngredient("Bahan Transisi Ilegal");
-    const requested = await requestStockTransferWithDb(db, businessId, {
+    const requested = await requestStockTransferWithDb(db, businessId, null, {
       toOutletId: retailOutletId,
       requestedBy: employeeId,
       lines: [{ ingredientId: ingId, unitChoice: "base", qty: 1 }],
@@ -478,7 +478,7 @@ describe.skipIf(!hasEnv)("stock-transfers/manage", () => {
   it("trigger check_transfer_item_immutable_core menolak perubahan requested_qty setelah baris dibuat", async () => {
     const { db, businessId } = fixture;
     const ingId = await insertIngredient("Bahan Item Immutable");
-    const requested = await requestStockTransferWithDb(db, businessId, {
+    const requested = await requestStockTransferWithDb(db, businessId, null, {
       toOutletId: retailOutletId,
       requestedBy: employeeId,
       lines: [{ ingredientId: ingId, unitChoice: "base", qty: 1 }],
@@ -503,13 +503,13 @@ describe.skipIf(!hasEnv)("stock-transfers/manage", () => {
     const ingId1 = await insertIngredient("Bahan Last Request A");
     const ingId2 = await insertIngredient("Bahan Last Request B");
 
-    await requestStockTransferWithDb(db, businessId, {
+    await requestStockTransferWithDb(db, businessId, null, {
       toOutletId: retailOutletId,
       requestedBy: employeeId,
       lines: [{ ingredientId: ingId1, unitChoice: "base", qty: 3 }],
     });
     await new Promise((resolve) => setTimeout(resolve, 10));
-    await requestStockTransferWithDb(db, businessId, {
+    await requestStockTransferWithDb(db, businessId, null, {
       toOutletId: retailOutletId,
       requestedBy: employeeId,
       lines: [{ ingredientId: ingId2, unitChoice: "base", qty: 7 }],

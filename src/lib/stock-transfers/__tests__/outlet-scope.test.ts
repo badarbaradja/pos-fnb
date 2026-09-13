@@ -16,9 +16,18 @@ loadEnv({ path: [".env.local", ".env"], quiet: true });
 
 import { and, eq } from "drizzle-orm";
 import { getAdminDb } from "@/lib/db/client";
-import { brands, businesses, outlets, stockTransfers } from "@/lib/db/schema";
+import { brands, businesses, employees, outlets, stockTransfers } from "@/lib/db/schema";
 import { isOutletAllowed, outletScopeCondition, outletScopeConditionForTransfer } from "@/lib/auth/outlet-scope";
 import type { OutletScope } from "@/lib/auth/outlet-scope";
+import {
+  approveStockTransferWithDb,
+  cancelStockTransferWithDb,
+  receiveStockTransferWithDb,
+  rejectStockTransferWithDb,
+  requestStockTransferWithDb,
+  sendStockTransferWithDb,
+} from "@/lib/stock-transfers/manage";
+import { id as strings } from "@/lib/i18n/id";
 
 const hasEnv = Boolean(
   process.env["DATABASE_URL"] &&
@@ -36,6 +45,7 @@ describe.skipIf(!hasEnv)("Pembatasan akses per outlet, Tahap 4 -- Stock Transfer
   let outletBId: string;
   let transferToAId: string;
   let transferToBId: string;
+  let employeeId: string;
 
   async function listTransfers(allowedOutletIds: OutletScope) {
     return db
@@ -83,6 +93,12 @@ describe.skipIf(!hasEnv)("Pembatasan akses per outlet, Tahap 4 -- Stock Transfer
       .values({ businessId, fromOutletId: gudangId, toOutletId: outletBId, status: "requested" })
       .returning({ id: stockTransfers.id });
     transferToBId = tB!.id;
+
+    const [employee] = await db
+      .insert(employees)
+      .values({ businessId, code: `${PREFIX}_emp`, fullName: "Pegawai Uji" })
+      .returning({ id: employees.id });
+    employeeId = employee!.id;
   });
 
   afterAll(async () => {
@@ -218,6 +234,242 @@ describe.skipIf(!hasEnv)("Pembatasan akses per outlet, Tahap 4 -- Stock Transfer
     it("scope null (owner/akuntan) -- diizinkan di kedua halaman", async () => {
       expect(await sendPageAllowsAccess(approvedTransferId, null)).toBe(true);
       expect(await receivePageAllowsAccess(sentTransferId, null)).toBe(true);
+    });
+  });
+
+  describe("4/5 -- lima fungsi *WithDb: gerbang per AKSI, dibuktikan lewat panggilan sungguhan + verifikasi DB", () => {
+    it("requestStockTransferWithDb: toOutletId di luar cakupan -- DITOLAK, TIDAK ADA baris baru ditulis", async () => {
+      const before = await db
+        .select({ id: stockTransfers.id })
+        .from(stockTransfers)
+        .where(eq(stockTransfers.toOutletId, outletBId));
+      const result = await requestStockTransferWithDb(db, businessId, [outletAId], {
+        toOutletId: outletBId,
+        requestedBy: employeeId,
+        lines: [{ ingredientId: crypto.randomUUID(), unitChoice: "base", qty: 1 }],
+      });
+      expect(result.error).toBe(strings.common.outletAccessDenied);
+      const after = await db
+        .select({ id: stockTransfers.id })
+        .from(stockTransfers)
+        .where(eq(stockTransfers.toOutletId, outletBId));
+      expect(after.length).toBe(before.length);
+    });
+
+    it("requestStockTransferWithDb: toOutletId di dalam cakupan -- lolos gerbang (gagal berikutnya karena ingredient palsu, BUKAN outletAccessDenied)", async () => {
+      const result = await requestStockTransferWithDb(db, businessId, [outletAId], {
+        toOutletId: outletAId,
+        requestedBy: employeeId,
+        lines: [{ ingredientId: crypto.randomUUID(), unitChoice: "base", qty: 1 }],
+      });
+      expect(result.error).not.toBe(strings.common.outletAccessDenied);
+    });
+
+    it("approveStockTransferWithDb: fromOutletId (gudang) di luar cakupan -- DITOLAK, status TIDAK berubah", async () => {
+      const [row] = await db
+        .insert(stockTransfers)
+        .values({ businessId, fromOutletId: gudangId, toOutletId: outletAId, status: "requested" })
+        .returning({ id: stockTransfers.id });
+      const result = await approveStockTransferWithDb(db, businessId, [outletAId], {
+        transferId: row!.id,
+        actorId: employeeId,
+      });
+      expect(result.error).toBe(strings.common.outletAccessDenied);
+      const [after] = await db.select({ status: stockTransfers.status }).from(stockTransfers).where(eq(stockTransfers.id, row!.id));
+      expect(after!.status).toBe("requested");
+    });
+
+    it("approveStockTransferWithDb: fromOutletId (gudang) di dalam cakupan -- BERHASIL, status jadi approved", async () => {
+      const [row] = await db
+        .insert(stockTransfers)
+        .values({ businessId, fromOutletId: gudangId, toOutletId: outletAId, status: "requested" })
+        .returning({ id: stockTransfers.id });
+      const result = await approveStockTransferWithDb(db, businessId, [gudangId], {
+        transferId: row!.id,
+        actorId: employeeId,
+      });
+      expect(result.error).toBeUndefined();
+      const [after] = await db.select({ status: stockTransfers.status }).from(stockTransfers).where(eq(stockTransfers.id, row!.id));
+      expect(after!.status).toBe("approved");
+    });
+
+    it("rejectStockTransferWithDb: fromOutletId (gudang) di luar cakupan -- DITOLAK, status TIDAK berubah", async () => {
+      const [row] = await db
+        .insert(stockTransfers)
+        .values({ businessId, fromOutletId: gudangId, toOutletId: outletAId, status: "requested" })
+        .returning({ id: stockTransfers.id });
+      const result = await rejectStockTransferWithDb(db, businessId, [outletAId], {
+        transferId: row!.id,
+        actorId: employeeId,
+        reason: "uji tolak",
+      });
+      expect(result.error).toBe(strings.common.outletAccessDenied);
+      const [after] = await db.select({ status: stockTransfers.status }).from(stockTransfers).where(eq(stockTransfers.id, row!.id));
+      expect(after!.status).toBe("requested");
+    });
+
+    it("rejectStockTransferWithDb: fromOutletId (gudang) di dalam cakupan -- BERHASIL, status jadi rejected", async () => {
+      const [row] = await db
+        .insert(stockTransfers)
+        .values({ businessId, fromOutletId: gudangId, toOutletId: outletAId, status: "requested" })
+        .returning({ id: stockTransfers.id });
+      const result = await rejectStockTransferWithDb(db, businessId, [gudangId], {
+        transferId: row!.id,
+        actorId: employeeId,
+        reason: "uji tolak",
+      });
+      expect(result.error).toBeUndefined();
+      const [after] = await db.select({ status: stockTransfers.status }).from(stockTransfers).where(eq(stockTransfers.id, row!.id));
+      expect(after!.status).toBe("rejected");
+    });
+
+    it("sendStockTransferWithDb: fromOutletId (gudang) di luar cakupan -- DITOLAK, status TIDAK berubah", async () => {
+      const [row] = await db
+        .insert(stockTransfers)
+        .values({ businessId, fromOutletId: gudangId, toOutletId: outletAId, status: "approved" })
+        .returning({ id: stockTransfers.id });
+      const result = await sendStockTransferWithDb(db, businessId, [outletAId], {
+        transferId: row!.id,
+        sentBy: employeeId,
+        lines: [{ itemId: crypto.randomUUID(), unitChoice: "base", qty: 1, unitCost: 0 }],
+      });
+      expect(result.error).toBe(strings.common.outletAccessDenied);
+      const [after] = await db.select({ status: stockTransfers.status }).from(stockTransfers).where(eq(stockTransfers.id, row!.id));
+      expect(after!.status).toBe("approved");
+    });
+
+    it("sendStockTransferWithDb: fromOutletId (gudang) di dalam cakupan -- lolos gerbang (gagal berikutnya karena item palsu, BUKAN outletAccessDenied)", async () => {
+      const [row] = await db
+        .insert(stockTransfers)
+        .values({ businessId, fromOutletId: gudangId, toOutletId: outletAId, status: "approved" })
+        .returning({ id: stockTransfers.id });
+      const result = await sendStockTransferWithDb(db, businessId, [gudangId], {
+        transferId: row!.id,
+        sentBy: employeeId,
+        lines: [{ itemId: crypto.randomUUID(), unitChoice: "base", qty: 1, unitCost: 0 }],
+      });
+      expect(result.error).not.toBe(strings.common.outletAccessDenied);
+    });
+
+    it("receiveStockTransferWithDb: toOutletId (outlet peminta) di luar cakupan -- DITOLAK, status TIDAK berubah", async () => {
+      const [row] = await db
+        .insert(stockTransfers)
+        .values({ businessId, fromOutletId: gudangId, toOutletId: outletAId, status: "sent" })
+        .returning({ id: stockTransfers.id });
+      const result = await receiveStockTransferWithDb(db, businessId, [gudangId], {
+        transferId: row!.id,
+        receivedBy: employeeId,
+        lines: [{ itemId: crypto.randomUUID(), receivedQty: 1 }],
+      });
+      expect(result.error).toBe(strings.common.outletAccessDenied);
+      const [after] = await db.select({ status: stockTransfers.status }).from(stockTransfers).where(eq(stockTransfers.id, row!.id));
+      expect(after!.status).toBe("sent");
+    });
+
+    it("receiveStockTransferWithDb: toOutletId di dalam cakupan -- lolos gerbang (gagal berikutnya karena item palsu, BUKAN outletAccessDenied)", async () => {
+      const [row] = await db
+        .insert(stockTransfers)
+        .values({ businessId, fromOutletId: gudangId, toOutletId: outletAId, status: "sent" })
+        .returning({ id: stockTransfers.id });
+      const result = await receiveStockTransferWithDb(db, businessId, [outletAId], {
+        transferId: row!.id,
+        receivedBy: employeeId,
+        lines: [{ itemId: crypto.randomUUID(), receivedQty: 1 }],
+      });
+      expect(result.error).not.toBe(strings.common.outletAccessDenied);
+    });
+
+    it("cancelStockTransferWithDb (requested): toOutletId di luar cakupan -- DITOLAK, status TIDAK berubah", async () => {
+      const [row] = await db
+        .insert(stockTransfers)
+        .values({ businessId, fromOutletId: gudangId, toOutletId: outletAId, status: "requested" })
+        .returning({ id: stockTransfers.id });
+      const result = await cancelStockTransferWithDb(db, businessId, [outletBId], {
+        transferId: row!.id,
+        reason: "batal",
+        cancelledBy: employeeId,
+      });
+      expect(result.error).toBe(strings.common.outletAccessDenied);
+      const [after] = await db.select({ status: stockTransfers.status }).from(stockTransfers).where(eq(stockTransfers.id, row!.id));
+      expect(after!.status).toBe("requested");
+    });
+
+    it("cancelStockTransferWithDb (requested): toOutletId di dalam cakupan -- BERHASIL walau scope TIDAK mencakup gudang (belum ada stok tersentuh, cuma ganti status)", async () => {
+      const [row] = await db
+        .insert(stockTransfers)
+        .values({ businessId, fromOutletId: gudangId, toOutletId: outletAId, status: "requested" })
+        .returning({ id: stockTransfers.id });
+      const result = await cancelStockTransferWithDb(db, businessId, [outletAId], {
+        transferId: row!.id,
+        reason: "batal",
+        cancelledBy: employeeId,
+      });
+      expect(result.error).toBeUndefined();
+      const [after] = await db.select({ status: stockTransfers.status }).from(stockTransfers).where(eq(stockTransfers.id, row!.id));
+      expect(after!.status).toBe("cancelled");
+    });
+
+    it("cancelStockTransferWithDb (received): scope CUMA toOutletId (BUKAN fromOutletId) -- DITOLAK, kedua outlet WAJIB untuk status ini", async () => {
+      const [row] = await db
+        .insert(stockTransfers)
+        .values({ businessId, fromOutletId: gudangId, toOutletId: outletAId, status: "received" })
+        .returning({ id: stockTransfers.id });
+      const result = await cancelStockTransferWithDb(db, businessId, [outletAId], {
+        transferId: row!.id,
+        reason: "batal",
+        cancelledBy: employeeId,
+      });
+      expect(result.error).toBe(strings.common.outletAccessDenied);
+      const [after] = await db.select({ status: stockTransfers.status }).from(stockTransfers).where(eq(stockTransfers.id, row!.id));
+      expect(after!.status).toBe("received");
+    });
+
+    it("cancelStockTransferWithDb (received): scope CUMA fromOutletId (BUKAN toOutletId) -- DITOLAK juga, satu outlet saja tidak cukup", async () => {
+      const [row] = await db
+        .insert(stockTransfers)
+        .values({ businessId, fromOutletId: gudangId, toOutletId: outletAId, status: "received" })
+        .returning({ id: stockTransfers.id });
+      const result = await cancelStockTransferWithDb(db, businessId, [gudangId], {
+        transferId: row!.id,
+        reason: "batal",
+        cancelledBy: employeeId,
+      });
+      expect(result.error).toBe(strings.common.outletAccessDenied);
+      const [after] = await db.select({ status: stockTransfers.status }).from(stockTransfers).where(eq(stockTransfers.id, row!.id));
+      expect(after!.status).toBe("received");
+    });
+
+    it("cancelStockTransferWithDb (received): scope mencakup KEDUA outlet -- BERHASIL", async () => {
+      const [row] = await db
+        .insert(stockTransfers)
+        .values({ businessId, fromOutletId: gudangId, toOutletId: outletAId, status: "received" })
+        .returning({ id: stockTransfers.id });
+      const result = await cancelStockTransferWithDb(db, businessId, [gudangId, outletAId], {
+        transferId: row!.id,
+        reason: "batal",
+        cancelledBy: employeeId,
+      });
+      expect(result.error).toBeUndefined();
+      const [after] = await db.select({ status: stockTransfers.status }).from(stockTransfers).where(eq(stockTransfers.id, row!.id));
+      expect(after!.status).toBe("cancelled");
+    });
+
+    it("scope null (owner/akuntan) di semua lima fungsi -- selalu lolos gerbang outlet", async () => {
+      const [row] = await db
+        .insert(stockTransfers)
+        .values({ businessId, fromOutletId: gudangId, toOutletId: outletAId, status: "requested" })
+        .returning({ id: stockTransfers.id });
+      const result = await approveStockTransferWithDb(db, businessId, null, { transferId: row!.id, actorId: employeeId });
+      expect(result.error).toBeUndefined();
+    });
+
+    it("scope array KOSONG di semua lima fungsi -- selalu DITOLAK", async () => {
+      const [row] = await db
+        .insert(stockTransfers)
+        .values({ businessId, fromOutletId: gudangId, toOutletId: outletAId, status: "requested" })
+        .returning({ id: stockTransfers.id });
+      const result = await approveStockTransferWithDb(db, businessId, [], { transferId: row!.id, actorId: employeeId });
+      expect(result.error).toBe(strings.common.outletAccessDenied);
     });
   });
 });

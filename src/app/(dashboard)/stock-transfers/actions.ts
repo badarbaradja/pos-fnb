@@ -31,7 +31,7 @@ export async function requestStockTransfer(
   formData: FormData
 ): Promise<StockTransferFormState> {
   const supabase = await createServerSupabaseClient();
-  const { db, closeDb, businessId } = await requirePermissionDb(supabase, "stock.transfer");
+  const { db, closeDb, businessId, allowedOutletIds } = await requirePermissionDb(supabase, "stock.transfer");
 
   let linesRaw: unknown;
   try {
@@ -41,7 +41,7 @@ export async function requestStockTransfer(
   }
 
   try {
-    const result = await requestStockTransferWithDb(db, businessId, {
+    const result = await requestStockTransferWithDb(db, businessId, allowedOutletIds, {
       toOutletId: formData.get("toOutletId"),
       note: formData.get("note") || undefined,
       requestedBy: formData.get("requestedBy"),
@@ -63,10 +63,10 @@ export async function approveStockTransfer(
   actorId: string
 ): Promise<StockTransferActionResult> {
   const supabase = await createServerSupabaseClient();
-  const { db, closeDb, businessId } = await requirePermissionDb(supabase, "stock.transfer_approve");
+  const { db, closeDb, businessId, allowedOutletIds } = await requirePermissionDb(supabase, "stock.transfer_approve");
 
   try {
-    const result = await approveStockTransferWithDb(db, businessId, { transferId, actorId });
+    const result = await approveStockTransferWithDb(db, businessId, allowedOutletIds, { transferId, actorId });
     if (!result.error) {
       revalidatePath("/stock-transfers");
     }
@@ -82,10 +82,10 @@ export async function rejectStockTransfer(
   reason: string
 ): Promise<StockTransferActionResult> {
   const supabase = await createServerSupabaseClient();
-  const { db, closeDb, businessId } = await requirePermissionDb(supabase, "stock.transfer_approve");
+  const { db, closeDb, businessId, allowedOutletIds } = await requirePermissionDb(supabase, "stock.transfer_approve");
 
   try {
-    const result = await rejectStockTransferWithDb(db, businessId, { transferId, actorId, reason });
+    const result = await rejectStockTransferWithDb(db, businessId, allowedOutletIds, { transferId, actorId, reason });
     if (!result.error) {
       revalidatePath("/stock-transfers");
     }
@@ -100,7 +100,7 @@ export async function sendStockTransfer(
   formData: FormData
 ): Promise<StockTransferFormState> {
   const supabase = await createServerSupabaseClient();
-  const { db, closeDb, businessId } = await requirePermissionDb(supabase, "stock.transfer");
+  const { db, closeDb, businessId, allowedOutletIds } = await requirePermissionDb(supabase, "stock.transfer");
 
   let linesRaw: unknown;
   try {
@@ -110,7 +110,7 @@ export async function sendStockTransfer(
   }
 
   try {
-    const result = await sendStockTransferWithDb(db, businessId, {
+    const result = await sendStockTransferWithDb(db, businessId, allowedOutletIds, {
       transferId: formData.get("transferId"),
       sentBy: formData.get("sentBy"),
       number: formData.get("number") || undefined,
@@ -132,7 +132,7 @@ export async function receiveStockTransfer(
   formData: FormData
 ): Promise<StockTransferFormState> {
   const supabase = await createServerSupabaseClient();
-  const { db, closeDb, businessId } = await requirePermissionDb(supabase, "stock.transfer");
+  const { db, closeDb, businessId, allowedOutletIds } = await requirePermissionDb(supabase, "stock.transfer");
 
   let linesRaw: unknown;
   try {
@@ -142,7 +142,7 @@ export async function receiveStockTransfer(
   }
 
   try {
-    const result = await receiveStockTransferWithDb(db, businessId, {
+    const result = await receiveStockTransferWithDb(db, businessId, allowedOutletIds, {
       transferId: formData.get("transferId"),
       receivedBy: formData.get("receivedBy"),
       lines: linesRaw,
@@ -164,10 +164,10 @@ export async function cancelStockTransfer(
   cancelledBy: string
 ): Promise<CancelStockTransferResult> {
   const supabase = await createServerSupabaseClient();
-  const { db, closeDb, businessId } = await requirePermissionDb(supabase, "stock.transfer");
+  const { db, closeDb, businessId, allowedOutletIds } = await requirePermissionDb(supabase, "stock.transfer");
 
   try {
-    const result = await cancelStockTransferWithDb(db, businessId, {
+    const result = await cancelStockTransferWithDb(db, businessId, allowedOutletIds, {
       transferId,
       reason,
       cancelledBy,

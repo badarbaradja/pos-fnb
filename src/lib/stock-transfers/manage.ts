@@ -16,6 +16,7 @@ import { assertRowsAffected } from "@/lib/db/errors";
 import { calculateNewAvgCost } from "@/lib/calc/cogs";
 import { businessDate } from "@/lib/utils/business-date";
 import { generateId } from "@/lib/utils/id";
+import { isOutletAllowed, type OutletScope } from "@/lib/auth/outlet-scope";
 import { id as strings } from "@/lib/i18n/id";
 
 /**
@@ -101,6 +102,7 @@ const requestSchema = z.object({
 export async function requestStockTransferWithDb(
   db: Db,
   businessId: string,
+  allowedOutletIds: OutletScope,
   rawInput: unknown
 ): Promise<StockTransferActionResult> {
   const parsed = requestSchema.safeParse(rawInput);
@@ -108,6 +110,15 @@ export async function requestStockTransferWithDb(
     return { error: parsed.error.issues[0]?.message ?? strings.common.unexpectedError };
   }
   const data = parsed.data;
+
+  // Pembatasan akses per outlet, Tahap 4 (13 September 2026, §28) --
+  // REQUEST digerbang toOutletId (outlet peminta, dari input).
+  // fromOutletId (gudang) TIDAK diperiksa di sini -- selalu auto-resolve
+  // dari getCentralKitchen() di bawah, tidak pernah dari input, jadi
+  // tidak ada yang bisa "dipalsukan" pemanggil untuk sisi itu.
+  if (!isOutletAllowed(allowedOutletIds, data.toOutletId)) {
+    return { error: strings.common.outletAccessDenied };
+  }
 
   const fromOutlet = await getCentralKitchen(db, businessId);
   if (!fromOutlet) {
@@ -185,6 +196,7 @@ const decisionSchema = z.object({
 export async function approveStockTransferWithDb(
   db: Db,
   businessId: string,
+  allowedOutletIds: OutletScope,
   rawInput: unknown
 ): Promise<StockTransferActionResult> {
   const parsed = decisionSchema.safeParse(rawInput);
@@ -192,6 +204,22 @@ export async function approveStockTransferWithDb(
     return { error: parsed.error.issues[0]?.message ?? strings.common.unexpectedError };
   }
   const data = parsed.data;
+
+  // Pembatasan akses per outlet, Tahap 4 -- APPROVE digerbang
+  // fromOutletId (gudang, keputusan gudang bukan outlet peminta) --
+  // baris diambil ulang dulu SEBELUM update, dicek SEBELUM apa pun
+  // ditulis.
+  const [current] = await db
+    .select({ fromOutletId: stockTransfers.fromOutletId })
+    .from(stockTransfers)
+    .where(and(eq(stockTransfers.id, data.transferId), eq(stockTransfers.businessId, businessId)));
+  if (!current) {
+    return { error: strings.stockTransfers.notPendingApproval };
+  }
+  if (!isOutletAllowed(allowedOutletIds, current.fromOutletId)) {
+    return { error: strings.common.outletAccessDenied };
+  }
+
   const now = new Date();
 
   const updated = await db
@@ -230,6 +258,7 @@ const rejectSchema = decisionSchema.extend({
 export async function rejectStockTransferWithDb(
   db: Db,
   businessId: string,
+  allowedOutletIds: OutletScope,
   rawInput: unknown
 ): Promise<StockTransferActionResult> {
   const parsed = rejectSchema.safeParse(rawInput);
@@ -237,6 +266,19 @@ export async function rejectStockTransferWithDb(
     return { error: parsed.error.issues[0]?.message ?? strings.common.unexpectedError };
   }
   const data = parsed.data;
+
+  // Pembatasan akses per outlet, Tahap 4 -- pola sama approveStockTransferWithDb.
+  const [current] = await db
+    .select({ fromOutletId: stockTransfers.fromOutletId })
+    .from(stockTransfers)
+    .where(and(eq(stockTransfers.id, data.transferId), eq(stockTransfers.businessId, businessId)));
+  if (!current) {
+    return { error: strings.stockTransfers.notPendingApproval };
+  }
+  if (!isOutletAllowed(allowedOutletIds, current.fromOutletId)) {
+    return { error: strings.common.outletAccessDenied };
+  }
+
   const now = new Date();
 
   const updated = await db
@@ -291,6 +333,7 @@ const sendSchema = z.object({
 export async function sendStockTransferWithDb(
   db: Db,
   businessId: string,
+  allowedOutletIds: OutletScope,
   rawInput: unknown
 ): Promise<StockTransferActionResult> {
   const parsed = sendSchema.safeParse(rawInput);
@@ -311,6 +354,11 @@ export async function sendStockTransferWithDb(
     );
   if (!transfer) {
     return { error: strings.stockTransfers.notApprovedYet };
+  }
+  // Pembatasan akses per outlet, Tahap 4 (13 September 2026, §28) --
+  // SEND ada di sisi gudang (fromOutletId), bukan outlet peminta.
+  if (!isOutletAllowed(allowedOutletIds, transfer.fromOutletId)) {
+    return { error: strings.common.outletAccessDenied };
   }
 
   const items = await db
@@ -477,6 +525,7 @@ export type ReceiveStockTransferResult = StockTransferActionResult & {
 export async function receiveStockTransferWithDb(
   db: Db,
   businessId: string,
+  allowedOutletIds: OutletScope,
   rawInput: unknown
 ): Promise<ReceiveStockTransferResult> {
   const parsed = receiveSchema.safeParse(rawInput);
@@ -497,6 +546,11 @@ export async function receiveStockTransferWithDb(
     );
   if (!transfer) {
     return { error: strings.stockTransfers.notSentYet };
+  }
+  // Pembatasan akses per outlet, Tahap 4 (13 September 2026, §28) --
+  // RECEIVE ada di sisi outlet peminta (toOutletId), bukan gudang.
+  if (!isOutletAllowed(allowedOutletIds, transfer.toOutletId)) {
+    return { error: strings.common.outletAccessDenied };
   }
 
   const items = await db
@@ -705,6 +759,7 @@ export type CancelStockTransferResult = {
 export async function cancelStockTransferWithDb(
   db: Db,
   businessId: string,
+  allowedOutletIds: OutletScope,
   rawInput: unknown
 ): Promise<CancelStockTransferResult> {
   const parsed = cancelSchema.safeParse(rawInput);
@@ -718,6 +773,23 @@ export async function cancelStockTransferWithDb(
   );
   if (!transfer || !["requested", "approved", "received"].includes(transfer.status)) {
     return { error: strings.stockTransfers.cannotCancelStatus };
+  }
+  // Pembatasan akses per outlet, Tahap 4 (13 September 2026, §28) --
+  // requested/approved: belum ada stok bergerak, murni keputusan outlet
+  // peminta -> toOutletId saja. received: reversal ini menyentuh stok
+  // outlet peminta TANPA membalik pengiriman gudang (keputusan akuntansi
+  // v1 yang sengaja, lihat komentar di bawah) -- tapi justru karena
+  // sepihak begitu, PERTANYAAN AKSES-nya baru: gudang juga berkepentingan
+  // (pengiriman yang sudah tercatat dibatalkan sepihak oleh outlet), jadi
+  // KEDUA outlet (fromOutletId DAN toOutletId) harus di dalam cakupan.
+  // Ini bukan mengubah aturan akuntansi cancel-dari-received, cuma
+  // mengetatkan siapa yang boleh memicunya.
+  const outletAccessOk =
+    transfer.status === "received"
+      ? isOutletAllowed(allowedOutletIds, transfer.fromOutletId) && isOutletAllowed(allowedOutletIds, transfer.toOutletId)
+      : isOutletAllowed(allowedOutletIds, transfer.toOutletId);
+  if (!outletAccessOk) {
+    return { error: strings.common.outletAccessDenied };
   }
 
   const now = new Date();
