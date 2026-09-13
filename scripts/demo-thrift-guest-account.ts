@@ -90,7 +90,7 @@ async function main() {
 
   async function runGuestAccountChecks() {
   // Bukti dashboard "siapa bertugas" (getOpenShiftsForBusiness) menyebut Rani
-  const openShifts = await getOpenShiftsForBusiness(db, businessId);
+  const openShifts = await getOpenShiftsForBusiness(db, businessId, null);
   const raniRow = openShifts.find((s) => s.employeeName === "Rani");
   console.log(`[uji 2b] getOpenShiftsForBusiness menyebut "Rani": ${raniRow ? "YA" : "!!! TIDAK, BUG !!!"}`);
 

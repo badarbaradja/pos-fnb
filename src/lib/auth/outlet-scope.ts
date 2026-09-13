@@ -178,3 +178,35 @@ export function assertOutletAllowed(scope: OutletScope, outletId: string, contex
     );
   }
 }
+
+/**
+ * intersectOutletScope() — Tahap 3 (13 September 2026, §24): beberapa
+ * halaman SUDAH punya filter outlet sendiri sebelum pembatasan akses per
+ * outlet ada sama sekali (mis. Dashboard mengelompokkan outlet per BRAND
+ * lewat `SalesReportFilter.outletId: string[]`). Filter lama itu dan
+ * `allowedOutletIds` dari membership harus berlaku SEKALIGUS -- outlet
+ * yang lolos wajib ada di KEDUANYA, bukan salah satu.
+ *
+ * Kombinasi yang ditangani (jangan ditulis ulang inline di halaman --
+ * itu sumber bug yang sama lagi, cuma bentuknya beda):
+ * - allowedOutletIds unrestricted (null) -> hasilnya SELALU pageFilter
+ *   apa adanya, scope membership tidak menambah pembatasan.
+ * - pageFilter null (halaman ini tidak membatasi outlet sama sekali) ->
+ *   hasilnya SELALU allowedOutletIds apa adanya.
+ * - keduanya array -> IRISAN (outlet yang ada di DUA-DUANYA). Kalau
+ *   irisannya kosong, hasilnya array KOSONG (BUKAN null) -- konsumen
+ *   hasil ini (mis. outletFilterClause di lib/db/queries/sales-report.ts,
+ *   yang sudah punya penanganan array-kosong-berarti-sql-false sendiri
+ *   sejak 11 September 2026) HARUS tetap menafsirkannya sebagai "tidak
+ *   ada yang cocok", persis seperti `resolveOutletScope` di file ini.
+ */
+export function intersectOutletScope(allowedOutletIds: OutletScope, pageFilter: string[] | null): string[] | null {
+  if (allowedOutletIds === null) {
+    return pageFilter;
+  }
+  if (pageFilter === null) {
+    return allowedOutletIds;
+  }
+  const pageFilterSet = new Set(pageFilter);
+  return allowedOutletIds.filter((id) => pageFilterSet.has(id));
+}

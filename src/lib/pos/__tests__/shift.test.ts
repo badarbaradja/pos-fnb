@@ -561,7 +561,7 @@ describe.skipIf(!hasEnv)("T15 — siklus shift", () => {
     expect(opened.error).toBeUndefined();
     const secondShiftId = opened.success!.shiftId;
 
-    const openList = await getOpenShiftsForBusiness(db, businessId);
+    const openList = await getOpenShiftsForBusiness(db, businessId, null);
     const ourShift = openList.find((s) => s.id === secondShiftId);
     expect(ourShift).toBeDefined();
     expect(ourShift?.employeeId).toBe(secondEmployeeId);
@@ -571,7 +571,7 @@ describe.skipIf(!hasEnv)("T15 — siklus shift", () => {
     // bukan yang diuji di sini) lalu pastikan TIDAK ikut lagi.
     await db.update(shifts).set({ status: "closed" }).where(eq(shifts.id, secondShiftId));
 
-    const afterClose = await getOpenShiftsForBusiness(db, businessId);
+    const afterClose = await getOpenShiftsForBusiness(db, businessId, null);
     expect(afterClose.find((s) => s.id === secondShiftId)).toBeUndefined();
   });
 
@@ -785,7 +785,7 @@ describe.skipIf(!hasEnv)("T15 — siklus shift", () => {
       const { deviceId: fcDeviceId, shiftId: fcShiftId } = await openIsolatedShift("G");
       await forceCloseShiftWithDb(db, businessId, "manager-uji-f", { shiftId: fcShiftId, reason: "ditinggal" });
 
-      const rows = await getShiftsNeedingReview(db, businessId, "Asia/Jakarta");
+      const rows = await getShiftsNeedingReview(db, businessId, "Asia/Jakarta", null);
       const staleRow = rows.find((r) => r.id === staleShiftId);
       const fcRow = rows.find((r) => r.id === fcShiftId);
 

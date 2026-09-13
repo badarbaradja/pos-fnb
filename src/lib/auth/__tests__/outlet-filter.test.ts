@@ -24,10 +24,43 @@ import { brands, businesses, devices, outlets, stockTransfers } from "@/lib/db/s
 import { generateId } from "@/lib/utils/id";
 import {
   assertOutletAllowed,
+  intersectOutletScope,
   isOutletAllowed,
   outletScopeCondition,
   outletScopeConditionForTransfer,
 } from "../outlet-scope";
+
+describe("intersectOutletScope — fungsi murni, tanpa DB", () => {
+  const outletA = generateId();
+  const outletB = generateId();
+  const outletC = generateId();
+
+  it("allowedOutletIds null (tak terbatas): hasil SELALU pageFilter apa adanya", () => {
+    expect(intersectOutletScope(null, null)).toBeNull();
+    expect(intersectOutletScope(null, [outletA])).toEqual([outletA]);
+    expect(intersectOutletScope(null, [])).toEqual([]);
+  });
+
+  it("pageFilter null (halaman tidak membatasi): hasil SELALU allowedOutletIds apa adanya", () => {
+    expect(intersectOutletScope([outletA], null)).toEqual([outletA]);
+    expect(intersectOutletScope([], null)).toEqual([]);
+  });
+
+  it("keduanya array dengan irisan: hasilnya CUMA outlet yang ada di dua-duanya", () => {
+    const result = intersectOutletScope([outletA, outletB], [outletB, outletC]);
+    expect(result).toEqual([outletB]);
+  });
+
+  it("keduanya array TANPA irisan sama sekali: hasilnya array KOSONG, BUKAN null", () => {
+    const result = intersectOutletScope([outletA], [outletB]);
+    expect(result).toEqual([]);
+    expect(result).not.toBeNull();
+  });
+
+  it("allowedOutletIds array KOSONG (tidak ada akses): hasil TETAP kosong walau pageFilter mengizinkan outlet lain", () => {
+    expect(intersectOutletScope([], [outletA])).toEqual([]);
+  });
+});
 
 describe("isOutletAllowed / assertOutletAllowed — fungsi murni, tanpa DB", () => {
   const outletA = generateId();

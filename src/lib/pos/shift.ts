@@ -19,6 +19,7 @@ import { businessDate } from "@/lib/utils/business-date";
 import { verifyCashierPin } from "@/lib/auth/pin";
 import { generateId } from "@/lib/utils/id";
 import { id as strings } from "@/lib/i18n/id";
+import { outletScopeCondition, type OutletScope } from "@/lib/auth/outlet-scope";
 
 /**
  * lib/pos/shift.ts — logika inti T15, pola thin-wrapper yang sama dengan
@@ -196,10 +197,18 @@ export type OpenShiftSummaryRow = {
  * sedang bertugas". Sengaja tipe terpisah dari OpenShiftRow: tidak ikut
  * countedCash/expectedCash/cashVariance, dashboard cuma perlu identitas +
  * jam buka, bukan data rekonsiliasi kas.
+ *
+ * allowedOutletIds WAJIB diisi (bukan parameter opsional) -- pembatasan
+ * akses per outlet, Tahap 3 (13 September 2026, §24). Sengaja wajib,
+ * bukan default ke `null` kalau tidak diisi: manajer yang dibatasi ke
+ * satu outlet tidak boleh melihat "siapa bertugas" di outlet lain lewat
+ * dashboard, dan pemanggil baru yang lupa mengisi parameter ini akan
+ * gagal DI COMPILE TIME, bukan diam-diam mengembalikan semua outlet.
  */
 export async function getOpenShiftsForBusiness(
   db: Db,
-  businessId: string
+  businessId: string,
+  allowedOutletIds: OutletScope
 ): Promise<OpenShiftSummaryRow[]> {
   return db
     .select({
@@ -217,7 +226,13 @@ export async function getOpenShiftsForBusiness(
     .from(shifts)
     .innerJoin(employees, eq(shifts.employeeId, employees.id))
     .innerJoin(outlets, eq(shifts.outletId, outlets.id))
-    .where(and(eq(shifts.businessId, businessId), eq(shifts.status, "open")))
+    .where(
+      and(
+        eq(shifts.businessId, businessId),
+        eq(shifts.status, "open"),
+        outletScopeCondition(allowedOutletIds, shifts.outletId)
+      )
+    )
     .orderBy(shifts.openedAt);
 }
 
@@ -249,11 +264,15 @@ export type ShiftNeedingReviewRow = {
  * Staleness dihitung PER OUTLET (dayCutoffTime beda-beda per outlet),
  * makanya dilakukan di JavaScript sesudah query, bukan di WHERE SQL --
  * jumlah shift open per bisnis kecil (satu per device aktif), murah.
+ *
+ * allowedOutletIds WAJIB diisi -- pola dan alasan sama persis
+ * getOpenShiftsForBusiness() di atas (Tahap 3, §24).
  */
 export async function getShiftsNeedingReview(
   db: Db,
   businessId: string,
-  businessTimezone: string
+  businessTimezone: string,
+  allowedOutletIds: OutletScope
 ): Promise<ShiftNeedingReviewRow[]> {
   const openRows = await db
     .select({
@@ -269,7 +288,13 @@ export async function getShiftsNeedingReview(
     .from(shifts)
     .innerJoin(employees, eq(shifts.employeeId, employees.id))
     .innerJoin(outlets, eq(shifts.outletId, outlets.id))
-    .where(and(eq(shifts.businessId, businessId), eq(shifts.status, "open")));
+    .where(
+      and(
+        eq(shifts.businessId, businessId),
+        eq(shifts.status, "open"),
+        outletScopeCondition(allowedOutletIds, shifts.outletId)
+      )
+    );
 
   const staleRows: ShiftNeedingReviewRow[] = openRows
     .filter((r) => r.businessDate !== businessDate(new Date(), businessTimezone, r.dayCutoffTime))
@@ -305,7 +330,8 @@ export async function getShiftsNeedingReview(
         eq(shifts.businessId, businessId),
         eq(shifts.status, "closed"),
         isNotNull(shifts.forceClosedAt),
-        isNull(shifts.countedCash)
+        isNull(shifts.countedCash),
+        outletScopeCondition(allowedOutletIds, shifts.outletId)
       )
     );
 

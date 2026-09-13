@@ -13,6 +13,7 @@ import {
   shifts,
 } from "@/lib/db/schema";
 import { averageCheck } from "@/lib/calc/kpi";
+import { outletScopeCondition, type OutletScope } from "@/lib/auth/outlet-scope";
 
 /**
  * lib/db/queries/sales-report.ts — T17. Isi pertama folder `lib/db/queries/`
@@ -502,7 +503,14 @@ export type SalesByBrandRow = {
  */
 export async function getSalesByBrand(
   db: Db,
-  filter: Pick<SalesReportFilter, "businessId" | "startDate" | "endDate">
+  filter: Pick<SalesReportFilter, "businessId" | "startDate" | "endDate"> & {
+    // Pembatasan akses per outlet, Tahap 3 (13 September 2026, §24) --
+    // WAJIB diisi. Diterapkan di JOIN outlets (sama seperti eq(outlets.
+    // isActive, true) yang sudah ada) -- outlet di luar cakupan
+    // diperlakukan seolah tidak ada untuk brand ini, sama seperti outlet
+    // nonaktif: tidak ikut orderCount/netSales/outletIds.
+    allowedOutletIds: OutletScope;
+  }
 ): Promise<SalesByBrandRow[]> {
   const rows = await db
     .select({
@@ -515,7 +523,14 @@ export async function getSalesByBrand(
       netSales: sql<string>`coalesce(sum(${orders.netSales}), '0')`,
     })
     .from(brands)
-    .leftJoin(outlets, and(eq(outlets.brandId, brands.id), eq(outlets.isActive, true)))
+    .leftJoin(
+      outlets,
+      and(
+        eq(outlets.brandId, brands.id),
+        eq(outlets.isActive, true),
+        outletScopeCondition(filter.allowedOutletIds, outlets.id)
+      )
+    )
     .leftJoin(
       orders,
       and(

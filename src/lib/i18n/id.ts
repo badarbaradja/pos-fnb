@@ -26,6 +26,12 @@ export const id = {
     empty: "Belum ada data",
     confirmTitle: "Yakin?",
     apply: "Terapkan",
+    // Pembatasan akses per outlet, Tahap 3 (13 September 2026, §24) --
+    // dipakai di SETIAP halaman baca-saja yang disaring per outlet, kalau
+    // allowedOutletIds anggota ini array KOSONG (bukan null). Sengaja
+    // beda kata-kata dari `empty` ("Belum ada data") -- ini masalah
+    // akses, bukan toko yang sedang sepi, keputusan CEO eksplisit.
+    noOutletAccess: "Anda tidak punya akses ke outlet manapun -- hubungi admin.",
   },
   auth: {
     loginTitle: "Masuk ke dashboard",
