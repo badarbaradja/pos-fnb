@@ -2,6 +2,7 @@ import Link from "next/link";
 import { and, desc, eq } from "drizzle-orm";
 import { createServerSupabaseClient } from "@/lib/auth/supabase";
 import { requirePermissionDb } from "@/lib/auth/permissions";
+import { outletScopeCondition } from "@/lib/auth/outlet-scope";
 import { employees, ingredients, stockMovements } from "@/lib/db/schema";
 import {
   Table,
@@ -36,7 +37,24 @@ export default async function IngredientStockCardPage({
 }) {
   const { id } = await params;
   const supabase = await createServerSupabaseClient();
-  const { db, closeDb, businessId } = await requirePermissionDb(supabase, "product.manage");
+  const { db, closeDb, businessId, allowedOutletIds } = await requirePermissionDb(supabase, "product.manage");
+
+  // Pembatasan akses per outlet, Tahap 3 (13 September 2026, §24) --
+  // ingredients sendiri katalog BISNIS (tidak punya outletId), tapi
+  // stock_movements-nya PER OUTLET -- lihat pengecekan di query
+  // movementRows di bawah. Scope kosong dicek di sini dulu supaya
+  // pesannya jelas beda dari "belum ada pergerakan stok".
+  if (allowedOutletIds !== null && allowedOutletIds.length === 0) {
+    await closeDb();
+    return (
+      <div className="flex flex-col gap-2">
+        <h1 className="text-xl font-semibold">{strings.stockCard.title}</h1>
+        <p className="rounded-lg border border-destructive/50 bg-destructive/10 p-4 text-sm text-destructive">
+          {strings.common.noOutletAccess}
+        </p>
+      </div>
+    );
+  }
 
   let ingredient;
   let rows;
@@ -53,7 +71,13 @@ export default async function IngredientStockCardPage({
     const movementRows = await db
       .select()
       .from(stockMovements)
-      .where(and(eq(stockMovements.businessId, businessId), eq(stockMovements.ingredientId, id)))
+      .where(
+        and(
+          eq(stockMovements.businessId, businessId),
+          eq(stockMovements.ingredientId, id),
+          outletScopeCondition(allowedOutletIds, stockMovements.outletId)
+        )
+      )
       .orderBy(desc(stockMovements.createdAt));
 
     const employeeIds = [...new Set(movementRows.map((m) => m.createdBy).filter((v): v is string => v != null))];
