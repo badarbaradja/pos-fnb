@@ -141,7 +141,20 @@ export async function saveBarangWithDb(
       if (isUniqueViolation(err) && attempt < MAX_KODE_RETRY - 1) {
         continue; // kode tabrakan, coba lagi dengan kode acak baru
       }
-      throw err;
+      // Utang dicatat §31, dikerjakan sekalian setelah Tahap 5 tutup --
+      // sebelumnya `throw err` di sini meneruskan error MENTAH (termasuk
+      // pelanggaran RLS) ke pemanggil, beda dari pola shift.ts (pesan
+      // generik). addBarangFromShiftWithDb TIDAK ADA try/catch-nya
+      // sendiri, jadi error mentah akan sampai ke boundary Server Action
+      // tanpa pesan manusiawi. Dibungkus di sini, BUKAN di
+      // addBarangFromShiftWithDb -- ini titik satu-satunya di
+      // saveBarangWithDb yang benar-benar bisa gagal karena sebab di
+      // luar validasi (RLS/koneksi), beda dari assertRowsAffected di
+      // jalur UPDATE di atas yang SENGAJA tetap melempar mentah (bug
+      // struktural, bukan penolakan akses yang sah -- lihat komentar
+      // assertRowsAffected di lib/db/errors.ts).
+      console.error("saveBarangWithDb (create) gagal:", err);
+      return { error: strings.common.unexpectedError };
     }
   }
   return { error: strings.common.unexpectedError };
