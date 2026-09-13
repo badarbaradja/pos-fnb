@@ -972,7 +972,13 @@ export const id = {
     payoutBlockedZeroSisaHint: "Sisa dibayar sudah nol -- tidak ada yang perlu dicatat.",
     colPemilik: "Pemilik",
     colDititipkan: "Dititipkan",
-    colTerjual: "Terjual",
+    // Diusulkan (13 September 2026, CEO minta dibedakan dengan KATA, bukan
+    // tanda kurung kecil) -- "Total Terjual" (kumulatif, kelompok stok) vs
+    // "Terjual Periode Ini" (dibatasi startDate..endDate, kelompok uang,
+    // colTerjualPeriode di bawah). Kata persisnya BELUM final, menunggu
+    // keputusan CEO -- gampang diganti, satu baris tiap satu.
+    colTerjual: "Total Terjual",
+    colTerjualPeriode: "Terjual Periode Ini",
     colBelumTerjual: "Belum Terjual",
     colRusak: "Rusak",
     colTotalPenjualan: "Total Penjualan",

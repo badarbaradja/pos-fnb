@@ -135,6 +135,7 @@ export function BagiHasilView({
                 <th className="p-2 text-right font-medium">{strings.bagiHasil.colTerjual}</th>
                 <th className="p-2 text-right font-medium">{strings.bagiHasil.colBelumTerjual}</th>
                 <th className="p-2 text-right font-medium">{strings.bagiHasil.colRusak}</th>
+                <th className="p-2 text-right font-medium">{strings.bagiHasil.colTerjualPeriode}</th>
                 <th className="p-2 text-right font-medium">{strings.bagiHasil.colTotalPenjualan}</th>
                 <th className="p-2 text-right font-medium">{strings.bagiHasil.colBagianPemilik}</th>
                 <th className="p-2 text-right font-medium">{strings.bagiHasil.colBagianToko}</th>
@@ -156,6 +157,7 @@ export function BagiHasilView({
                     <td className="p-2 text-right">{row.terjualKumulatif}</td>
                     <td className="p-2 text-right">{row.belumTerjual}</td>
                     <td className="p-2 text-right">{row.rusak}</td>
+                    <td className="p-2 text-right">{row.terjualPeriode}</td>
                     <td className="p-2 text-right">{formatIDR(new Decimal(row.totalPenjualan))}</td>
                     <td className="p-2 text-right font-medium">
                       {formatIDR(new Decimal(row.bagianPemilik))}

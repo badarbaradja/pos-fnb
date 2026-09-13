@@ -56,10 +56,18 @@ describe.skipIf(!hasEnv)("TT11 — laporan bagi hasil bulanan penuh", () => {
   let pemilikAId: string; // 60% -- akan jual barang
   let pemilikBId: string; // 50% -- TIDAK akan jual apa pun bulan ini
   let pemilikCId: string; // 70% -- barang laku SESUDAH endDate periode lama (uji terjualPada)
+  let pemilikDId: string; // 80% -- jual di periode LAMA dan periode INI (uji terjualPeriode vs terjualKumulatif)
   let recorderProfileId: string; // akun dashboard yang "mencatat" pembayaran
 
   async function jualBarang(hargaJual: string, pemilikId: string) {
-    const kode = `${PREFIX}-${generateId().slice(0, 8)}`;
+    // slice(-8) -- BUKAN slice(0, 8). UUID v7 8 karakter PERTAMA berasal
+    // dari bit tinggi timestamp milidetik, nyaris konstan untuk beberapa
+    // menit -- dua pemanggilan jualBarang() dalam file test yang sama
+    // (proses cuma berjalan detik) menghasilkan STRING SAMA, menabrak
+    // unique constraint (ditemukan 13 September 2026 saat menambah test
+    // kedua yang memanggil helper ini). 8 karakter TERAKHIR berasal dari
+    // rand_b (bagian acak sungguhan), aman dipakai berkali-kali.
+    const kode = `${PREFIX}-${generateId().slice(-8)}`;
     const [item] = await db
       .insert(barang)
       .values({
@@ -164,6 +172,12 @@ describe.skipIf(!hasEnv)("TT11 — laporan bagi hasil bulanan penuh", () => {
       .values({ businessId, nama: `${PREFIX}_PemilikC`, persenBagi: "70" })
       .returning({ id: pemilik.id });
     pemilikCId = pC!.id;
+
+    const [pD] = await db
+      .insert(pemilik)
+      .values({ businessId, nama: `${PREFIX}_PemilikD`, persenBagi: "80" })
+      .returning({ id: pemilik.id });
+    pemilikDId = pD!.id;
 
     // Titipan pemilikB yang BELUM terjual -- membuktikan "belum terjual"
     // dan "dititipkan" terhitung walau tidak ada penjualan bulan ini.
@@ -420,5 +434,61 @@ describe.skipIf(!hasEnv)("TT11 — laporan bagi hasil bulanan penuh", () => {
     const rowA = rows.find((r) => r.pemilikId === pemilikAId)!;
     // 300.000 + 500.000 = 800.000, cocok persis contoh §7.
     expect(rowA.sudahDibayar).toBe("800000.00");
+  });
+
+  it("PENYAJIAN GANDA (keputusan CEO 13 September 2026): terjualPeriode (dibatasi startDate..endDate) BERBEDA dari terjualKumulatif (sepanjang waktu) untuk pemilik yang jual di periode LAMA dan periode INI -- kalau keduanya selalu sama, tidak ada yang diuji", async () => {
+    const kodeLama = `${PREFIX}-PERIODE-LAMA`;
+    const [itemLama] = await db
+      .insert(barang)
+      .values({
+        businessId,
+        outletId,
+        kode: kodeLama,
+        nama: "Barang Periode Lama",
+        hargaJual: "100000",
+        status: "siap_jual",
+        pemilikId: pemilikDId,
+      })
+      .returning({ id: barang.id });
+
+    // Jual SUNGGUHAN lewat sellBarangWithDb (bukan insert order_items
+    // manual) -- tapi businessDate order ini dipaksa mundur ke masa lalu
+    // SESUDAH insert, karena sellBarangWithDb menghitungnya dari waktu
+    // sungguhan saat dipanggil (tidak bisa disuntik lewat parameter).
+    // terjualPada (kolom barang, TIDAK disentuh) tetap waktu sungguhan
+    // hari ini -- itu yang membuat item ini TETAP terhitung di
+    // terjualKumulatif (filter <= endOfPeriodInstant hari ini, lihat
+    // komentar ASUMSI PENAFSIRAN di bagi-hasil-report.ts), walau
+    // businessDate-nya sudah di luar rentang startDate laporan periode
+    // ini di bawah.
+    const orderIdLama = generateId();
+    const jualLama = await sellBarangWithDb(db, businessId, {
+      orderId: orderIdLama,
+      outletId,
+      deviceId,
+      lines: [{ barangId: itemLama!.id }],
+      payments: [{ id: generateId(), paymentMethodId: cashMethodId, amount: "100000", reference: "" }],
+    });
+    if (jualLama.error || !jualLama.success) {
+      throw new Error(`Gagal jual barang uji periode lama: ${jualLama.error}`);
+    }
+    await db.update(orders).set({ businessDate: "2000-06-15" }).where(eq(orders.id, orderIdLama));
+
+    // Barang KEDUA, dijual SEKARANG -- businessDate = TODAY, di DALAM
+    // rentang periode "hari ini" yang diuji di bawah.
+    await jualBarang("150000", pemilikDId);
+
+    const rows = await getBagiHasilLaporan(db, {
+      businessId,
+      outletId,
+      businessTimezone: TIMEZONE,
+      startDate: TODAY, // periode HANYA hari ini -- sengaja mengecualikan "2000-06-15"
+      endDate: TODAY,
+    });
+    const rowD = rows.find((r) => r.pemilikId === pemilikDId)!;
+
+    expect(rowD.terjualKumulatif).toBe(2); // kedua barang sudah terjual per hari ini (terjualPada sungguhan)
+    expect(rowD.terjualPeriode).toBe(1); // cuma yang businessDate-nya jatuh di periode "hari ini"
+    expect(rowD.terjualKumulatif).toBeGreaterThan(rowD.terjualPeriode);
   });
 });

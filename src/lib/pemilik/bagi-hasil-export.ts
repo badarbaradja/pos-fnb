@@ -16,6 +16,11 @@ const COLUMN_DEFS = [
   { header: strings.bagiHasil.colTerjual, key: "terjual", width: 12 },
   { header: strings.bagiHasil.colBelumTerjual, key: "belumTerjual", width: 14 },
   { header: strings.bagiHasil.colRusak, key: "rusak", width: 10 },
+  // Posisi TEPAT SEBELUM totalPenjualan (keputusan CEO 13 September
+  // 2026) -- sama posisi dengan tabel di layar, supaya urutan baca
+  // konsisten: terjual periode ini -> total penjualan -> bagian pemilik
+  // -> bagian toko.
+  { header: strings.bagiHasil.colTerjualPeriode, key: "terjualPeriode", width: 14 },
   { header: strings.bagiHasil.colTotalPenjualan, key: "totalPenjualan", width: 18 },
   { header: strings.bagiHasil.colBagianPemilik, key: "bagianPemilik", width: 18 },
   { header: strings.bagiHasil.colBagianToko, key: "bagianToko", width: 18 },
@@ -122,6 +127,7 @@ export async function buildBagiHasilExport(
       terjual: row.terjualKumulatif,
       belumTerjual: row.belumTerjual,
       rusak: row.rusak,
+      terjualPeriode: row.terjualPeriode,
       totalPenjualan: Number(row.totalPenjualan),
       bagianPemilik: Number(row.bagianPemilik),
       bagianToko: Number(row.bagianToko),
