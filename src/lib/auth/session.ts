@@ -1,7 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { userRoleEnum } from "../db/schema";
 import { createServerSupabaseClient } from "./supabase";
-import { computeAllowedOutletIds } from "./outlet-scope";
+import { computeAllowedOutletIds, type OutletScope } from "./outlet-scope";
 
 export type UserRole = (typeof userRoleEnum.enumValues)[number];
 
@@ -17,7 +17,7 @@ export type CurrentBusiness = {
   // ADITIF, belum dipakai menyaring apa pun (lihat lib/auth/outlet-scope.ts).
   // null = semua outlet (termasuk SELALU null untuk owner/akuntan, apa pun
   // isi outlet_ids mereka di database); array = daftar outlet spesifik.
-  allowedOutletIds: string[] | null;
+  allowedOutletIds: OutletScope;
 };
 
 /**

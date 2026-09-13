@@ -1,6 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { UserRole } from "./session";
 import { getCurrentBusinessFromClient, getSessionFromClient } from "./session";
+import type { OutletScope } from "./outlet-scope";
 import { getUserDb, type UserDbHandle } from "../db/client";
 
 /**
@@ -170,7 +171,7 @@ export type PermissionContext = {
   // Pembatasan akses per outlet, Tahap 1 -- MURNI ADITIF, belum dipakai
   // menyaring halaman/Server Action mana pun (lihat lib/auth/outlet-scope.ts
   // dan CurrentBusiness di lib/auth/session.ts).
-  allowedOutletIds: string[] | null;
+  allowedOutletIds: OutletScope;
 };
 
 /**
