@@ -239,6 +239,13 @@
       "when": 1789304289500,
       "tag": "0033_rls_outlet_ids_orders",
       "breakpoints": true
+    },
+    {
+      "idx": 34,
+      "version": "7",
+      "when": 1789306418690,
+      "tag": "0034_rls_outlet_ids_shifts",
+      "breakpoints": true
     }
   ]
 }

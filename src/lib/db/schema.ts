@@ -1125,18 +1125,32 @@ export const shifts = pgTable(
     forceClosedAt: timestamp("force_closed_at", { withTimezone: true }),
   },
   (t) => [
+    // Pembatasan akses per outlet, Tahap 5 (13 September 2026, §30) --
+    // auth_outlet_ids(business_id) SUDAH ADA (dibuat untuk orders, migrasi
+    // 0033) -- dipakai ulang APA ADANYA, tidak ada fungsi SQL baru untuk
+    // shifts. Guard "IS NULL OR" WAJIB (lihat komentar orders di atas
+    // untuk alasan lengkap `x = any(NULL)`).
+    //
+    // shifts adalah GERBANG IDENTITAS KASIR -- akun yang login di
+    // browser tablet POS (BUKAN kasir yang PIN, employees TIDAK wajib
+    // punya akun auth sama sekali) yang di-cek auth_outlet_ids()-nya.
+    // Kalau akun itu dibatasi dan outlet_ids-nya tidak memuat outlet
+    // tablet itu sendiri, SEMUA kasir di outlet itu gagal buka/tutup
+    // shift -- bukan satu fitur, seluruh penjualan berhenti. Dicatat
+    // sebagai SYARAT PELUNCURAN di plan doc §30, bukan diperbaiki di
+    // sini (di luar lingkup RLS, itu soal siapa yang login di tablet).
     pgPolicy("shifts_select", {
       for: "select",
-      using: sql`${t.businessId} = any(auth_business_ids())`,
+      using: sql`${t.businessId} = any(auth_business_ids()) and (auth_outlet_ids(${t.businessId}) is null or ${t.outletId} = any(auth_outlet_ids(${t.businessId})))`,
     }),
     pgPolicy("shifts_insert", {
       for: "insert",
-      withCheck: sql`${t.businessId} = any(auth_business_ids())`,
+      withCheck: sql`${t.businessId} = any(auth_business_ids()) and (auth_outlet_ids(${t.businessId}) is null or ${t.outletId} = any(auth_outlet_ids(${t.businessId})))`,
     }),
     pgPolicy("shifts_update", {
       for: "update",
-      using: sql`${t.businessId} = any(auth_business_ids())`,
-      withCheck: sql`${t.businessId} = any(auth_business_ids())`,
+      using: sql`${t.businessId} = any(auth_business_ids()) and (auth_outlet_ids(${t.businessId}) is null or ${t.outletId} = any(auth_outlet_ids(${t.businessId})))`,
+      withCheck: sql`${t.businessId} = any(auth_business_ids()) and (auth_outlet_ids(${t.businessId}) is null or ${t.outletId} = any(auth_outlet_ids(${t.businessId})))`,
     }),
   ]
 ).enableRLS();
