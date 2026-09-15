@@ -1,15 +1,20 @@
 import { readFileSync } from "fs";
 import { join } from "path";
 
-function parseCsv(text: string): Record<string, string>[] {
+function parseCsv<T extends Record<string, string>>(text: string): T[] {
   const lines = text.split(/\r?\n/).filter((l) => l.length > 0);
   const header = splitCsvLine(lines[0]!);
-  const rows: Record<string, string>[] = [];
+  const rows: T[] = [];
   for (let i = 1; i < lines.length; i++) {
     const cols = splitCsvLine(lines[i]!);
     const row: Record<string, string> = {};
     header.forEach((h, idx) => (row[h] = (cols[idx] ?? "").trim()));
-    rows.push(row);
+    // Baris CSV selalu berisi SEMUA kolom header (parseCsv menuliskan
+    // string kosong kalau sel aslinya kosong, bukan meninggalkan key
+    // hilang) -- noUncheckedIndexedAccess tidak bisa tahu itu dari tipe
+    // Record<string,string> generik, jadi di-assert ke bentuk kolom
+    // yang sudah diverifikasi manual (lihat pemanggil parseCsv<...>).
+    rows.push(row as T);
   }
   return rows;
 }
@@ -38,11 +43,21 @@ function splitCsvLine(line: string): string[] {
   return out;
 }
 
+type MaterialRow = { id: string; name: string; harga_beli: string; satuan: string };
+type ProdukRow = {
+  id: string;
+  name: string;
+  category: string;
+  resto: string;
+  harga_jual: string;
+  note: string;
+};
+
 const materialCsv = readFileSync(join(__dirname, "material.csv"), "utf-8");
 const produkCsv = readFileSync(join(__dirname, "produk.csv"), "utf-8");
 
-const materials = parseCsv(materialCsv);
-const produk = parseCsv(produkCsv);
+const materials = parseCsv<MaterialRow>(materialCsv);
+const produk = parseCsv<ProdukRow>(produkCsv);
 
 // ==== 1. Normalisasi satuan material ====
 // Peta HANYA untuk variasi kapitalisasi/spasi/singkatan yang jelas TIDAK
@@ -66,7 +81,6 @@ const UNIT_NORMALIZE: Record<string, string> = {
   pak: "pack",
 };
 
-type MaterialRow = (typeof materials)[number];
 const normalized: { row: MaterialRow; unit: string }[] = [];
 const ambiguous: { row: MaterialRow; rawUnit: string; reason: string }[] = [];
 

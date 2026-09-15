@@ -10,15 +10,18 @@ import { join } from "path";
  * - add on gula 30%/50% -> modifier harga 0
  */
 
-function parseCsv(text: string): Record<string, string>[] {
+function parseCsv<T extends Record<string, string>>(text: string): T[] {
   const lines = text.split(/\r?\n/).filter((l) => l.length > 0);
   const header = splitCsvLine(lines[0]!);
-  const rows: Record<string, string>[] = [];
+  const rows: T[] = [];
   for (let i = 1; i < lines.length; i++) {
     const cols = splitCsvLine(lines[i]!);
     const row: Record<string, string> = {};
     header.forEach((h, idx) => (row[h] = (cols[idx] ?? "").trim()));
-    rows.push(row);
+    // Lihat catatan yang sama di analyze.ts -- semua kolom header selalu
+    // terisi (string kosong kalau memang kosong), assert ke bentuk yang
+    // sudah diverifikasi manual di pemanggil.
+    rows.push(row as T);
   }
   return rows;
 }
@@ -46,8 +49,18 @@ function splitCsvLine(line: string): string[] {
   return out;
 }
 
-const materials = parseCsv(readFileSync(join(__dirname, "material.csv"), "utf-8"));
-const produk = parseCsv(readFileSync(join(__dirname, "produk.csv"), "utf-8"));
+type MaterialRow = { id: string; name: string; harga_beli: string; satuan: string };
+type ProdukRow = {
+  id: string;
+  name: string;
+  category: string;
+  resto: string;
+  harga_jual: string;
+  note: string;
+};
+
+const materials = parseCsv<MaterialRow>(readFileSync(join(__dirname, "material.csv"), "utf-8"));
+const produk = parseCsv<ProdukRow>(readFileSync(join(__dirname, "produk.csv"), "utf-8"));
 
 const UNIT_NORMALIZE: Record<string, string> = {
   porsi: "porsi",
