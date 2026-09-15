@@ -1,0 +1,226 @@
+id,name,harga_beli,satuan
+45,Chicken Steak Ayam Paha / porsi,4800,Porsi
+46,Kentang Steak / porsi,1000,porsi
+47,Mix Vegetable / porsi,1500,porsi
+48,BBQ Sauce / porsi,3000,porsi
+50,Blackpaper Sauce / porsi,3000,-
+51,Chicken Steak Ayam Dada / porsi,4500,porsi
+54,Beef Meltic / porsi,31000,porsi
+55,Telur / pcs,1900,pcs
+56,Beras/ gram,16,per gram
+57,Brown Sauce / porsi,3000,porsi
+58,Daging Sop Iga / porsi,5000,porsi
+59,Kuah Sop Iga / porsi,3000,porsi
+60,Kentang sop / porsi,1000,porsi
+61,Wortel / porsi,1000,porsi
+62,Sambel Soto / porsi,2000,porsi
+63,Jeruk Nipis / pcs,400,pcs
+64,Daging Soto / porsi,2000,porsi
+65,Kuah Soto / porsi,3000,porsi
+66,Ayam Goreng / porsi,8000,porsi
+67,Sambal Walid / porsi,3000,porsi
+68,Ayam Bakar / porsi,8000,porsi
+69,Sambal Bawang / porsi,3000,porsi
+70,Mie Telur / porsi,1500,porsi
+71,Bento / porsi,3000,porsi
+72,Kwitiau/ porsi,2500,porsi
+73,Tauge / porsi,1000,porsi
+74,Daging Slice / porsi,7000,porsi
+75,Singkong / porsi,2000,porsi
+76,pisang bakar / porsi,2000,porsi
+77,donat / porsi,10000,porsi
+78,Kentang Krikel / porsi,4000,porsi
+79,Teh Tongjie / porsi,800,porsi
+80,Gula putih / gr,26,gr
+83,Aqua/ pcs,2500,pcs
+84,Badak / pcs,14000,pcs
+86,Mie Ramen / porsi,4000,
+87,Kuah Ramen / porsi,4000,porsi
+88,Ayam Suwir / porsi,2500,porsi
+89,Yakult/ pcs,3000,pcs
+90,Yoghurt / porsi,3000,porsi
+92,Susu putih/porsi,1500,porsi
+93,Masroom / porsi,3000,Porsi
+182,Lamtor Blend,200,Gr
+183,Gula Kelapa,155,Gr
+185,Es Batu,2,in gr
+189,Teh Hitam Celup(tongji),30,Gr
+191,Matcha Powder,20,gr
+192,Air Soda/Sprite,30,ml
+193,Gula Aren,12,ml
+194,Simple Sirup/Gula Cair,40,ml
+195,Madu,50,ml
+196,Caramel Syrup,130,ml
+198,Syrup Jasmine,40,ml
+201,Syrup Butterscotch,100,ml
+202,Sirup Lemon/ ml,50,ml
+203,Syrup Pistachio,55,ML
+204,Pandan Syrup,250,ml
+205,Orange Syrup,350,ml
+208,Strawberry Syrup,350,ml
+212,Creamer Bubuk,100,Gr
+213,Keju Cheddar,20,gr
+215,Keju Mozarella,250,gr
+217,Mie Basah / Mie Tek-tek,50,gr
+221,Ayam Slice,350,gr
+224,Gyoza Frozen,3000,Pcs
+225,Dimsum Frozen,5000,Pcs
+226,Kentang Goreng Frozen,28,gr
+227,Nugget Frozen,30,gr
+230,Minyak Goreng/ Liter,18,liter
+231,Cabai Merah Keriting,60,gr
+232,Cabai Rawit,75,gr
+233,Bawang Goreng,60,gr
+234,Bawang Putih,50,gr
+235,Tomat,20,gr/pcs
+237,Garam/gr,16,gr
+238,Penyedap Rasa,15,gr
+240,Kecap Manis/dirgen,20000,Dirgen
+241,Saos Tomat,3,ml
+242,Kaldu Ayam,4,ml/gr
+243,Terasi,1,gr
+245,blue lagoon syrup,85,ml
+257,Berry Blend,250,gr
+259,Lychee Syrup,130,ml
+261,Drip Cinamon,60,ml
+262,Garam Bali,30,gr
+263,Bubuk Avocado,60,gr
+264,Bubuk Choclate Tivico,165,gr
+266,Strawberry Jam,30,gr
+267,Susu Coklat,30,Ml
+268,Susu Kental Manis putih,30,Ml
+271,Blueberry Jam,380,ml
+272,Thai Tea,100,gr
+273,Roti Tawar,1100,Porsi
+276,Plastik Take Away,200,Pcs
+279,Ice Cream Scoop,4,per scoop
+280,Ginger Syrup,30,ml
+281,kelapa sangrai,20,gr
+282,Coklat Golden Field,70,ml
+284,Syrup Jeruk,250,ml
+285,Syrup Grenadine,250,ml
+287,Leci kaleng/porsi,3500,pcs
+288,susu evaporasi,60,ml
+289,Indomie Goreng,3000,pcs
+290,Indomie Rebus,3000,pcs
+292,Sosis,200,Pcs
+293,Chicken wing,2000,Pcs
+294,Saus bbq,2500,Pcs
+295,Saos keju,4000,Pcs
+299,kwitiaw,5000,
+302,Saos salad,2000,Pcs
+305,Saos dimsum,2000,Pcs
+309,Decaf,150,Gr
+310,Cream Cheese,10,Gr
+331,Ceres,900,Gr
+337,Sea Salt Cream,175,gr
+345,Japanese Sauce / porsi,3000,per porsi
+346,Mashed Potato / porsi,8000,porsi
+347,Kuah Phoba / porsi,3000,per porsi
+348,Daging Phoba / Porsi,10000,per porsi
+349,Cendol Aurora,80,gr
+350,Boba Caramel,40,gr
+351,Jelly Nangka,70,gr
+352,Teh Cap Botol,200,
+353,Box Takeaway,1200,
+354,Susu Oatside,36,ml
+355,Golden Fieal Strawberry,55,gr
+358,Espresso / ml,100,
+362,Biji kopi / Gram,130,Gram
+363,UHT Omela / ml,19,ml
+365,Cristalin,2500,pcs
+366,Pengharum ruangan /pcs,87,ml
+367,Pembersih kamar mandi/dirgen,59,dirgen
+368,Baigon/pcs,64,pcs
+369,Sirup Leci,255,ml
+371,Teh hijau,74,gr
+373,Cup take away,20,barang masuk
+375,Mentega Curah/gram,23,gr
+376,Sambel Kopi/porsi,200,porsi
+377,Tissu sendok,2600,pack
+378,Kuas Oles ayam / pcs,15000,pcs
+379,kremilk santari,104000,g
+383,Susu Dancow bubuk,4000,Bungkus
+386,Pisang MBG / Porsi,3000,Porsi
+388,Dry Lemon/gr,750,per pcs
+389,Mie Pad Thai,5000,Porsi
+390,Saori saous tiram,60000,Botol
+391,Kinor demergras,80000,Kotak
+392,Sasa/pcs,50,pcs
+393,Maizena,23000,Bungkus
+394,Raico ayam/pcs,40,pcs
+395,Raiko Sapi/pcs,50,pcs
+396,Oregano,60000,Kotak
+397,Kewpie Wijen sangrai,50000,Botol
+398,Cuka,8000,Botol
+399,Fiber cream,54000,Bungkus
+400,Chicken powder,200000,Bungkus
+401,Meizena,46000,Bungkus
+402,Blue band,38000,Kg
+403,Thai Chilipaste,70000,Botol
+404,Lada hitam bubuk,100000,Kg
+405,Saos sambel,35,Ml
+406,Sabun cuci tangan,50000,Dergen
+407,Pembersih lantai /dirgen,62,dirgen
+408,Pembersih kaca/dirgen,29,Dirgen
+409,Sabun cuci piring,150000,Dirgen
+410,Kamper toilet/pcs,6,Pcs
+411,Tisu meja,60000,Pck
+412,Tisu toilet,135000,Pck
+413,Plastik tomat 1kg,13000,Pck
+414,Plastik anti panas 1 kg,18000,Pck
+415,Plastik anti panas 2kg,36000,Pck
+430,ekkado,5000,
+431,Foam Salted Machiato,100,ml
+432,sawi/porsi,15,porsi
+433,plastik sampah kecil/pck,26000,pck
+434,daun bawang/kg,1,g
+435,Timun/gram,31,g
+436,Cabe Rawit/kg,65000,g
+437,kwetiaw/pak,6000,pak
+438,Toge/kg,10000,g
+439,Emping/Kg,90000,kg
+440,Sedotan kecil/pack,130,pack
+441,Sedotan besar/pack,130,pack
+449,LIMO/gram,25,g
+450,Teh solo/pack,30,Pack
+451,Es krim/pcs,30000,pcs
+452,Handlove ( sarung tangan)/pak,10000,pack
+454,Kantong hdpe 24/ pak,24000,pak
+455,Kantong hdpe 28/ pak,24000,pak
+458,Gelas Take Away/pcs,750,Pcs(1 pak isi 50 pcs)
+464,Royco Ayam,55000,bungkus
+465,Royco Sapi,50000,Bungkus
+466,Tiparos,42000,Bungkus
+487,Kelapa parut kering/gram,50,gr
+488,Sirup lemongras/ml,207,ml
+489,Sirup Vanila delifru/ml,60,ml
+490,Sirup peach drip/ml,146,ml
+491,sirup  coconut drip/ml,144,ml
+493,sirup drip vanila/ml,142,ml
+494,denali sirup tiramusi/ml,158,ml
+495,Delifru sirup dark cherry/ml,111,ml
+497,mix platter,2000,
+499,Kerupuk bawang / gram,16,gram
+500,Bluberry selai goldenfil/gr,60,gram
+520,Triste pandan/ml,112,ml
+521,Sirup Denali lemon/ml,135,ml
+522,Jelly konyaku coffee/gr,70,gr
+523,Topico sauce strawberry/gr,95,gr
+524,Topico sirup orange/ml,110,ml
+525,Rinso bubuk/gr,28,gr
+526,Mie bestie/porsi,2000,porsi
+530,Delmanto blackpper/gram,37,gram
+531,Delmanto BBQ/gram,37,gram
+542,Kuah gultik/porsi,5000,porsi
+543,Daging gultik/porsi,5000,porsi
+544,Tovico Klepon,50,Gr
+550,Plastik klip uk 7x10/pack,7000,pack
+551,Plastik klip uk 10x6/pack,7000,pack
+552,plastik sampah besar/pck,26000,pack
+553,Tepung panir/kg,23000,kg
+554,Saos kopi/pcs,3000,pcs
+555,Mayones/gr,25,gram
+556,Greenfile tiramisu/gr,60,gram
+557,Saos bento/pcs,3000,pcs
+558,Sambal mie bestie/porsi,3000,porsi

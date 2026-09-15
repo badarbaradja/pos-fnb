@@ -1,0 +1,197 @@
+id,name,category,resto,harga_jual,note
+1,BBQ Chicken Steak Paha 100gr,Steak,Indosteak,28000,-
+2,BBQ Chicken Steak Dada 100gr,Steak,Indosteak,38000,-
+3,BBQ Meltic Steak 200gr,Steak,Indosteak,85000,-
+4,Chicken Miyabi + Nasi,Steak,Indosteak,40000,-
+5,Sop Iga Campur,Menu Nusantara,Indosteak,45000,
+6,Soto Betawi Campur,Menu Nusantara,Indosteak,49000,-
+7,Ayam Walid + Nasi,Menu Nusantara,Indosteak,38000,-
+8,Ayam Bakar + Nasi,Menu Nusantara,Indosteak,38000,-
+9,Mie Tek Tek,Menu Rakyat,Indosteak,24000,
+10,Nasi Goreng,Menu Rakyat,Indosteak,25000,-
+11,Nasi Sambal Ceplok,Menu Rakyat,Indosteak,13000,-
+12,Nasi Bento,Menu Rakyat,Indosteak,25000,-
+13,Phoba,Menu Rakyat,Indosteak,38000,
+14,Japanese Egg Rice,Menu Rakyat,Indosteak,28000,
+15,Singkong Goreng,Snack,Indosteak,18000,-
+16,Kentang Goreng 75gr,Snack,Indosteak,18000,-
+17,Pisang Bakar Keju,Snack,Indosteak,20000,
+18,Donat Keju / Coklat,Snack,Indosteak,20000,
+19,Kopi Aren Tua,Signature Coffee,Indosteak,24000,
+20,Coffee Butterscotch,Signature Coffee,Indosteak,28000,-
+21,Kopi Pistachio,Signature Coffee,Indosteak,28000,-
+22,Kopi Salted Caramel,Signature Coffee,Indosteak,28000,-
+23,Cendol Oat,Non Coffee,Indosteak,25000,-
+24,Lychee Tea,Non Coffee,Indosteak,24000,-
+25,Teh Hijau,Non Coffee,Indosteak,15000,-
+26,Es Teh Manis,Non Coffee,Indosteak,8000,-
+27,Lemon Tea,Non Coffee,Indosteak,23000,-
+28,Strawberry Milkshake,Non Coffee,Indosteak,28000,
+29,Badak,Non Coffee,Indosteak,25000,
+30,Aqua,Non Coffee,Indosteak,10000,
+31,Nasi Sambal Ceplok + Es Teh,Paket Favorit,Indosteak,18000,
+32,BBQ Chicken Steak Paha + Es Teh,Paket Favorit,Indosteak,35000,
+33,Soto Betawi + Es Teh,Paket Favorit,Indosteak,55000,-
+34,Kopi Aren Tua + Singkong,Paket Favorit,Indosteak,38000,
+35,Kopi Aren Tua + Pisang Bakar,Paket Favorit,Indosteak,39000,
+36,Nasi Putih,Tambahan,Indosteak,8000,
+37,Mozarella,Tambahan,Indosteak,10000,-
+38,Sauce Barbeque,Tambahan,Indosteak,7000,
+39,Saus Lada Hitam,Tambahan,Indosteak,7000,-
+40,Creamy Mushroom,Tambahan,Indosteak,7000,-
+41,Sauce Teriyaki,Tambahan,Indosteak,7000,
+44,Ramen + Es Teh,Promo,Indosteak,50000,
+49,Blackpaper Chicken Steak Paha 100gr,Steak,Indosteak,28000,
+52,Blackpaper Chicken Steak Dada 100gr,Steak,Indosteak,38000,
+53,Blackpaper Meltic Steak 200gr,Steak,Indosteak,85000,
+85,Blackpaper Chicken Steak Paha + Es Teh,Paket Favorit,Indosteak,35000,
+94,Kopi Rambutan Madu,Signature Coffee,Indosteak,30000,
+95,Americano,Kopi,Indokopi,18000,-
+96,Caffe Latte,Kopi,Indokopi,23000,-
+97,Kopi Aren Tua,Kopi,Indokopi,24000,-
+99,Jasmine Honey Latte,Kopi,Indokopi,28000,
+101,Kopi Rempah Pagi,Kopi,Indokopi,28000,-
+102,Kopi Kelapa Asap,Kopi,Indokopi,28000,-
+103,Butterscotch Coffee,Kopi,Indokopi,30000,-
+104,Salted Caramel Latte,Kopi,Indokopi,30000,-
+106,Lemonade Espresso,Kopi,Indokopi,30000,-
+108,Pistachio Cream Coffee,Kopi,Indokopi,32000,-
+109,Avocado Coffee,Kopi,Indokopi,32000,
+111,Kopi Klepon,Kopi,Indokopi,32000,-
+112,Kopi Coklat Crunchy,Kopi,Indokopi,32000,-
+114,Kopi Santai Pantai,Aeropress,Indokopi,25000,-
+116,Kopi Hijau Tenang,Aeropress,Indokopi,25000,-
+118,Kopi Fresh Healing,Aeropress,Indokopi,23000,-
+121,Matcha Latte Ceremonial,Non Kopi,Indokopi,35000,-
+123,Matcha Gula Aren,Non Kopi,Indokopi,33000,
+125,Sunset Bestie,Mocktail,Indokopi,25000,
+126,Blue Ocean,Mocktail,Indokopi,25000,-
+128,Strawberry Sparkling,Mocktail,Indokopi,25000,
+129,Es Teh,Teh,Indokopi,8000,-
+130,Es Lemon Tea,Teh,Indokopi,23000,-
+133,Indomie Rebus Telur,Makanan,Indokopi,18000,
+135,Indomie Goreng Telur,Makanan,Indokopi,18000,-
+137,Mie Tek Tek Sambel Kopi,Makanan,Indokopi,28000,-
+139,Ramen Chicken,Makanan,Indokopi,45000,-
+141,Nasi Goreng Sambel Kopi,Makanan,Indokopi,25000,-
+143,Nasi Ceplok Kecap,Makanan,Indokopi,13000,-
+144,Gyoza 5 Pcs,Snack,Indokopi,28000,-
+146,Dimsum Rempah 3 Pcs,Snack,Indokopi,28000,-
+147,Kentang Goreng,Snack,Indokopi,17000,-
+148,Mix Platter,Snack,Indokopi,38000,-
+149,Pisang Bakar Keju,Sweet,Indokopi,20000,
+151,Pisang Bakar Cokelat,Sweet,Indokopi,20000,-
+152,Roti Bakar Keju,Sweet,Indokopi,18000,-
+153,Roti Bakar Coklat,Sweet,Indokopi,18000,-
+154,Singkong goreng,Sweet,Indokopi,20000,-
+156,Donat 2 Pcs,Sweet,Indokopi,18000,-
+157,Telur 1/2 Matang 2 Butir,Sweet,Indokopi,23000,-
+159,Keju,Topping Extra,Indokopi,5000,-
+160,Telur,Topping Extra,Indokopi,8000,-
+162,Sosis,Topping Extra,Indokopi,8000,-
+163,Mozarella,Topping Extra,Indokopi,10000,-
+165,Pad Thai Goreng Bestie,Makanan,Indokopi,30000,-
+167,Coklat Bestie(2 pcs),Sweet,Indokopi,15000,-
+168,Susu Oat Milk,Topping Extra,Indokopi,6000,-
+169,Cream Cheese,Topping Extra,Indokopi,5000,-
+170,Berry Cloud Latte,Signature Berry,Indokopi,35000,-
+171,Berry Kopi Aren,Signature Berry,Indokopi,32000,-
+172,Berry Lemonade Espresso,Signature Berry,Indokopi,35000,-
+173,Berry Sea Salt,Signature Berry,Indokopi,37000,-
+174,Berry Coconut Cream,Signature Berry,Indokopi,38000,-
+175,Berry Mocha,Signature Berry,Indokopi,38000,-
+176,Berry Pistachio,Signature Berry,Indokopi,38000,
+177,Berry Butterscotch,Signature Berry,Indokopi,39000,-
+178,Berry Americano Tonic,Signature Berry,Indokopi,35000,-
+179,Berry Americano,Signature Berry,Indokopi,28000,-
+180,Hot Berry Latte,Signature Berry,Indokopi,30000,-
+246,Milk Thai Tea,Non Kopi,Indokopi,28000,-
+247,Matcha Strawberry,Non Kopi,Indokopi,38000,-
+248,Matcha Blueberry,Non Kopi,Indokopi,32000,-
+249,Thai Green Tea,Tea Series,Indokopi,15000,
+250,Es Lychee Tea,Tea Series,Indokopi,25000,-
+251,Milk Green Thai Tea,Tea Series,Indokopi,28000,-
+252,Saus (BBQ/Lada Hitam/Keju),Topping Extra,Indokopi,8000,-
+253,Aqua Botol,Topping Extra,Indokopi,10000,-
+254,Badak,Topping Extra,Indokopi,26000,-
+255,Upgrade Cold Foam Vanilla,Topping Extra,Indokopi,3000,-
+274,Thai Tea,Teh,Indokopi,30000,-
+275,Plastik Take Away,Topping Extra,Indokopi,3000,
+277,Ice Cream Scoop,Topping Extra,Indokopi,8000,
+283,brownies,Snack,Indokopi,28000,-
+296,Chicken gemoy,Makanan,Indokopi,28000,-
+311,Workspace Paket ( Americano + Indomie),Promo,Indokopi,30000,
+312,Berry Americano Promo,Promo,Indokopi,22000,-
+313,Promo Donat,Snack,Indokopi,9000,Promo Donat
+314,Promo Pisang Bakar,Snack,Indokopi,9000,Promo Pisang Bakar
+315,Bundling Donat 1 pcs + kopi aren tua,bundling,Indokopi,30000,-
+316,Bundling Kopi Aren Berry + Nyoklat Lumer Bestie,bundling,Indokopi,45000,
+317,Bundling Coklat Crunchy + Brownis Nyoklat,bundling,Indokopi,49000,-
+318,Expresso 1 shot Lamtor,Topping Extra,Indokopi,8000,
+319,Expresso 1 shot Berry,Topping Extra,Indokopi,8000,
+320,Pisang Bakar,Promo,Indokopi,4000,Promo
+321,Ropis Poligami,Sweet,Indokopi,25000,Roti Bakar Pandan + Pisang Bakar + Keju+coklat
+322,Kerupuk Singkong,Snack,Indokopi,8000,
+326,add on gula 30%,Topping Extra,Indokopi,1,
+327,add on gula 50%,Topping Extra,Indokopi,1,
+328,Nasi Bento Chicken Roll,Makanan,Indokopi,30000,Pcs
+329,Sosis Sambel Kopi(isi 3),Snack,Indokopi,23000,
+330,Otak-otak Goreng(3 pcs),Snack,Indokopi,20000,
+332,Karamel Nusantara,Non Kopi,Indokopi,36000,
+333,Topping Sea Salt,Topping Extra,Indokopi,3000,
+336,Montblanc Aren Madu,Montblanc,Indokopi,28000,
+338,Montblanc Pandan,Montblanc,Indokopi,28000,
+339,Montblanc Caramel Nusantara,Montblanc,Indokopi,29000,
+343,Pisang MBG (isi 3 pcs),Snack,Indokopi,24000,
+344,Kopi Rambutan Madu V60,Kopi,Indokopi,30000,
+361,Americano,Signature Coffee,Indosteak,18000,
+374,Chocodrink,Non Coffee,Indosteak,25000,
+380,Cherry Tiramisu Latte,Kopi,Indokopi,29000,
+381,Kopi Aren Tua 1 Liter,Kopi 1 Liter,Indokopi,109000,
+418,Cafe Latte 1 Liter,Kopi 1 Liter,Indokopi,120000,
+419,Cherry Tiramisu Latte 1 Liter,Kopi 1 Liter,Indokopi,120000,
+420,Hazelnut Latte 1 Liter,Kopi 1 Liter,Indokopi,120000,
+421,French Vanilla Latte 1 Liter,Kopi 1 Liter,Indokopi,120000,
+422,Salted Caramel Latte 1 Liter,Kopi 1 Liter,Indokopi,120000,
+423,Butterscotch Latte,Kopi 1 Liter,Indokopi,120000,
+424,Jasmine Honey Latte,Kopi 1 Liter,Indokopi,120000,
+425,Kopi Kelapa Asap 1 Liter,Kopi 1 Liter,Indokopi,120000,
+426,Pistachio Latte 1 Liter,Kopi 1 Liter,Indokopi,120000,
+427,Telur tambahan,Tambahan,Indosteak,8000,
+428,Salted Macchiato Coffee,Kopi,Indokopi,27000,
+446,Indomie Goreng Telur,Menu Rakyat,Indosteak,20000,
+448,Indomie Rebus Telur,Menu Rakyat,Indosteak,20000,
+456,CLEO,Non Coffee,Indosteak,13000,
+459,Mie Bestie,Makanan,Indokopi,13000,
+460,Mie Bestie,Makanan,Indosteak,13000,
+461,Mie Bestie,Makanan,Indosteak,13000,
+476,Pisang Bakar+Americano,bundling,Indokopi,22000,
+477,Kentang+Thai Tea,bundling,Indokopi,32000,
+485,Paket Favorit 1,Promo Agustus,Indokopi,38000,Butterscotch Latte coklat lumer bestie
+486,Paket Favorit 2,Promo Agustus,Indokopi,33000,nasi bento chicken roll es teh manis
+505,Kopi Aren Tua,Kopi,Indokopi Lite,18000,
+506,Americano,Kopi,Indokopi Lite,15000,
+507,Caffe Latte,Kopi,Indokopi Lite,18000,
+508,Butterscotch,Kopi,Indokopi Lite,22000,
+509,Caramel Sea Salt,Kopi,Indokopi Lite,22000,
+510,Indomie Goreng Telor,Makanan,Indokopi Lite,18000,
+511,Indomie Rebus Telor,Makanan,Indokopi Lite,18000,
+512,Mie Bestie,Makanan,Indokopi Lite,13000,
+513,Roti Kenangan Coklat Keju,Makanan,Indokopi Lite,15000,
+514,Es teh manis,Teh,Indokopi Lite,5000,
+516,Es Teh Lecy,Non Coffee,Indokopi,15000,
+517,Toping Telor,Tambahan,Indokopi,5000,
+518,sea salt,Tambahan,Indokopi,3000,
+519,Toping Keju,Tambahan,Indokopi,5000,
+527,Gultic blok m,Makanan,Indokopi,15000,
+528,Gultic blok m,Makanan,Indokopi Lite,15000,
+535,Es Leci Tea,Teh,Indokopi Lite,18000,
+536,Coklat Bestie,Non Kopi,Indokopi Lite,15000,
+538,matcha latte,Non Coffee,Indokopi Lite,28000,
+539,matcha aren,Non Coffee,Indokopi Lite,28000,
+540,Air Mineral,Non Coffee,Indokopi Lite,5000,
+541,Nasi Putih,Tambahan,Indokopi Lite,5000,
+545,"Ceria Nusantara , Soto Betawi Nasi Putih Es Teh",Promo September,Indosteak,45000,
+546,"Ceria Bestie, Chicken Steak Paha Kopi Aren Tua",Promo September,Indosteak,50000,
+547,"Rambutan Ceria, Kopi Rambutan Singkong Goreng",Promo September,Indosteak,44000,
+549,"Ceria Indonesia, Ayam Bakar Nasi Putih Es Cendol",Promo September,Indosteak,54000,
