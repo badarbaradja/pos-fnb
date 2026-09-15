@@ -29,6 +29,7 @@ const navItems = [
   { href: "/label-settings", label: id.nav.labelSettings },
   { href: "/units", label: id.nav.units },
   { href: "/ingredients", label: id.nav.ingredients },
+  { href: "/recipes", label: id.nav.recipes },
   { href: "/stock-transfers", label: id.nav.stockTransfers },
   { href: "/reports/sales", label: id.nav.reports },
   { href: "/reports/stock", label: id.nav.stockReport },

@@ -2011,6 +2011,137 @@ export const stockMovements = pgTable(
 ).enableRLS();
 
 /**
+ * Resep / Bill of Materials — BLUEPRINT §3.3 "recipes" (T27, Langkah B1).
+ * Satu produk/varian BOLEH tidak punya resep sama sekali (167 produk hasil
+ * Langkah A hari ini semuanya begitu) -- itu keadaan valid, BUKAN error:
+ * payOrderWithDb melewati potong stok sepenuhnya kalau tidak ada resep
+ * aktif untuk product_id (+variant_id kalau ada), HPP tetap "0" seperti
+ * sekarang (docs/RENCANA-PEMBANGUNAN-KASIR-THRIFTING.md §37).
+ *
+ * output_ingredient_id (bukan product_id/variant_id) dipakai untuk
+ * SUB-RESEP semi-finished (mis. "Ayam Siap Masak" -- hasil olahan gudang,
+ * bukan produk yang dijual langsung ke pembeli) -- lib/calc/cogs.ts
+ * (calculateRecipeCost) sudah mendukung ini rekursif sejak T04, cuma
+ * belum pernah punya data resep sungguhan untuk dikonsumsi. CHECK di
+ * bawah memastikan salah satu dari dua mode ini WAJIB diisi, tidak boleh
+ * baris resep yang tidak menempel ke apa pun.
+ *
+ * productType 'simple' SENGAJA tidak dilayani tabel ini untuk sekarang
+ * (keputusan Langkah B poin 1) -- tidak ada satu pun dari 167 produk
+ * F&B hari ini yang polanya "produk = bahan itu sendiri, dijual utuh
+ * tanpa diracik" (semua Indosteak/Indokopi adalah makanan/minuman
+ * olahan). Kalau nanti ada produk seperti itu (mis. air kemasan literan
+ * dijual utuh), jalur konsumsi stok langsungnya diputuskan saat itu --
+ * bukan ditebak sekarang.
+ *
+ * business_id + trigger cross-check (migration, CLAUDE.md §3.6 -- tidak
+ * bisa diekspresikan di schema.ts) memakai pola PERSIS sama dengan
+ * check_ingredient_outlet_business_id di stock_levels/stock_movements
+ * (migration 0017): tanpa ini, resep bisa memasangkan product_id/
+ * variant_id/output_ingredient_id bisnis A dengan business_id bisnis B
+ * untuk user yang jadi anggota keduanya.
+ */
+export const recipes = pgTable(
+  "recipes",
+  {
+    id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+    businessId: uuid("business_id")
+      .notNull()
+      .references(() => businesses.id, { onDelete: "cascade" }),
+    productId: uuid("product_id").references(() => products.id, { onDelete: "cascade" }),
+    variantId: uuid("variant_id").references(() => productVariants.id, { onDelete: "cascade" }),
+    outputIngredientId: uuid("output_ingredient_id").references(() => ingredients.id),
+    outputQty: numeric("output_qty", { precision: 16, scale: 4 }).notNull().default("1"),
+    overheadCost: numeric("overhead_cost", { precision: 20, scale: 2 }).notNull().default("0"),
+    // Belum dipakai jalur mana pun di B1/B2 -- disiapkan sesuai BLUEPRINT
+    // untuk riwayat resep (mis. "resep V2 mulai berlaku tanggal X"), TIDAK
+    // memengaruhi jaminan snapshot HPP di order_items (unitCogs sudah
+    // membekukan ANGKA HASIL HITUNG saat itu, bukan pointer ke versi resep
+    // -- pola sama pemilikBagiPercentAtSale di order_items thrifting;
+    // lihat docs/RENCANA-PEMBANGUNAN-KASIR-THRIFTING.md §37). Kolom ini
+    // murni mengikuti spesifikasi BLUEPRINT apa adanya per keputusan
+    // Langkah B, penggunaannya menyusul kalau/kapan histori-edit-resep
+    // dibutuhkan.
+    version: integer("version").notNull().default(1),
+    isActive: boolean("is_active").notNull().default(true),
+  },
+  (t) => [
+    check(
+      "recipes_product_or_output_ingredient",
+      sql`${t.productId} is not null or ${t.outputIngredientId} is not null`
+    ),
+    pgPolicy("recipes_select", {
+      for: "select",
+      using: sql`${t.businessId} = any(auth_business_ids())`,
+    }),
+    pgPolicy("recipes_insert", {
+      for: "insert",
+      withCheck: sql`${t.businessId} = any(auth_business_ids())`,
+    }),
+    pgPolicy("recipes_update", {
+      for: "update",
+      using: sql`${t.businessId} = any(auth_business_ids())`,
+      withCheck: sql`${t.businessId} = any(auth_business_ids())`,
+    }),
+    pgPolicy("recipes_delete", {
+      for: "delete",
+      using: sql`${t.businessId} = any(auth_business_ids())`,
+    }),
+  ]
+).enableRLS();
+
+/**
+ * Baris bahan per resep — BLUEPRINT §3.3 "recipe_items".
+ *
+ * business_id didenormalisasi ke sini (bukan cuma lewat recipe_id),
+ * pola PERSIS sama alasannya dengan stock_levels/stock_movements
+ * (migration 0017 & BLUEPRINT §3.3 catatan T21): supaya RLS bisa
+ * memeriksa langsung tanpa subquery berlapis, DAN supaya ada kolom
+ * eksplisit untuk trigger memvalidasi recipe_id & ingredient_id
+ * sungguh-sungguh milik business_id yang sama.
+ *
+ * qty dalam base_unit ingredient (BLUEPRINT) -- bukan purchase_unit,
+ * konsisten dengan stock_movements.qty yang juga selalu base_unit.
+ */
+export const recipeItems = pgTable(
+  "recipe_items",
+  {
+    id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+    recipeId: uuid("recipe_id")
+      .notNull()
+      .references(() => recipes.id, { onDelete: "cascade" }),
+    businessId: uuid("business_id")
+      .notNull()
+      .references(() => businesses.id, { onDelete: "cascade" }),
+    ingredientId: uuid("ingredient_id")
+      .notNull()
+      .references(() => ingredients.id),
+    qty: numeric("qty", { precision: 16, scale: 4 }).notNull(),
+    isOptional: boolean("is_optional").notNull().default(false),
+    wastePercent: numeric("waste_percent", { precision: 7, scale: 4 }).notNull().default("0"),
+  },
+  (t) => [
+    pgPolicy("recipe_items_select", {
+      for: "select",
+      using: sql`${t.businessId} = any(auth_business_ids())`,
+    }),
+    pgPolicy("recipe_items_insert", {
+      for: "insert",
+      withCheck: sql`${t.businessId} = any(auth_business_ids())`,
+    }),
+    pgPolicy("recipe_items_update", {
+      for: "update",
+      using: sql`${t.businessId} = any(auth_business_ids())`,
+      withCheck: sql`${t.businessId} = any(auth_business_ids())`,
+    }),
+    pgPolicy("recipe_items_delete", {
+      for: "delete",
+      using: sql`${t.businessId} = any(auth_business_ids())`,
+    }),
+  ]
+).enableRLS();
+
+/**
  * Transfer stok dua sisi (T22, docs/05-RENCANA-FASE-2.md §8):
  * requested → approved → sent → received, dengan rejected (dari
  * requested) dan cancelled (dari approved/sent/received) sebagai
