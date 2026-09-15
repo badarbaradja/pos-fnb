@@ -2413,3 +2413,36 @@ export const labelSettings = pgTable(
     }),
   ]
 ).enableRLS();
+
+/**
+ * Token publik per outlet untuk self-order display (QR + kiosk).
+ *
+ * TIDAK enable RLS -- seluruh akses lewat getAdminDb() karena tidak ada
+ * Supabase Auth di sisi customer sama sekali (tidak ada token JWT untuk
+ * set_config 'request.jwt.claims'). Keamanan lewat:
+ *   1. Token random 32-byte hex (256 bit entropy) -- brute-force tidak
+ *      praktis.
+ *   2. is_active flag -- token bisa di-revoke kapan saja dari dashboard.
+ *   3. Validasi outlet aktif setiap request -- token yang outlet-nya
+ *      dinonaktifkan otomatis ditolak.
+ *
+ * Tidak ada kolom business_id langsung -- disambiguasi lewat outlet.
+ * Satu outlet bisa punya lebih dari satu token (mis. satu sedang
+ * di-rotate), tapi cuma satu yang aktif yang ditampilkan di dashboard.
+ */
+export const outletTokens = pgTable(
+  "outlet_tokens",
+  {
+    id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+    outletId: uuid("outlet_id")
+      .notNull()
+      .references(() => outlets.id, { onDelete: "cascade" }),
+    token: text("token").notNull().unique(), // random 32-byte hex, masuk URL QR
+    label: text("label"), // opsional -- 'Meja depan', 'Kiosk 1'
+    isActive: boolean("is_active").notNull().default(true),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [unique().on(t.outletId, t.token)]
+);

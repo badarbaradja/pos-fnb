@@ -260,6 +260,13 @@
       "when": 1789310000000,
       "tag": "0036_search_path_auth_functions",
       "breakpoints": true
+    },
+    {
+      "idx": 37,
+      "version": "7",
+      "when": 1789380000000,
+      "tag": "0037_outlet_tokens_self_order",
+      "breakpoints": true
     }
   ]
 }

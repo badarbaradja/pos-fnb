@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useCallback } from "react";
 import Link from "next/link";
 import { Decimal } from "decimal.js";
 import { toast } from "sonner";
@@ -21,8 +21,10 @@ import { PriceTierSelector } from "./price-tier-selector";
 import { MobileCartBar } from "./mobile-cart-bar";
 import { MobileCartSheet } from "./mobile-cart-sheet";
 import { CashMovementDialog } from "./shift/cash-movement-dialog";
+import { PendingOrdersBadge } from "./pending-orders-badge";
 import { Button } from "@/components/ui/button";
 import { id as strings } from "@/lib/i18n/id";
+import type { PendingOrderSummary } from "@/lib/order-guest";
 
 export function PosScreen({
   outlet,
@@ -48,8 +50,41 @@ export function PosScreen({
   const [dialogOpen, setDialogOpen] = useState(false);
   const [mobileCartOpen, setMobileCartOpen] = useState(false);
   const addLine = useCartStore((s) => s.addLine);
+  const clearCart = useCartStore((s) => s.clear);
   const cartLines = useCartStore((s) => s.lines);
   const cartItemCount = cartLines.reduce((sum, l) => sum.plus(l.qty), new Decimal(0));
+
+  // Saat kasir "ambil" draft order dari customer, isi keranjang kasir
+  // dengan item pesanan. Harga tidak disimpan di cart (diambil live dari
+  // katalog saat calculateOrder), jadi cukup productId + variantId + qty.
+  const handleTakeGuestOrder = useCallback(
+    (order: PendingOrderSummary) => {
+      // Bersihkan keranjang dulu kalau ada isinya
+      if (cartLines.length > 0) {
+        clearCart();
+      }
+      for (const item of order.items) {
+        // Cari produk di katalog berdasarkan nama (fallback -- idealnya by id,
+        // tapi draft order dari guest tidak selalu sesuai dengan id yang ada
+        // di memori. Lebih aman: kasir cek dan tambah manual kalau perlu).
+        const found = products.find((p) => p.name === item.name);
+        if (!found) continue;
+        addLine({
+          productId: found.id,
+          productName: found.name,
+          categoryName: found.categoryName,
+          variantId: null,
+          variantName: null,
+          modifiers: [],
+          qty: new Decimal(item.qty),
+          isTaxable: found.isTaxable,
+          note: item.note ?? "",
+        });
+      }
+      toast.success(`Pesanan antrian #${order.queueNumber} diambil ke keranjang`);
+    },
+    [products, cartLines, addLine, clearCart]
+  );
 
   // Satu-satunya pemanggilan calculateOrder() di layar ini -- hasilnya
   // diturunkan ke CartPanel lewat props (kesepakatan T12). Baris keranjang
@@ -107,6 +142,11 @@ export function PosScreen({
               {strings.shift.activeShiftLabel}: {shift.employeeName}
             </span>
             {outlet.cashEnabled ? <CashMovementDialog shiftId={shift.id} /> : null}
+            {/* Badge pesanan masuk dari customer self-order (TT-SELFORDER) */}
+            <PendingOrdersBadge
+              outletId={outlet.id}
+              onTakeOrder={handleTakeGuestOrder}
+            />
             <Button
               variant="outline"
               size="sm"
