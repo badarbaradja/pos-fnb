@@ -2544,3 +2544,157 @@ export const labelSettings = pgTable(
     }),
   ]
 ).enableRLS();
+
+// ---------------------------------------------------------------------------
+// LANGKAH C — Stock Opname (opname pertama = saldo awal 225 bahan)
+// ---------------------------------------------------------------------------
+
+/**
+ * Sesi stock opname per outlet — BLUEPRINT §3.3 (stock_opnames).
+ *
+ * Write-once: begitu status "submitted", tidak ada UPDATE/DELETE.
+ * Koreksi = sesi opname baru (pola sama countedCash di shifts).
+ *
+ * business_date wajib ada, pola sama stock_movements — laporan
+ * filter pakai ini, bukan created_at.
+ *
+ * Status:
+ *   draft     → baru dibuat, item masih bisa ditambah/edit (lewat
+ *               upsert stockOpnameItems)
+ *   submitted → terkunci, adjustment sudah ditulis ke stock_movements
+ *
+ * TIDAK ADA policy UPDATE/DELETE — append-only (CLAUDE.md §3.2).
+ * Transisi draft→submitted dilakukan oleh submitOpnameWithDb yang
+ * menulisnya lewat getAdminDb() (jalur server action, BYPASSRLS),
+ * setelah semua validasi selesai, dalam satu transaksi atomik.
+ */
+export const stockOpnameStatusEnum = pgEnum("stock_opname_status", [
+  "draft",
+  "submitted",
+]);
+
+export const stockOpnames = pgTable(
+  "stock_opnames",
+  {
+    id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+    businessId: uuid("business_id")
+      .notNull()
+      .references(() => businesses.id, { onDelete: "cascade" }),
+    outletId: uuid("outlet_id")
+      .notNull()
+      .references(() => outlets.id),
+    status: stockOpnameStatusEnum("status").notNull().default("draft"),
+    businessDate: date("business_date").notNull(),
+    // Judul opsional -- "Opname Bulanan September" atau kosong
+    label: text("label"),
+    // Selisih besar wajib alasan. Baris ini diisi sama seperti
+    // shifts.note -- alasan level sesi, bukan per bahan.
+    // Per bahan ada di stock_opname_items.varianceReason.
+    note: text("note"),
+    submittedBy: uuid("submitted_by").references(() => employees.id),
+    submittedAt: timestamp("submitted_at", { withTimezone: true }),
+    createdBy: uuid("created_by").references(() => employees.id),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    index("stock_opnames_outlet_date_idx").on(t.outletId, t.businessDate),
+    pgPolicy("stock_opnames_select", {
+      for: "select",
+      using: sql`${t.businessId} = any(auth_business_ids())`,
+    }),
+    pgPolicy("stock_opnames_insert", {
+      for: "insert",
+      withCheck: sql`${t.businessId} = any(auth_business_ids())`,
+    }),
+    // TIDAK ADA policy UPDATE/DELETE -- write-once setelah submitted.
+    // Status transition dilakukan lewat getAdminDb() di server action
+    // yang sudah memvalidasi state machine sendiri (sama pola transfer).
+  ]
+).enableRLS();
+
+/**
+ * Baris per-bahan dalam satu sesi stock opname.
+ *
+ * Bahan yang TIDAK masuk daftar ini TIDAK terpengaruh sama sekali
+ * (dilewati, bukan dianggap nol — syarat f dari spesifikasi).
+ *
+ * physicalQty: qty yang dihitung fisik di gudang, dalam base_unit.
+ * systemQty: snapshot qty_on_hand SAAT sesi dibuat (untuk display
+ *   selisih, tidak berubah walau stok bergerak saat sesi masih draft).
+ * unitCost: harga yang dipakai untuk movement adjustment. Diisi
+ *   otomatis dari avg_cost ingredient kalau sudah ada, atau dari
+ *   material.csv (untuk opname pertama, avg_cost masih 0).
+ *   Bisa diedit oleh pengguna sebelum submit.
+ * variance: physicalQty - systemQty, dihitung server saat submit
+ *   (bukan diketik manual), ditulis ke stock_movements.qty.
+ * varianceReason: wajib diisi kalau |variance * unitCost| melebihi
+ *   outlets.varianceAlertValue ATAU |variance/systemQty| melebihi
+ *   outlets.varianceAlertPercent. Ambang dari setting, bukan hardcode.
+ *
+ * TIDAK ADA policy UPDATE/DELETE -- item hanya bisa diubah SEBELUM
+ * opname disubmit (status draft). Server action melarang upsert kalau
+ * status sudah submitted. Setelah submitted, record ini baca-saja.
+ */
+export const stockOpnameItems = pgTable(
+  "stock_opname_items",
+  {
+    id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+    opnameId: uuid("opname_id")
+      .notNull()
+      .references(() => stockOpnames.id, { onDelete: "cascade" }),
+    businessId: uuid("business_id")
+      .notNull()
+      .references(() => businesses.id, { onDelete: "cascade" }), // didenormalisasi, pola stock_levels/stock_movements
+    ingredientId: uuid("ingredient_id")
+      .notNull()
+      .references(() => ingredients.id),
+    // Snapshot saldo sistem saat item ditambahkan ke sesi (draft).
+    // Tidak berubah walau stok bergerak kemudian — dipakai hitung
+    // variance di submit, dan ditampilkan di UI sebagai "Stok Sistem".
+    systemQty: numeric("system_qty", { precision: 16, scale: 4 })
+      .notNull()
+      .default("0"),
+    // Qty fisik yang dihitung. NULL = belum dihitung (UI membedakan
+    // "kosong" dengan "belum diisi" -- null BUKAN 0).
+    physicalQty: numeric("physical_qty", { precision: 16, scale: 4 }),
+    // Harga per base_unit untuk movement adjustment. Diisi dari:
+    // 1. avg_cost outlet kalau sudah > 0 (opname koreksi rutin)
+    // 2. Nilai dari material.csv (opname pertama, avg_cost masih 0)
+    // Bisa diedit pengguna sebelum submit. Pakai numeric(20,8) sama
+    // pola unit_cost di stock_movements (CLAUDE.md §3.1).
+    unitCost: numeric("unit_cost", { precision: 20, scale: 8 })
+      .notNull()
+      .default("0"),
+    // Selisih (physical - system), diisi SERVER saat submit. Bukan
+    // input manual -- dicompute dari dua kolom di atas di dalam TX.
+    variance: numeric("variance", { precision: 16, scale: 4 }),
+    // Alasan wajib kalau selisih melampaui ambang outlet.
+    varianceReason: text("variance_reason"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    unique().on(t.opnameId, t.ingredientId),
+    pgPolicy("stock_opname_items_select", {
+      for: "select",
+      using: sql`${t.businessId} = any(auth_business_ids())`,
+    }),
+    pgPolicy("stock_opname_items_insert", {
+      for: "insert",
+      withCheck: sql`${t.businessId} = any(auth_business_ids())`,
+    }),
+    pgPolicy("stock_opname_items_update", {
+      for: "update",
+      using: sql`${t.businessId} = any(auth_business_ids())`,
+      withCheck: sql`${t.businessId} = any(auth_business_ids())`,
+    }),
+    // TIDAK ADA policy DELETE -- item tidak pernah dihapus satu-satu.
+    // Seluruh sesi dihapus lewat cascade ON DELETE di opname_id FK.
+  ]
+).enableRLS();
