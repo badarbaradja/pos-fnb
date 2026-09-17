@@ -164,6 +164,7 @@ describe.skipIf(!hasEnv)("stock-transfers/manage", () => {
       transferId,
       sentBy: employeeId,
       lines: [{ itemId: item!.id, unitChoice: "purchase", qty: 5, unitCost: 24000 }], // sesuai permintaan
+      photo: { photoMissingReason: "uji: foto tidak relevan untuk skenario ini" },
     });
     expect(sent.success).toBeTruthy();
 
@@ -183,6 +184,7 @@ describe.skipIf(!hasEnv)("stock-transfers/manage", () => {
       transferId,
       receivedBy: employeeId,
       lines: [{ itemId: item!.id, receivedQty: 5 }], // sesuai kiriman (satuan sama: dus)
+      photo: { photoMissingReason: "uji: foto tidak relevan untuk skenario ini" },
     });
     expect(received.success).toBeTruthy();
     expect(received.discrepancies).toBeUndefined();
@@ -221,6 +223,7 @@ describe.skipIf(!hasEnv)("stock-transfers/manage", () => {
       transferId,
       sentBy: employeeId,
       lines: [{ itemId: item!.id, unitChoice: "base", qty: 15, unitCost: 1000 }], // beda dari 20, tanpa diffReason
+      photo: { photoMissingReason: "uji: foto tidak relevan untuk skenario ini" },
     });
     expect(sent.error).toBeTruthy();
   });
@@ -250,6 +253,7 @@ describe.skipIf(!hasEnv)("stock-transfers/manage", () => {
           diffReason: "Stok gudang cuma tersisa 15",
         },
       ],
+      photo: { photoMissingReason: "uji: foto tidak relevan untuk skenario ini" },
     });
     expect(sent.success).toBeTruthy();
 
@@ -273,12 +277,14 @@ describe.skipIf(!hasEnv)("stock-transfers/manage", () => {
       transferId,
       sentBy: employeeId,
       lines: [{ itemId: item!.id, unitChoice: "base", qty: 10, unitCost: 1000 }],
+      photo: { photoMissingReason: "uji: foto tidak relevan untuk skenario ini" },
     });
 
     const received = await receiveStockTransferWithDb(db, businessId, null, {
       transferId,
       receivedBy: employeeId,
       lines: [{ itemId: item!.id, receivedQty: 7 }], // beda dari 10, tanpa alasan
+      photo: { photoMissingReason: "uji: foto tidak relevan untuk skenario ini" },
     });
     expect(received.error).toBeTruthy();
   });
@@ -298,12 +304,14 @@ describe.skipIf(!hasEnv)("stock-transfers/manage", () => {
       transferId,
       sentBy: employeeId,
       lines: [{ itemId: item!.id, unitChoice: "base", qty: 20, unitCost: 1000 }],
+      photo: { photoMissingReason: "uji: foto tidak relevan untuk skenario ini" },
     });
 
     const received = await receiveStockTransferWithDb(db, businessId, null, {
       transferId,
       receivedBy: employeeId,
       lines: [{ itemId: item!.id, receivedQty: 15, diffReason: "3 pecah, 2 hilang di jalan" }],
+      photo: { photoMissingReason: "uji: foto tidak relevan untuk skenario ini" },
     });
     expect(received.success).toBeTruthy();
     expect(received.discrepancies).toBeTruthy();
@@ -394,6 +402,7 @@ describe.skipIf(!hasEnv)("stock-transfers/manage", () => {
       transferId,
       sentBy: employeeId,
       lines: [{ itemId: item!.id, unitChoice: "base", qty: 5, unitCost: 1000 }],
+      photo: { photoMissingReason: "uji: foto tidak relevan untuk skenario ini" },
     });
 
     const cancelled = await cancelStockTransferWithDb(db, businessId, null, {
@@ -419,11 +428,13 @@ describe.skipIf(!hasEnv)("stock-transfers/manage", () => {
       transferId,
       sentBy: employeeId,
       lines: [{ itemId: item!.id, unitChoice: "base", qty: 10, unitCost: 2000 }],
+      photo: { photoMissingReason: "uji: foto tidak relevan untuk skenario ini" },
     });
     await receiveStockTransferWithDb(db, businessId, null, {
       transferId,
       receivedBy: employeeId,
       lines: [{ itemId: item!.id, receivedQty: 10 }],
+      photo: { photoMissingReason: "uji: foto tidak relevan untuk skenario ini" },
     });
 
     // Simulasi 8 pcs sudah terjual (T25 belum dibangun) -- sisa 2.

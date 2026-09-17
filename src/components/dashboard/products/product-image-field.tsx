@@ -9,43 +9,18 @@ import {
   PRODUCT_IMAGE_MAX_DIMENSION,
   validateProductImage,
 } from "@/lib/products/image";
+import { compressImageToJpeg } from "@/lib/utils/compress-image";
 import { id as strings } from "@/lib/i18n/id";
 
 /**
  * Kompresi client-side murni kenyamanan -- lib/products/image.ts#validateProductImage
  * dipanggil ULANG di server (saveProduct) sebagai penegakan sungguhan
- * (CLAUDE.md, diminta eksplisit "bukan hanya di client").
+ * (CLAUDE.md, diminta eksplisit "bukan hanya di client"). Fungsi
+ * kompresinya sendiri dipindah ke lib/utils/compress-image.ts (Langkah D)
+ * supaya dipakai ULANG oleh CameraCapture, bukan disalin.
  */
 async function compressImage(file: File): Promise<File> {
-  const bitmap = await createImageBitmap(file);
-  const longestSide = Math.max(bitmap.width, bitmap.height);
-  const scale = Math.min(1, PRODUCT_IMAGE_MAX_DIMENSION / longestSide); // jangan upscale gambar kecil
-  const width = Math.max(1, Math.round(bitmap.width * scale));
-  const height = Math.max(1, Math.round(bitmap.height * scale));
-
-  const canvas = document.createElement("canvas");
-  canvas.width = width;
-  canvas.height = height;
-  const ctx = canvas.getContext("2d");
-  if (!ctx) {
-    throw new Error("Canvas tidak didukung di browser ini");
-  }
-  ctx.drawImage(bitmap, 0, 0, width, height);
-  bitmap.close();
-
-  // Turunkan kualitas bertahap sampai <=500KB atau kehabisan percobaan --
-  // cap iterasi supaya tidak bisa nyangkut, bukan while(true).
-  const qualitySteps = [0.85, 0.75, 0.65, 0.55, 0.45];
-  let blob: Blob | null = null;
-  for (const quality of qualitySteps) {
-    blob = await new Promise<Blob | null>((resolve) =>
-      canvas.toBlob(resolve, "image/jpeg", quality)
-    );
-    if (blob && blob.size <= PRODUCT_IMAGE_MAX_BYTES) break;
-  }
-  if (!blob) {
-    throw new Error("Gagal mengompres gambar");
-  }
+  const blob = await compressImageToJpeg(file, PRODUCT_IMAGE_MAX_DIMENSION, PRODUCT_IMAGE_MAX_BYTES);
   return new File([blob], "product.jpg", { type: "image/jpeg" });
 }
 

@@ -482,6 +482,7 @@ export const id = {
     sendSuccess: "Barang tercatat terkirim",
     notApprovedYet: "Permintaan ini belum disetujui atau tidak ditemukan",
     sentByLabel: "Dikirim oleh",
+    photoSendLabel: "Foto barang saat diambil dari gudang (wajib)",
 
     // Receive (outlet)
     receiveButton: "Terima Barang",
@@ -497,12 +498,43 @@ export const id = {
     receivedByHint: "Siapa yang benar-benar menerima dan menghitung barang ini -- dipakai untuk penelusuran, bukan menyalahkan.",
     discrepancyWarningTitle: "Selisih pengiriman tercatat sebagai kerugian",
     discrepancyLine: "{ingredient}: dikirim {sentQty} {unit}, diterima {receivedQty} {unit} -- Rp{lossValue}",
+    photoReceiveLabel: "Foto barang saat sampai di outlet (wajib)",
+
+    // Foto bukti (Langkah D, 17 September 2026)
+    photoRequiredError: "Foto wajib diambil, atau (kalau kamera benar-benar tidak bisa dibuka) alasan tercatat -- tidak boleh dua-duanya kosong",
+    photoTakeButton: "Ambil Foto",
+    photoRetakeButton: "Ambil Ulang",
+    photoUseButton: "Gunakan Foto Ini",
+    photoFlipCameraLabel: "Balik kamera",
+    photoRequestingPermission: "Meminta izin kamera...",
+    photoPermissionDenied: "Butuh izin kamera untuk memotret bukti transfer. Buka Pengaturan -> Situs -> izinkan Kamera, lalu coba lagi.",
+    photoNotSupported: "Kamera tidak bisa diakses dari alamat ini. Pastikan alamat website diawali https://, lalu coba lagi.",
+    photoCameraFailedRetry: "Coba Lagi",
+    photoCameraFailedTitle: "Kamera tidak bisa dibuka di perangkat ini",
+    photoContinueWithoutButton: "Lanjut Tanpa Foto",
+    photoContinueWithoutConfirm: "Lanjutkan tanpa foto? Alasan ini akan tersimpan otomatis dan baris transfer ini akan ditandai di daftar.",
+    photoMissingAutoReason: "Kamera tidak bisa dibuka di perangkat ini saat {step}",
+    photoMissingReasonStepSend: "mengirim",
+    photoMissingReasonStepReceive: "menerima",
+    photoMissingBadge: "Tanpa foto",
+    photoPreviewAlt: "Pratinjau foto bukti transfer",
+
+    // Halaman detail
+    detailTitle: "Detail Transfer Stok",
+    detailBackLink: "Kembali ke daftar",
+    detailPhotoSectionTitle: "Foto Bukti",
+    detailPhotoSendLabel: "Saat Dikirim",
+    detailPhotoReceiveLabel: "Saat Diterima",
+    detailPhotoNotYet: "Belum sampai tahap ini",
+    detailPhotoMissingReasonLabel: "Tanpa foto -- alasan:",
+    detailViewLink: "Lihat",
 
     // Daftar
     colNumber: "Nomor",
     colOutlet: "Outlet",
     colWaitingSince: "Menunggu Sejak",
     colStatus: "Status",
+    colPhoto: "Foto",
     colActions: "Aksi",
     statusRequested: "Menunggu Persetujuan",
     statusApproved: "Disetujui",

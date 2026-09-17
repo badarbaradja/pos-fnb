@@ -129,6 +129,7 @@ export default async function StockTransfersPage() {
               <TableHead>{strings.stockTransfers.colNumber}</TableHead>
               <TableHead>{strings.stockTransfers.colWaitingSince}</TableHead>
               <TableHead>{strings.stockTransfers.colStatus}</TableHead>
+              <TableHead>{strings.stockTransfers.colPhoto}</TableHead>
               <TableHead className="text-right">{strings.stockTransfers.colActions}</TableHead>
             </TableRow>
           </TableHeader>
@@ -163,8 +164,22 @@ export default async function StockTransfersPage() {
                       {statusLabels[row.status] ?? row.status}
                     </Badge>
                   </TableCell>
+                  <TableCell>
+                    {/* Langkah D -- baris tanpa foto (kamera gagal saat
+                        kirim/terima) WAJIB terlihat di sini, bukan cuma di
+                        detail (instruksi eksplisit CEO: "jangan diam-diam
+                        lolos"). */}
+                    {row.sentPhotoMissingReason || row.receivedPhotoMissingReason ? (
+                      <Badge variant="destructive">{strings.stockTransfers.photoMissingBadge}</Badge>
+                    ) : null}
+                  </TableCell>
                   <TableCell className="text-right">
                     <div className="flex items-center justify-end gap-1">
+                      <Link href={`/stock-transfers/${row.id}`}>
+                        <Button variant="ghost" size="sm">
+                          {strings.stockTransfers.detailViewLink}
+                        </Button>
+                      </Link>
                       {/* Pembatasan akses per outlet, Tahap 4 (13 September
                           2026, §28) -- tombol Approve/Reject DISEMBUNYIKAN
                           kalau outlet gudang (fromOutletId) tidak ada di

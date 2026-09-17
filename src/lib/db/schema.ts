@@ -2203,6 +2203,26 @@ export const stockTransfers = pgTable(
     receivedBy: uuid("received_by").references(() => employees.id),
     receivedAt: timestamp("received_at", { withTimezone: true }), // nullable -- beda dari v1, terima tidak lagi terjadi saat baris dibuat
 
+    // Foto bukti fisik (Langkah D, 17 September 2026) -- WAJIB diisi
+    // salah satu dari pasangan {photoPath, photoMissingReason} di setiap
+    // tahap (send DAN receive), tidak pernah dua-duanya null dan tidak
+    // pernah dua-duanya terisi. Ditegakkan DUA lapis: Zod
+    // (lib/stock-transfers/manage.ts, pesan galat jelas) dan trigger
+    // check_stock_transfer_transition (migration, independen dari kode
+    // aplikasi -- pola sama "wajib alasan kalau selisih" di opname/
+    // countedCash, bukan CHECK constraint statis karena aturannya
+    // bergantung pada TRANSISI status, bukan cuma nilai baris saat ini).
+    // photoPath = path objek Storage
+    // bucket 'stock-transfers' (privat, signed URL saat dibaca -- pola
+    // sama products/T09c). missingReason diisi OTOMATIS oleh UI kalau
+    // kamera gagal dibuka (bukan diketik manual "malas foto") -- baris
+    // dengan alasan ini WAJIB terlihat ditandai di daftar transfer,
+    // bukan lolos diam-diam (instruksi eksplisit CEO).
+    sentPhotoPath: text("sent_photo_path"),
+    sentPhotoMissingReason: text("sent_photo_missing_reason"),
+    receivedPhotoPath: text("received_photo_path"),
+    receivedPhotoMissingReason: text("received_photo_missing_reason"),
+
     // Pembatalan (T22 v1) -- append-only tanpa jalur koreksi berarti staf
     // akan "membetulkan" lewat opname tanpa alasan jelas, persis kebiasaan
     // yang bikin Indokopi kacau. Diperluas T22: sekarang bisa dari

@@ -14,12 +14,59 @@ import {
   type ReceiveStockTransferResult,
   type StockTransferActionResult,
 } from "@/lib/stock-transfers/manage";
+import { getStockTransferPhotoPath } from "@/lib/stock-transfers/photo";
+import { id as strings } from "@/lib/i18n/id";
 
 export type { StockTransferActionResult, CancelStockTransferResult, ReceiveStockTransferResult };
 
 export type StockTransferFormState = {
   error?: string;
 };
+
+type TransferPhotoResolution = { photoPath?: string; photoMissingReason?: string; error?: string };
+
+/**
+ * Langkah D (17 September 2026) -- upload foto lewat sesi USER (bukan
+ * admin), sama pola image upload produk (T09c): supaya RLS Storage
+ * bucket 'stock-transfers' (migration 0039) benar-benar dilewati jalur
+ * produksi, bukan cuma ada tapi tidak pernah teruji. Tepat SATU dari
+ * `photoFile`/`photoMissingReason` WAJIB ada di FormData -- server tidak
+ * pernah percaya klien sudah memvalidasi ini (CLAUDE.md §3.4), diperiksa
+ * ULANG di sini sebelum diteruskan ke manage.ts yang menegakkannya lagi
+ * lewat Zod.
+ */
+async function resolveTransferPhoto(
+  supabase: Awaited<ReturnType<typeof createServerSupabaseClient>>,
+  businessId: string,
+  transferId: string,
+  step: "send" | "receive",
+  formData: FormData
+): Promise<TransferPhotoResolution> {
+  const photoFile = formData.get("photoFile");
+  const missingReason = formData.get("photoMissingReason");
+  const hasFile = photoFile instanceof File && photoFile.size > 0;
+  const hasReason = typeof missingReason === "string" && missingReason.trim().length > 0;
+
+  if (hasFile === hasReason) {
+    // Keduanya kosong ATAU keduanya terisi -- klien seharusnya mencegah
+    // ini, tapi server tidak pernah percaya itu.
+    return { error: strings.stockTransfers.photoRequiredError };
+  }
+
+  if (hasReason) {
+    return { photoMissingReason: (missingReason as string).trim() };
+  }
+
+  const path = getStockTransferPhotoPath(businessId, transferId, step);
+  const { error: uploadError } = await supabase.storage
+    .from("stock-transfers")
+    .upload(path, photoFile as File, { upsert: true, contentType: "image/jpeg" });
+  if (uploadError) {
+    console.error("Upload foto transfer stok gagal:", uploadError);
+    return { error: strings.common.unexpectedError };
+  }
+  return { photoPath: path };
+}
 
 /**
  * Pembungkus Server Action tipis -- logika sesungguhnya ada di
@@ -109,12 +156,20 @@ export async function sendStockTransfer(
     return { error: "Data baris tidak valid" };
   }
 
+  const transferId = String(formData.get("transferId") ?? "");
+
   try {
+    const photo = await resolveTransferPhoto(supabase, businessId, transferId, "send", formData);
+    if (photo.error) {
+      return { error: photo.error };
+    }
+
     const result = await sendStockTransferWithDb(db, businessId, allowedOutletIds, {
       transferId: formData.get("transferId"),
       sentBy: formData.get("sentBy"),
       number: formData.get("number") || undefined,
       lines: linesRaw,
+      photo: { photoPath: photo.photoPath, photoMissingReason: photo.photoMissingReason },
     });
     if (result.error) {
       return { error: result.error };
@@ -141,11 +196,19 @@ export async function receiveStockTransfer(
     return { error: "Data baris tidak valid" };
   }
 
+  const transferId = String(formData.get("transferId") ?? "");
+
   try {
+    const photo = await resolveTransferPhoto(supabase, businessId, transferId, "receive", formData);
+    if (photo.error) {
+      return { error: photo.error };
+    }
+
     const result = await receiveStockTransferWithDb(db, businessId, allowedOutletIds, {
       transferId: formData.get("transferId"),
       receivedBy: formData.get("receivedBy"),
       lines: linesRaw,
+      photo: { photoPath: photo.photoPath, photoMissingReason: photo.photoMissingReason },
     });
     if (result.error) {
       return { error: result.error };

@@ -323,11 +323,28 @@ const sendLineSchema = z.object({
   diffReason: z.string().trim().optional(),
 });
 
+// Langkah D (17 September 2026) -- WAJIB tepat satu dari photoPath
+// (upload berhasil) atau photoMissingReason (kamera gagal dibuka, diisi
+// OTOMATIS oleh UI, bukan diketik manual) -- refine (bukan union
+// z.undefined(), yang rapuh terhadap key yang sama sekali tidak ada di
+// objek) menolak keduanya kosong ATAU keduanya terisi di level Zod,
+// sebelum sampai ke trigger check_stock_transfer_transition yang
+// menegakkan hal sama di server independen dari kode ini.
+const transferPhotoSchema = z
+  .object({
+    photoPath: z.string().min(1).optional(),
+    photoMissingReason: z.string().min(1).optional(),
+  })
+  .refine((val) => Boolean(val.photoPath) !== Boolean(val.photoMissingReason), {
+    message: strings.stockTransfers.photoRequiredError,
+  });
+
 const sendSchema = z.object({
   transferId: z.string().uuid(),
   sentBy: z.string().uuid(),
   number: z.string().trim().optional(),
   lines: z.array(sendLineSchema).min(1, strings.stockTransfers.atLeastOneLine),
+  photo: transferPhotoSchema,
 });
 
 export async function sendStockTransferWithDb(
@@ -466,7 +483,14 @@ export async function sendStockTransferWithDb(
 
     const updated = await tx
       .update(stockTransfers)
-      .set({ status: "sent", sentBy: data.sentBy, sentAt: now, number: data.number || null })
+      .set({
+        status: "sent",
+        sentBy: data.sentBy,
+        sentAt: now,
+        number: data.number || null,
+        sentPhotoPath: data.photo.photoPath ?? null,
+        sentPhotoMissingReason: data.photo.photoMissingReason ?? null,
+      })
       .where(
         and(
           eq(stockTransfers.id, data.transferId),
@@ -507,6 +531,7 @@ const receiveSchema = z.object({
   transferId: z.string().uuid(),
   receivedBy: z.string().uuid(),
   lines: z.array(receiveLineSchema).min(1, strings.stockTransfers.atLeastOneLine),
+  photo: transferPhotoSchema,
 });
 
 export type ReceiveDiscrepancy = {
@@ -709,7 +734,13 @@ export async function receiveStockTransferWithDb(
 
     const updated = await tx
       .update(stockTransfers)
-      .set({ status: "received", receivedBy: data.receivedBy, receivedAt: now })
+      .set({
+        status: "received",
+        receivedBy: data.receivedBy,
+        receivedAt: now,
+        receivedPhotoPath: data.photo.photoPath ?? null,
+        receivedPhotoMissingReason: data.photo.photoMissingReason ?? null,
+      })
       .where(
         and(
           eq(stockTransfers.id, data.transferId),

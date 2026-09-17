@@ -333,6 +333,7 @@ describe.skipIf(!hasEnv)("Pembatasan akses per outlet, Tahap 4 -- Stock Transfer
         transferId: row!.id,
         sentBy: employeeId,
         lines: [{ itemId: crypto.randomUUID(), unitChoice: "base", qty: 1, unitCost: 0 }],
+        photo: { photoMissingReason: "uji: foto tidak relevan untuk skenario ini" },
       });
       expect(result.error).toBe(strings.common.outletAccessDenied);
       const [after] = await db.select({ status: stockTransfers.status }).from(stockTransfers).where(eq(stockTransfers.id, row!.id));
@@ -348,6 +349,7 @@ describe.skipIf(!hasEnv)("Pembatasan akses per outlet, Tahap 4 -- Stock Transfer
         transferId: row!.id,
         sentBy: employeeId,
         lines: [{ itemId: crypto.randomUUID(), unitChoice: "base", qty: 1, unitCost: 0 }],
+        photo: { photoMissingReason: "uji: foto tidak relevan untuk skenario ini" },
       });
       expect(result.error).not.toBe(strings.common.outletAccessDenied);
     });
@@ -361,6 +363,7 @@ describe.skipIf(!hasEnv)("Pembatasan akses per outlet, Tahap 4 -- Stock Transfer
         transferId: row!.id,
         receivedBy: employeeId,
         lines: [{ itemId: crypto.randomUUID(), receivedQty: 1 }],
+        photo: { photoMissingReason: "uji: foto tidak relevan untuk skenario ini" },
       });
       expect(result.error).toBe(strings.common.outletAccessDenied);
       const [after] = await db.select({ status: stockTransfers.status }).from(stockTransfers).where(eq(stockTransfers.id, row!.id));
@@ -376,6 +379,7 @@ describe.skipIf(!hasEnv)("Pembatasan akses per outlet, Tahap 4 -- Stock Transfer
         transferId: row!.id,
         receivedBy: employeeId,
         lines: [{ itemId: crypto.randomUUID(), receivedQty: 1 }],
+        photo: { photoMissingReason: "uji: foto tidak relevan untuk skenario ini" },
       });
       expect(result.error).not.toBe(strings.common.outletAccessDenied);
     });
