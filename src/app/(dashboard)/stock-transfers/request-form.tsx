@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { requestStockTransfer, type StockTransferFormState } from "./actions";
 import { LinePreview } from "./line-preview";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -20,6 +21,7 @@ export type IngredientOption = {
   purchaseFactor: string;
 };
 export type LastRequestLine = { ingredientId: string; unit: string; qty: string };
+export type StockByIngredient = Record<string, string>; // ingredientId -> qty_on_hand (base_unit)
 
 type LineState = { key: string; ingredientId: string; unitChoice: "purchase" | "base"; qty: string };
 
@@ -42,11 +44,15 @@ export function RequestStockTransferForm({
   ingredients,
   employees,
   lastRequestByOutlet,
+  centralKitchenStock,
+  outletStockByOutlet,
 }: {
   outlets: OutletOption[];
   ingredients: IngredientOption[];
   employees: EmployeeOption[];
   lastRequestByOutlet: Record<string, LastRequestLine[]>;
+  centralKitchenStock: StockByIngredient;
+  outletStockByOutlet: Record<string, StockByIngredient>;
 }) {
   const router = useRouter();
   const [state, formAction, isPending] = useActionState(requestStockTransfer, initialState);
@@ -154,6 +160,13 @@ export function RequestStockTransferForm({
           const ingredient = ingredientById.get(line.ingredientId);
           const unit = line.unitChoice === "purchase" ? ingredient?.purchaseUnit : ingredient?.baseUnit;
           const factor = line.unitChoice === "purchase" ? Number(ingredient?.purchaseFactor ?? 1) : 1;
+          // Stok gudang pusat + stok outlet peminta, TIDAK PERNAH memblokir
+          // (§4 instruksi CEO) -- murni informasi supaya orang bisa
+          // memutuskan sendiri, bukan minta jumlah buta lalu ditolak Ita.
+          const warehouseQty = Number(centralKitchenStock[line.ingredientId] ?? "0");
+          const outletQty = Number(outletStockByOutlet[toOutletId]?.[line.ingredientId] ?? "0");
+          const requestedQtyBase = Number(line.qty || 0) * factor;
+          const exceedsWarehouse = line.qty.trim() !== "" && requestedQtyBase > warehouseQty;
           return (
             <div key={line.key} className="flex flex-col gap-3 rounded-lg border border-border p-4">
               <div className="grid gap-3 sm:grid-cols-4">
@@ -198,6 +211,20 @@ export function RequestStockTransferForm({
                   </Button>
                 </div>
               </div>
+              {ingredient ? (
+                <div className="flex flex-wrap items-center gap-2 text-xs">
+                  {warehouseQty <= 0 ? (
+                    <Badge variant="destructive">{strings.stockTransfers.warehouseStockEmpty}</Badge>
+                  ) : (
+                    <Badge variant="secondary">
+                      {strings.stockTransfers.warehouseStockLabel}: {warehouseQty} {ingredient.baseUnit}
+                    </Badge>
+                  )}
+                  <Badge variant="secondary">
+                    {strings.stockTransfers.outletStockLabel}: {outletQty} {ingredient.baseUnit}
+                  </Badge>
+                </div>
+              ) : null}
               <div className="flex flex-col gap-2">
                 <Label>{strings.stockTransfers.requestedQtyLabel}</Label>
                 <Input
@@ -208,6 +235,13 @@ export function RequestStockTransferForm({
                   onChange={(e) => updateLine(line.key, { qty: e.target.value })}
                   required
                 />
+                {exceedsWarehouse ? (
+                  <p className="text-xs text-amber-600 dark:text-amber-500">
+                    {strings.stockTransfers.exceedsWarehouseStockWarning
+                      .replace("{available}", String(warehouseQty))
+                      .replace("{unit}", ingredient?.baseUnit ?? "")}
+                  </p>
+                ) : null}
               </div>
               {ingredient ? (
                 <LinePreview baseUnit={ingredient.baseUnit} unit={unit ?? ""} factor={factor} qty={line.qty} />

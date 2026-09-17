@@ -1,9 +1,9 @@
 import Link from "next/link";
-import { and, asc, eq } from "drizzle-orm";
+import { and, asc, eq, inArray } from "drizzle-orm";
 import { createServerSupabaseClient } from "@/lib/auth/supabase";
 import { requirePermissionDb } from "@/lib/auth/permissions";
 import { outletScopeCondition } from "@/lib/auth/outlet-scope";
-import { employees, ingredients, outlets } from "@/lib/db/schema";
+import { employees, ingredients, outlets, stockLevels } from "@/lib/db/schema";
 import { getLastRequestForOutlet } from "@/lib/stock-transfers/manage";
 import { id as strings } from "@/lib/i18n/id";
 import { RequestStockTransferForm, type LastRequestLine } from "../request-form";
@@ -30,6 +30,8 @@ export default async function NewStockTransferPage() {
   let ingredientRows;
   let employeeRows;
   let hasCentralKitchen: boolean;
+  const centralKitchenStock: Record<string, string> = {};
+  const outletStockByOutlet: Record<string, Record<string, string>> = {};
   const lastRequestByOutlet: Record<string, LastRequestLine[]> = {};
   try {
     // Dropdown "outlet peminta" TIDAK PERNAH menampilkan outlet di luar
@@ -65,6 +67,32 @@ export default async function NewStockTransferPage() {
       .from(employees)
       .where(and(eq(employees.businessId, businessId), eq(employees.isActive, true)))
       .orderBy(asc(employees.fullName));
+
+    // Stok gudang pusat + stok tiap outlet peminta ditampilkan bersamaan di
+    // form (instruksi CEO 16 September 2026): kasir yang tahu gudang cuma
+    // punya 3 liter tidak akan mengetik 10 liter lalu menunggu ditolak Ita.
+    // Ini MURNI informasi -- tidak pernah memblokir pengajuan (§4 alasan
+    // yang sama seperti stok minus tidak memblokir penjualan).
+    const outletIdsForStock = [...outletRows.map((o) => o.id), ...(centralKitchen ? [centralKitchen.id] : [])];
+    const stockRows = outletIdsForStock.length
+      ? await db
+          .select({
+            outletId: stockLevels.outletId,
+            ingredientId: stockLevels.ingredientId,
+            qtyOnHand: stockLevels.qtyOnHand,
+          })
+          .from(stockLevels)
+          .where(
+            and(eq(stockLevels.businessId, businessId), inArray(stockLevels.outletId, outletIdsForStock))
+          )
+      : [];
+    for (const row of stockRows) {
+      if (centralKitchen && row.outletId === centralKitchen.id) {
+        centralKitchenStock[row.ingredientId] = row.qtyOnHand;
+      } else {
+        (outletStockByOutlet[row.outletId] ??= {})[row.ingredientId] = row.qtyOnHand;
+      }
+    }
 
     for (const outlet of outletRows) {
       lastRequestByOutlet[outlet.id] = await getLastRequestForOutlet(db, businessId, allowedOutletIds, outlet.id);
@@ -124,6 +152,8 @@ export default async function NewStockTransferPage() {
         ingredients={ingredientOptions}
         employees={employeeRows}
         lastRequestByOutlet={lastRequestByOutlet}
+        centralKitchenStock={centralKitchenStock}
+        outletStockByOutlet={outletStockByOutlet}
       />
     </div>
   );
