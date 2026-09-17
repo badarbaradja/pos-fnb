@@ -6,6 +6,7 @@ import {
   getRecipeDetail,
   saveRecipeWithDb,
   type RecipeDetail,
+  type RecipeProductType,
   type SaveRecipeResult,
 } from "@/lib/recipes/manage";
 import { id as strings } from "@/lib/i18n/id";
@@ -28,6 +29,7 @@ export async function getRecipeDetailAction(productId: string): Promise<GetRecip
 
 export type SaveRecipeActionInput = {
   productId: string;
+  productType: RecipeProductType;
   items: {
     ingredientId: string;
     qty: number;

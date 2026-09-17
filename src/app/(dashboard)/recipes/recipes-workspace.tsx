@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import {
   Table,
   TableBody,
@@ -15,11 +16,17 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { id as strings } from "@/lib/i18n/id";
-import type { IngredientOption, RecipeItemDetail, RecipeOverviewRow } from "@/lib/recipes/manage";
+import type {
+  IngredientOption,
+  RecipeItemDetail,
+  RecipeOverviewRow,
+  RecipeProductType,
+} from "@/lib/recipes/manage";
+import { RECIPE_PRODUCT_TYPES } from "@/lib/recipes/manage";
 import { getRecipeDetailAction, saveRecipeAction } from "./actions";
 import { IngredientPicker } from "./ingredient-picker";
 
-type FilterMode = "all" | "missing" | "has";
+type FilterMode = "all" | "missing" | "has" | "simpleMissing";
 
 type DraftLine = {
   key: string; // stabil untuk React key, bukan dari DB (bahan baru belum punya recipeItem.id)
@@ -49,6 +56,19 @@ function toDraftLines(items: RecipeItemDetail[]): DraftLine[] {
   }));
 }
 
+function toRecipeProductType(value: string): RecipeProductType {
+  return (RECIPE_PRODUCT_TYPES as readonly string[]).includes(value)
+    ? (value as RecipeProductType)
+    : "recipe";
+}
+
+function productTypeLabel(value: string): string {
+  if (value === "simple") return strings.recipes.typeSimple;
+  if (value === "recipe") return strings.recipes.typeRecipe;
+  if (value === "service") return strings.recipes.typeService;
+  return strings.recipes.typeOther;
+}
+
 export function RecipesWorkspace({
   initialProducts,
   ingredientOptions,
@@ -60,6 +80,7 @@ export function RecipesWorkspace({
   const [search, setSearch] = useState("");
   const [filterMode, setFilterMode] = useState<FilterMode>("missing");
   const [selectedProductId, setSelectedProductId] = useState<string | null>(null);
+  const [productType, setProductType] = useState<RecipeProductType>("recipe");
   const [lines, setLines] = useState<DraftLine[] | null>(null);
   const [loadingDetail, setLoadingDetail] = useState(false);
   const [isSaving, startSaving] = useTransition();
@@ -75,6 +96,9 @@ export function RecipesWorkspace({
     return products.filter((p) => {
       if (filterMode === "missing" && p.hasRecipe) return false;
       if (filterMode === "has" && !p.hasRecipe) return false;
+      if (filterMode === "simpleMissing" && !(p.productType === "simple" && !p.hasRecipe)) {
+        return false;
+      }
       if (term && !p.name.toLowerCase().includes(term)) return false;
       return true;
     });
@@ -86,6 +110,8 @@ export function RecipesWorkspace({
     setSelectedProductId(productId);
     setLoadingDetail(true);
     setLines(null);
+    const product = products.find((p) => p.productId === productId);
+    setProductType(toRecipeProductType(product?.productType ?? "recipe"));
     const result = await getRecipeDetailAction(productId);
     setLoadingDetail(false);
     if (result.error || !result.data) {
@@ -117,6 +143,37 @@ export function RecipesWorkspace({
     });
   }
 
+  /** Barang jadi: satu bahan saja -- memilih bahan baru MENGGANTI, bukan menambah. */
+  function selectSimpleIngredient(ingredient: IngredientOption) {
+    setLines([
+      {
+        key: nextDraftKey(),
+        ingredientId: ingredient.id,
+        ingredientName: ingredient.name,
+        baseUnit: ingredient.baseUnit,
+        qty: "1",
+        isOptional: false,
+        wastePercent: "0",
+      },
+    ]);
+  }
+
+  function changeProductType(next: RecipeProductType) {
+    setProductType(next);
+    if (next === "service") {
+      setLines([]);
+      return;
+    }
+    if (next === "simple") {
+      setLines((prev) => {
+        const current = prev ?? [];
+        if (current.length === 0) return current;
+        const first = current[0]!;
+        return [{ ...first, qty: "1" }];
+      });
+    }
+  }
+
   function removeLine(key: string) {
     setLines((prev) => (prev ?? []).filter((l) => l.key !== key));
   }
@@ -139,19 +196,34 @@ export function RecipesWorkspace({
   function handleSave(jumpToNext: boolean) {
     if (!selectedProductId || lines === null) return;
 
-    for (const line of lines) {
-      const qtyNum = Number(line.qty);
-      if (!line.qty || !Number.isFinite(qtyNum) || qtyNum <= 0) {
-        toast.error(`${line.ingredientName}: ${strings.recipes.qtyMustBePositive}`);
-        return;
+    if (productType === "simple" && lines.length !== 1) {
+      toast.error(strings.recipes.simpleMustHaveOneItem);
+      return;
+    }
+    if (productType === "service" && lines.length !== 0) {
+      toast.error(strings.recipes.serviceMustHaveNoItems);
+      return;
+    }
+    if (productType !== "service") {
+      for (const line of lines) {
+        const qtyNum = Number(line.qty);
+        if (!line.qty || !Number.isFinite(qtyNum) || qtyNum <= 0) {
+          toast.error(`${line.ingredientName}: ${strings.recipes.qtyMustBePositive}`);
+          return;
+        }
       }
     }
 
     const productIdAtSave = selectedProductId;
+    const productTypeAtSave = productType;
+    const linesAtSave =
+      productTypeAtSave === "simple" ? [{ ...lines[0]!, qty: "1" }] : lines;
+
     startSaving(async () => {
       const result = await saveRecipeAction({
         productId: productIdAtSave,
-        items: lines.map((l) => ({
+        productType: productTypeAtSave,
+        items: linesAtSave.map((l) => ({
           ingredientId: l.ingredientId,
           qty: Number(l.qty),
           isOptional: l.isOptional,
@@ -167,7 +239,12 @@ export function RecipesWorkspace({
       setProducts((prev) =>
         prev.map((p) =>
           p.productId === productIdAtSave
-            ? { ...p, hasRecipe: lines.length > 0, itemCount: lines.length }
+            ? {
+                ...p,
+                productType: productTypeAtSave,
+                hasRecipe: linesAtSave.length > 0,
+                itemCount: linesAtSave.length,
+              }
             : p
         )
       );
@@ -195,11 +272,12 @@ export function RecipesWorkspace({
             onChange={(e) => setSearch(e.target.value)}
             className="sm:max-w-xs"
           />
-          <div className="flex gap-1">
+          <div className="flex flex-wrap gap-1">
             {(
               [
                 ["missing", strings.recipes.filterMissing],
                 ["has", strings.recipes.filterHas],
+                ["simpleMissing", strings.recipes.filterSimpleMissing],
                 ["all", strings.recipes.filterAll],
               ] as [FilterMode, string][]
             ).map(([mode, label]) => (
@@ -224,6 +302,7 @@ export function RecipesWorkspace({
               <TableHeader>
                 <TableRow>
                   <TableHead>{strings.recipes.colName}</TableHead>
+                  <TableHead>{strings.recipes.colType}</TableHead>
                   <TableHead>{strings.recipes.colStatus}</TableHead>
                 </TableRow>
               </TableHeader>
@@ -239,6 +318,11 @@ export function RecipesWorkspace({
                       {p.categoryName ? (
                         <div className="text-xs text-muted-foreground">{p.categoryName}</div>
                       ) : null}
+                    </TableCell>
+                    <TableCell>
+                      <span className="text-xs text-muted-foreground">
+                        {productTypeLabel(p.productType)}
+                      </span>
                     </TableCell>
                     <TableCell>
                       {p.hasRecipe ? (
@@ -271,77 +355,129 @@ export function RecipesWorkspace({
               ) : null}
             </div>
 
-            <IngredientPicker
-              options={ingredientOptions}
-              excludeIds={new Set(lines.map((l) => l.ingredientId))}
-              onSelect={addLine}
-            />
+            <div className="flex flex-col gap-2">
+              <Label>{strings.recipes.typeQuestionLabel}</Label>
+              <div className="flex flex-col gap-2 sm:flex-row">
+                {(
+                  [
+                    ["simple", strings.recipes.typeSimple, strings.recipes.typeSimpleHint],
+                    ["recipe", strings.recipes.typeRecipe, strings.recipes.typeRecipeHint],
+                    ["service", strings.recipes.typeService, strings.recipes.typeServiceHint],
+                  ] as [RecipeProductType, string, string][]
+                ).map(([value, label, hint]) => (
+                  <button
+                    key={value}
+                    type="button"
+                    onClick={() => changeProductType(value)}
+                    className={`flex-1 rounded-md border p-2 text-left text-sm transition-colors ${
+                      productType === value ? "border-primary bg-muted" : "border-input"
+                    }`}
+                  >
+                    <div className="font-medium">{label}</div>
+                    <div className="text-xs text-muted-foreground">{hint}</div>
+                  </button>
+                ))}
+              </div>
+            </div>
 
-            {lines.length === 0 ? (
-              <p className="text-sm text-muted-foreground">{strings.recipes.noItemsHint}</p>
+            {productType === "service" ? (
+              <p className="text-sm text-muted-foreground">{strings.recipes.typeServiceHint}</p>
+            ) : productType === "simple" ? (
+              <div className="flex flex-col gap-2">
+                <Label>{strings.recipes.simpleIngredientLabel}</Label>
+                <IngredientPicker
+                  options={ingredientOptions}
+                  excludeIds={new Set()}
+                  onSelect={selectSimpleIngredient}
+                />
+                {lines.length > 0 ? (
+                  <div className="flex items-center justify-between rounded-md border p-2 text-sm">
+                    <span>{lines[0]!.ingredientName}</span>
+                    <span className="text-xs text-muted-foreground">
+                      1 {ingredientById.get(lines[0]!.ingredientId)?.baseUnit ?? lines[0]!.baseUnit}
+                    </span>
+                  </div>
+                ) : null}
+              </div>
             ) : (
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>{strings.recipes.colIngredient}</TableHead>
-                    <TableHead>{strings.recipes.colQty}</TableHead>
-                    <TableHead>{strings.recipes.colOptional}</TableHead>
-                    <TableHead>{strings.recipes.colWaste}</TableHead>
-                    <TableHead />
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {lines.map((line) => {
-                    const ingredient = ingredientById.get(line.ingredientId);
-                    return (
-                      <TableRow key={line.key}>
-                        <TableCell>{line.ingredientName}</TableCell>
-                        <TableCell>
-                          <div className="flex items-center gap-1">
-                            <Input
-                              type="number"
-                              step="0.0001"
-                              min="0"
-                              value={line.qty}
-                              onChange={(e) => updateLine(line.key, { qty: e.target.value })}
-                              className="w-24"
-                            />
-                            <span className="text-xs text-muted-foreground">
-                              {ingredient?.baseUnit ?? line.baseUnit}
-                            </span>
-                          </div>
-                        </TableCell>
-                        <TableCell>
-                          <Checkbox
-                            checked={line.isOptional}
-                            onCheckedChange={(c) => updateLine(line.key, { isOptional: c === true })}
-                          />
-                        </TableCell>
-                        <TableCell>
-                          <Input
-                            type="number"
-                            step="0.01"
-                            min="0"
-                            value={line.wastePercent}
-                            onChange={(e) => updateLine(line.key, { wastePercent: e.target.value })}
-                            className="w-20"
-                          />
-                        </TableCell>
-                        <TableCell>
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => removeLine(line.key)}
-                          >
-                            {strings.recipes.removeLine}
-                          </Button>
-                        </TableCell>
+              <>
+                <IngredientPicker
+                  options={ingredientOptions}
+                  excludeIds={new Set(lines.map((l) => l.ingredientId))}
+                  onSelect={addLine}
+                />
+
+                {lines.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">{strings.recipes.noItemsHint}</p>
+                ) : (
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>{strings.recipes.colIngredient}</TableHead>
+                        <TableHead>{strings.recipes.colQty}</TableHead>
+                        <TableHead>{strings.recipes.colOptional}</TableHead>
+                        <TableHead>{strings.recipes.colWaste}</TableHead>
+                        <TableHead />
                       </TableRow>
-                    );
-                  })}
-                </TableBody>
-              </Table>
+                    </TableHeader>
+                    <TableBody>
+                      {lines.map((line) => {
+                        const ingredient = ingredientById.get(line.ingredientId);
+                        return (
+                          <TableRow key={line.key}>
+                            <TableCell>{line.ingredientName}</TableCell>
+                            <TableCell>
+                              <div className="flex items-center gap-1">
+                                <Input
+                                  type="number"
+                                  step="0.0001"
+                                  min="0"
+                                  value={line.qty}
+                                  onChange={(e) => updateLine(line.key, { qty: e.target.value })}
+                                  className="w-24"
+                                />
+                                <span className="text-xs text-muted-foreground">
+                                  {ingredient?.baseUnit ?? line.baseUnit}
+                                </span>
+                              </div>
+                            </TableCell>
+                            <TableCell>
+                              <Checkbox
+                                checked={line.isOptional}
+                                onCheckedChange={(c) =>
+                                  updateLine(line.key, { isOptional: c === true })
+                                }
+                              />
+                            </TableCell>
+                            <TableCell>
+                              <Input
+                                type="number"
+                                step="0.01"
+                                min="0"
+                                value={line.wastePercent}
+                                onChange={(e) =>
+                                  updateLine(line.key, { wastePercent: e.target.value })
+                                }
+                                className="w-20"
+                              />
+                            </TableCell>
+                            <TableCell>
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => removeLine(line.key)}
+                              >
+                                {strings.recipes.removeLine}
+                              </Button>
+                            </TableCell>
+                          </TableRow>
+                        );
+                      })}
+                    </TableBody>
+                  </Table>
+                )}
+              </>
             )}
 
             <div className="flex gap-2">
