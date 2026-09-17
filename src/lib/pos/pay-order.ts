@@ -24,6 +24,14 @@ import { assertRowsAffected } from "@/lib/db/errors";
 import { businessDate } from "@/lib/utils/business-date";
 import { generateId } from "@/lib/utils/id";
 import { checkShiftSellability, getOpenShiftForDevice, getShiftSellabilityErrorMessage } from "@/lib/pos/shift";
+import {
+  deductStockForModifier,
+  deductStockForOrderLine,
+  loadActiveRecipes,
+  loadModifierIngredients,
+  recipeLineKey,
+  type StockWarning,
+} from "@/lib/pos/stock-deduction";
 import { id as strings } from "@/lib/i18n/id";
 
 /**
@@ -49,9 +57,17 @@ import { id as strings } from "@/lib/i18n/id";
  *   order_items, payments wajib id dari client). Kalau orders.id ini
  *   sudah ada, dianggap submit ganda (double-tap) -- kembalikan hasil
  *   yang sudah ada, jangan proses ulang / jangan nomor struk baru.
- * - unit_cogs dan cogs_total DISENGAJA "0" -- skema resep/bahan belum
- *   ada (Fase 2), jadi belum ada cara menghitung HPP sungguhan. Ini
- *   BUKAN dianggap sudah benar, cuma placeholder sampai Fase 2.
+ * - B3 (17 September 2026, docs/RENCANA-PEMBANGUNAN-KASIR-THRIFTING.md
+ *   §37-38): potong stok + hitung unit_cogs/cogs_total SUNGGUHAN, lewat
+ *   lib/pos/stock-deduction.ts, di dalam TRANSAKSI YANG SAMA dengan
+ *   penulisan order (satu atau semua). Ada-tidaknya resep AKTIF untuk
+ *   (productId, variantId) adalah satu-satunya sumber kebenaran --
+ *   produk tanpa resep dilewati sepenuhnya, unit_cogs/cogs_total tetap
+ *   "0" persis seperti sebelumnya, TIDAK PERNAH memblokir pembayaran.
+ *   Stok tidak cukup TIDAK PERNAH menolak transaksi -- movement tetap
+ *   ditulis walau saldo jadi negatif, dikumpulkan ke `stockWarnings`
+ *   dan ditampilkan SETELAH struk tercetak (pola sama
+ *   cancelStockTransferWithDb).
  */
 
 const lineSchema = z.object({
@@ -92,6 +108,9 @@ export type PayOrderResult = {
     orderNumber: string;
     total: string;
     change: string;
+    // Kosong/undefined = tidak ada bahan yang jadi minus. Ditampilkan
+    // SETELAH struk, tidak pernah menahan pembeli (§37 poin 2).
+    stockWarnings?: StockWarning[];
   };
 };
 
@@ -295,7 +314,18 @@ export async function payOrderWithDb(
     const now = new Date();
     const bDate = businessDate(now, business.timezone, outlet.dayCutoffTime);
 
+    // Resep aktif + bahan modifier dimuat SEKALI sebelum transaksi (batch,
+    // bukan N+1 di dalam loop) -- B3/B5.
+    const activeRecipesByLine = await loadActiveRecipes(
+      db,
+      businessId,
+      data.lines.map((l) => ({ productId: l.productId, variantId: l.variantId }))
+    );
+    const modifierIngredientById = await loadModifierIngredients(db, modifierIds);
+
     let orderNumber = "";
+    const stockWarnings: StockWarning[] = [];
+    let cogsTotal = new Decimal(0);
 
     await db.transaction(async (tx) => {
       // Idempotency: kalau order ini sudah pernah disimpan (double-tap),
@@ -344,9 +374,11 @@ export async function payOrderWithDb(
         taxAmount: result.taxAmount.toFixed(2),
         rounding: result.rounding.toFixed(2),
         total: result.total.toFixed(2),
-        // cogsTotal/grossProfit: HPP sungguhan belum bisa dihitung (belum
-        // ada skema resep/bahan, Fase 2) -- 0 sementara, lihat komentar
-        // di atas fungsi ini.
+        // cogsTotal/grossProfit: nilai SEMENTARA, diisi ulang lewat UPDATE
+        // di bawah setelah semua baris (+ potong stok resepnya) selesai
+        // diproses -- orders row harus ADA dulu sebelum order_items bisa
+        // di-insert (FK), jadi urutan tulisnya insert placeholder -> proses
+        // baris -> update total, semua di transaksi atomik yang sama.
         cogsTotal: "0",
         grossProfit: result.netSales.toFixed(2),
         businessDate: bDate,
@@ -357,6 +389,47 @@ export async function payOrderWithDb(
         const product = productById.get(line.productId)!;
         const variant = line.variantId ? variantById.get(line.variantId) : undefined;
         const lineResult = resultByLineId.get(line.id)!;
+        const lineQty = new Decimal(line.qty);
+
+        // B3: potong stok sesuai resep aktif (kalau ada) + hitung HPP
+        // sungguhan SEBELUM insert order_items, supaya unitCogs/cogsAmount
+        // yang tersimpan adalah angka final, bukan ditulis lalu diedit lagi.
+        const recipe = activeRecipesByLine.get(recipeLineKey(line.productId, line.variantId)) ?? null;
+        const { unitCogs: recipeUnitCogs, warnings: lineWarnings } = await deductStockForOrderLine(tx, {
+          businessId,
+          outletId: data.outletId,
+          orderId: data.orderId,
+          businessDate: bDate,
+          createdBy: activeShift.employeeId,
+          recipe,
+          lineQty,
+        });
+        stockWarnings.push(...lineWarnings);
+
+        // B5: konsumsi bahan per modifier terpilih (kalau modifier itu
+        // punya ingredient_id+ingredient_qty terisi) -- ditulis SEBELUM
+        // insert order_item_modifiers, alasan sama seperti di atas.
+        let modifierUnitCogsTotal = new Decimal(0);
+        const modifierCogsById = new Map<string, string>();
+        for (const modifierId of line.modifierIds) {
+          const ingredient = modifierIngredientById.get(modifierId) ?? null;
+          const { unitCogs: modUnitCogs, warning } = await deductStockForModifier(tx, {
+            businessId,
+            outletId: data.outletId,
+            orderId: data.orderId,
+            businessDate: bDate,
+            createdBy: activeShift.employeeId,
+            ingredient,
+            lineQty,
+          });
+          if (warning) stockWarnings.push(warning);
+          modifierUnitCogsTotal = modifierUnitCogsTotal.plus(modUnitCogs);
+          modifierCogsById.set(modifierId, modUnitCogs.toFixed(2));
+        }
+
+        const unitCogs = recipeUnitCogs.plus(modifierUnitCogsTotal);
+        const cogsAmount = unitCogs.times(lineQty);
+        cogsTotal = cogsTotal.plus(cogsAmount);
 
         await tx.insert(orderItems).values({
           id: line.id,
@@ -375,8 +448,12 @@ export async function payOrderWithDb(
           discountAmount: lineResult.itemDiscount.toFixed(2),
           allocatedOrderDiscount: lineResult.allocatedOrderDiscount.toFixed(2),
           netAmount: lineResult.netAmount.toFixed(2),
-          unitCogs: "0", // lihat catatan cogsTotal di atas
-          cogsAmount: "0",
+          // SNAPSHOT HPP -- dihitung dari resep + avg_cost bahan SAAT INI,
+          // dibekukan permanen di sini. Resep diedit bulan depan TIDAK
+          // PERNAH mengubah angka ini (docs/RENCANA-PEMBANGUNAN-KASIR-
+          // THRIFTING.md §37 -- pola sama pemilikBagiPercentAtSale).
+          unitCogs: unitCogs.toFixed(2),
+          cogsAmount: cogsAmount.toFixed(2),
           note: line.note || null,
           sortOrder: index,
         });
@@ -390,9 +467,19 @@ export async function payOrderWithDb(
             modifierName: modifier.name, // SNAPSHOT, sama alasannya dengan order_items
             price: modifier.price,
             qty: "1",
-            unitCogs: "0",
+            unitCogs: modifierCogsById.get(modifierId) ?? "0",
           });
         }
+      }
+
+      if (cogsTotal.greaterThan(0)) {
+        await tx
+          .update(orders)
+          .set({
+            cogsTotal: cogsTotal.toFixed(2),
+            grossProfit: result.netSales.minus(cogsTotal).toFixed(2),
+          })
+          .where(eq(orders.id, data.orderId));
       }
 
       for (const [index, payment] of data.payments.entries()) {
@@ -419,6 +506,7 @@ export async function payOrderWithDb(
         orderNumber,
         total: result.total.toFixed(2),
         change: change.toFixed(2),
+        stockWarnings: stockWarnings.length > 0 ? stockWarnings : undefined,
       },
     };
   } catch (err) {

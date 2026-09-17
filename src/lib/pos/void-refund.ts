@@ -16,6 +16,7 @@ import {
 } from "@/lib/db/schema";
 import { businessDate } from "@/lib/utils/business-date";
 import { generateId } from "@/lib/utils/id";
+import { loadActiveRecipes, recipeLineKey, restockForOrderItem } from "@/lib/pos/stock-deduction";
 import { id as strings } from "@/lib/i18n/id";
 
 /**
@@ -78,6 +79,11 @@ export async function resolveEmployeeIdForUser(
 export const voidOrderSchema = z.object({
   orderId: z.string().uuid(),
   reason: z.string().min(1),
+  // WAJIB eksplisit (B4, 17 September 2026, docs/RENCANA-PEMBANGUNAN-
+  // KASIR-THRIFTING.md §37 poin 4) -- TIDAK PERNAH diasumsikan salah
+  // satu. Sistem tidak bisa tahu makanan sudah dimasak/dimakan atau
+  // belum, jadi kasir/manajer yang memutuskan setiap kali.
+  restock: z.boolean(),
 });
 
 export type VoidOrderResult = { error?: string; success?: { voidedAt: string } };
@@ -109,6 +115,36 @@ export async function voidOrderWithDb(
       return { error: strings.voidRefund.shiftClosedError };
     }
 
+    // Dimuat SEBELUM transaksi (bukan wajib restock=true, tapi murah dan
+    // menyederhanakan alur) -- dipakai kalau restock=true di bawah.
+    const [business] = await db
+      .select({ timezone: businesses.timezone })
+      .from(businesses)
+      .where(eq(businesses.id, businessId));
+    const [outlet] = await db
+      .select({ dayCutoffTime: outlets.dayCutoffTime })
+      .from(outlets)
+      .where(eq(outlets.id, order.outletId));
+    if (!business || !outlet) {
+      return { error: strings.common.unexpectedError };
+    }
+    const bDate = businessDate(new Date(), business.timezone, outlet.dayCutoffTime);
+
+    let itemRows: { productId: string | null; variantId: string | null; qty: string }[] = [];
+    if (data.restock) {
+      itemRows = await db
+        .select({ productId: orderItems.productId, variantId: orderItems.variantId, qty: orderItems.qty })
+        .from(orderItems)
+        .where(eq(orderItems.orderId, data.orderId));
+    }
+    const activeRecipesByLine = data.restock
+      ? await loadActiveRecipes(
+          db,
+          businessId,
+          itemRows.filter((i): i is { productId: string; variantId: string | null; qty: string } => i.productId !== null)
+        )
+      : new Map();
+
     const now = new Date();
     let voided = false;
 
@@ -123,6 +159,23 @@ export async function voidOrderWithDb(
       }
       voided = true;
 
+      if (data.restock) {
+        for (const item of itemRows) {
+          if (!item.productId) continue;
+          const recipe = activeRecipesByLine.get(recipeLineKey(item.productId, item.variantId)) ?? null;
+          await restockForOrderItem(tx, {
+            businessId,
+            outletId: order.outletId,
+            orderId: order.id,
+            businessDate: bDate,
+            createdBy: employeeId,
+            recipe,
+            qty: new Decimal(item.qty),
+            reasonNote: `Void: ${data.reason}`,
+          });
+        }
+      }
+
       await tx.insert(auditLogs).values({
         id: generateId(),
         businessId,
@@ -132,7 +185,7 @@ export async function voidOrderWithDb(
         refType: "order",
         refId: order.id,
         reason: data.reason,
-        metadata: { orderNumber: order.number, total: order.total },
+        metadata: { orderNumber: order.number, total: order.total, restock: data.restock },
         createdAt: now,
       });
     });
@@ -395,14 +448,29 @@ export async function refundOrderWithDb(
     const bDate = businessDate(now, business.timezone, outlet.dayCutoffTime);
     const refundId = data.id;
 
+    // Dimuat SEBELUM transaksi -- dipakai kalau restock=true di bawah.
+    // Restock pakai resep AKTIF SAAT INI untuk (productId, variantId)
+    // order_item yang direfund -- sistem tidak menyimpan breakdown bahan
+    // per order_item saat jual (cuma unit_cogs agregat yang sudah
+    // dibekukan), jadi kalau resep berubah sejak saat jual, restock ini
+    // mengikuti resep SEKARANG. Keterbatasan yang diketahui, dicatat di
+    // lib/pos/stock-deduction.ts, bukan bug tersembunyi.
+    const activeRecipesByLine = data.restock
+      ? await loadActiveRecipes(
+          db,
+          businessId,
+          refundItemValues
+            .map((l) => itemById.get(l.orderItemId)!)
+            .filter((i): i is typeof i & { productId: string } => i.productId !== null)
+            .map((i) => ({ productId: i.productId, variantId: i.variantId }))
+        )
+      : new Map();
+
     await db.transaction(async (tx) => {
       await tx.insert(refunds).values({
         id: refundId,
         orderId: data.orderId,
         amount: totalRefundAmount.toFixed(2),
-        // Reversal stok belum diproses -- inventori baru ada di Fase 2.
-        // Nilai disimpan apa adanya sekarang, pemrosesannya menyusul di
-        // T25.
         restock: data.restock,
         reason: data.reason,
         approvedBy: employeeId,
@@ -420,6 +488,25 @@ export async function refundOrderWithDb(
           qty: line.qty,
           amount: line.amount,
         });
+
+        // B4: sambungkan refunds.restock ke movement refund_in sungguhan
+        // (sebelumnya nilai disimpan tapi tidak pernah diproses).
+        if (data.restock) {
+          const item = itemById.get(line.orderItemId)!;
+          if (item.productId) {
+            const recipe = activeRecipesByLine.get(recipeLineKey(item.productId, item.variantId)) ?? null;
+            await restockForOrderItem(tx, {
+              businessId,
+              outletId: order.outletId,
+              orderId: order.id,
+              businessDate: bDate,
+              createdBy: employeeId,
+              recipe,
+              qty: new Decimal(line.qty),
+              reasonNote: `Refund: ${data.reason}`,
+            });
+          }
+        }
       }
 
       await tx.insert(auditLogs).values({

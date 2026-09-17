@@ -213,6 +213,7 @@ describe.skipIf(!hasEnv)("T17 — laporan penjualan", () => {
     const voidResult = await voidOrderWithDb(db, businessId, null, {
       orderId,
       reason: "uji T17 -- void dikecualikan dari agregasi",
+      restock: false,
     });
     expect(voidResult.success).toBeTruthy();
 

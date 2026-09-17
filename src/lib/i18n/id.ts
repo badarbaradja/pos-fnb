@@ -1203,6 +1203,7 @@ export const id = {
     voidButton: "Void",
     voidDialogTitle: "Batalkan Order",
     voidDialogHint: "Order akan ditandai batal. Tindakan ini tidak bisa dibatalkan lagi.",
+    voidRestockLabel: "Kembalikan ke stok (centang kalau makanan/minuman BELUM sempat dibuat)",
     voidReasonLabel: "Alasan (wajib)",
     voidReasonPlaceholder: "mis. salah input, pesanan dibatalkan pelanggan",
     voidConfirmButton: "Konfirmasi Void",

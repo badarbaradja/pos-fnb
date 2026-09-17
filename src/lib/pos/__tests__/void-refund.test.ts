@@ -32,6 +32,7 @@ import {
   businesses,
   devices,
   employees,
+  ingredients,
   orderItems,
   orders,
   outlets,
@@ -39,8 +40,12 @@ import {
   priceTiers,
   productPrices,
   products,
+  recipeItems,
+  recipes,
   refunds,
   shifts,
+  stockLevels,
+  stockMovements,
 } from "@/lib/db/schema";
 import { hashPin } from "@/lib/auth/pin";
 import { generateId } from "@/lib/utils/id";
@@ -199,6 +204,9 @@ describe.skipIf(!hasEnv)("T16 — void & refund", () => {
       for (const o of orderRows) {
         await db.delete(refunds).where(eq(refunds.orderId, o.id));
       }
+      // stock_movements.business_id -- NO ACTION, dihapus manual sebelum
+      // businesses (B4, dari test restock void/refund).
+      await db.delete(stockMovements).where(eq(stockMovements.businessId, businessId));
       await db.delete(orders).where(eq(orders.businessId, businessId));
       await db.delete(shifts).where(eq(shifts.businessId, businessId));
       await db.delete(businesses).where(eq(businesses.id, businessId));
@@ -233,6 +241,7 @@ describe.skipIf(!hasEnv)("T16 — void & refund", () => {
     const result = await voidOrderWithDb(db, businessId, null, {
       orderId,
       reason: "harusnya ditolak, shift sudah tutup",
+      restock: false,
     });
     expect(result.error).toBeTruthy();
 
@@ -331,6 +340,7 @@ describe.skipIf(!hasEnv)("T16 — void & refund", () => {
     const voidResult = await voidOrderWithDb(db, businessId, null, {
       orderId: orderA.orderId,
       reason: "uji agregasi",
+      restock: false,
     });
     expect(voidResult.success).toBeTruthy();
 
@@ -349,6 +359,7 @@ describe.skipIf(!hasEnv)("T16 — void & refund", () => {
     const voidResult = await voidOrderWithDb(db, businessId, null, {
       orderId: orderToVoid.orderId,
       reason: "uji audit log void",
+      restock: false,
     });
     expect(voidResult.success).toBeTruthy();
 
@@ -390,5 +401,149 @@ describe.skipIf(!hasEnv)("T16 — void & refund", () => {
     expect(refundLogRows.length).toBe(1);
     expect(refundLogRows[0]?.action).toBe("refund");
     expect(refundLogRows[0]?.reason).toBe("uji audit log refund");
+  });
+
+  // ─── B4 (17 September 2026): void/refund restock ─────────────────────
+  describe("B4 -- restock lewat void/refund", () => {
+    let ingredientId: string;
+    let productWithRecipeId: string;
+
+    beforeAll(async () => {
+      const [ingredient] = await db
+        .insert(ingredients)
+        .values({
+          businessId,
+          name: `${PREFIX}_ingredient_kopi`,
+          baseUnit: "gram",
+          purchaseUnit: "kg",
+          purchaseFactor: "1000",
+        })
+        .returning({ id: ingredients.id });
+      ingredientId = ingredient!.id;
+
+      await db.insert(stockLevels).values({
+        businessId,
+        ingredientId,
+        outletId,
+        qtyOnHand: "100",
+        avgCost: "1000",
+      });
+
+      const [productWithRecipe] = await db
+        .insert(products)
+        .values({ businessId, name: `${PREFIX}_product_resep`, isTaxable: false })
+        .returning({ id: products.id });
+      productWithRecipeId = productWithRecipe!.id;
+      await db.insert(productPrices).values({ productId: productWithRecipeId, priceTierId, price: "20000" });
+
+      const [recipe] = await db
+        .insert(recipes)
+        .values({ businessId, productId: productWithRecipeId })
+        .returning({ id: recipes.id });
+      await db.insert(recipeItems).values({
+        recipeId: recipe!.id,
+        businessId,
+        ingredientId,
+        qty: "20", // 20 gram per unit produk
+      });
+    });
+
+    async function payRecipeOrder() {
+      const orderId = generateId();
+      const lineId = generateId();
+      const result = await payOrderWithDb(db, businessId, {
+        orderId,
+        outletId,
+        deviceId,
+        priceTierId,
+        lines: [
+          { id: lineId, productId: productWithRecipeId, variantId: null, modifierIds: [], qty: "1", itemDiscount: "0", note: "" },
+        ],
+        discountType: "none",
+        orderDiscountAmount: "0",
+        orderDiscountPercentInput: "0",
+        payments: [{ id: generateId(), paymentMethodId: qrisMethodId, amount: "999999", reference: "REF" }],
+      });
+      expect(result.success).toBeTruthy();
+      return { orderId, lineId };
+    }
+
+    async function getIngredientQty(): Promise<Decimal> {
+      const [level] = await db
+        .select({ qtyOnHand: stockLevels.qtyOnHand })
+        .from(stockLevels)
+        .where(and(eq(stockLevels.ingredientId, ingredientId), eq(stockLevels.outletId, outletId)));
+      return new Decimal(level!.qtyOnHand);
+    }
+
+    it("void restock=true mengembalikan stok yang dipotong saat jual", async () => {
+      const before = await getIngredientQty();
+      const { orderId } = await payRecipeOrder();
+      const afterSale = await getIngredientQty();
+      expect(afterSale.toString()).toBe(before.minus(20).toString());
+
+      const voidResult = await voidOrderWithDb(db, businessId, null, {
+        orderId,
+        reason: "uji restock void true",
+        restock: true,
+      });
+      expect(voidResult.success).toBeTruthy();
+
+      const afterVoid = await getIngredientQty();
+      expect(afterVoid.toString()).toBe(before.toString());
+
+      const refundInRows = await db
+        .select()
+        .from(stockMovements)
+        .where(and(eq(stockMovements.refId, orderId), eq(stockMovements.movementType, "refund_in")));
+      expect(refundInRows.length).toBe(1);
+      expect(new Decimal(refundInRows[0]!.qty).toString()).toBe("20");
+    });
+
+    it("void restock=false TIDAK menyentuh stok sama sekali", async () => {
+      const before = await getIngredientQty();
+      const { orderId } = await payRecipeOrder();
+      const afterSale = await getIngredientQty();
+      expect(afterSale.toString()).toBe(before.minus(20).toString());
+
+      const voidResult = await voidOrderWithDb(db, businessId, null, {
+        orderId,
+        reason: "uji restock void false",
+        restock: false,
+      });
+      expect(voidResult.success).toBeTruthy();
+
+      const afterVoid = await getIngredientQty();
+      // TIDAK kembali -- tetap di level setelah penjualan, void restock=false
+      // benar-benar tidak menulis movement apa pun.
+      expect(afterVoid.toString()).toBe(afterSale.toString());
+
+      const refundInRows = await db
+        .select()
+        .from(stockMovements)
+        .where(and(eq(stockMovements.refId, orderId), eq(stockMovements.movementType, "refund_in")));
+      expect(refundInRows.length).toBe(0);
+    });
+
+    it("refund restock=true mengembalikan stok proporsional ke qty yang direfund", async () => {
+      const before = await getIngredientQty();
+      const { orderId, lineId } = await payRecipeOrder();
+      const afterSale = await getIngredientQty();
+      expect(afterSale.toString()).toBe(before.minus(20).toString());
+
+      const refundResult = await refundOrderWithDb(db, businessId, null, {
+        id: generateId(),
+        orderId,
+        paymentMethodId: qrisMethodId,
+        reference: "",
+        restock: true,
+        reason: "uji restock refund true",
+        lines: [{ orderItemId: lineId, qty: "1" }],
+      });
+      expect(refundResult.success).toBeTruthy();
+
+      const afterRefund = await getIngredientQty();
+      expect(afterRefund.toString()).toBe(before.toString());
+    });
   });
 });

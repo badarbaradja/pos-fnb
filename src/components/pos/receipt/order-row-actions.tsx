@@ -33,12 +33,13 @@ function VoidDialog({ orderId }: { orderId: string }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [reason, setReason] = useState("");
+  const [restock, setRestock] = useState(false);
   const [isPending, setIsPending] = useState(false);
 
   async function handleConfirm() {
     setIsPending(true);
     try {
-      const result = await voidOrder({ orderId, reason });
+      const result = await voidOrder({ orderId, reason, restock });
       if (result.error) {
         toast.error(result.error);
         return;
@@ -46,6 +47,7 @@ function VoidDialog({ orderId }: { orderId: string }) {
       toast.success(strings.voidRefund.voidSuccess);
       setOpen(false);
       setReason("");
+      setRestock(false);
       router.refresh();
     } catch (err) {
       console.error("Void pesanan gagal:", err);
@@ -70,6 +72,16 @@ function VoidDialog({ orderId }: { orderId: string }) {
         </DialogHeader>
         <div className="flex flex-col gap-3 py-2">
           <p className="text-sm text-muted-foreground">{strings.voidRefund.voidDialogHint}</p>
+          <div className="flex items-center gap-2">
+            <Checkbox
+              id="voidRestock"
+              checked={restock}
+              onCheckedChange={(checked) => setRestock(checked === true)}
+            />
+            <Label htmlFor="voidRestock" className="text-sm font-normal">
+              {strings.voidRefund.voidRestockLabel}
+            </Label>
+          </div>
           <div className="flex flex-col gap-1">
             <Label htmlFor="voidReason">{strings.voidRefund.voidReasonLabel}</Label>
             <Textarea
