@@ -13,6 +13,7 @@ import {
   getActiveOpnameDrafts,
   getOpnameItemsForSession,
   submitOpnameWithDb,
+  upsertOpnameItemsBulkWithDb,
   upsertOpnameItemWithDb,
   type OpnameItemRow,
   type SubmitOpnameResult,
@@ -145,6 +146,37 @@ export async function upsertOpnameItemAction(
     }
     await upsertOpnameItemWithDb(db, { businessId, outletId, opnameId, item });
     return { success: true };
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : strings.common.unexpectedError };
+  } finally {
+    await closeDb();
+  }
+}
+
+export type UpsertOpnameItemsBulkActionResult = { saved?: number; error?: string };
+
+/**
+ * Simpan Semua (18 September 2026) -- satu panggilan untuk semua baris yang
+ * sudah diisi lokal, dipakai tombol "Simpan Semua" dan auto-save berkala.
+ * Baris kosong TIDAK dikirim sama sekali (disaring di workspace) -- server
+ * tidak perlu tahu bedanya "sengaja dilewati" vs "belum sempat diisi".
+ */
+export async function upsertOpnameItemsBulkAction(
+  opnameId: string,
+  outletId: string,
+  items: UpsertOpnameItemPayload[]
+): Promise<UpsertOpnameItemsBulkActionResult> {
+  const supabase = await createServerSupabaseClient();
+  const { db, closeDb, businessId, allowedOutletIds } = await requirePermissionDb(
+    supabase,
+    "stock.opname_input"
+  );
+  try {
+    if (!isOutletAllowed(allowedOutletIds, outletId)) {
+      return { error: strings.common.outletAccessDenied };
+    }
+    const { saved } = await upsertOpnameItemsBulkWithDb(db, { businessId, outletId, opnameId, items });
+    return { saved };
   } catch (err) {
     return { error: err instanceof Error ? err.message : strings.common.unexpectedError };
   } finally {

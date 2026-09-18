@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState, useTransition } from "react";
+import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -30,15 +30,20 @@ import {
   getActiveDraftsAction,
   getOpnameItemsAction,
   submitOpnameAction,
-  upsertOpnameItemAction,
+  upsertOpnameItemsBulkAction,
   type ActiveDraft,
   type OpnameOutletOption,
 } from "./actions";
 
+// Auto-save berjalan AUTO_SAVE_DELAY_MS setelah keystroke TERAKHIR (bukan
+// tiap keystroke) -- 225 baris tidak boleh memicu 225 request beruntun.
+// "Simpan Semua" (tombol eksplisit) melewati jeda ini, langsung menyimpan
+// semua baris yang berubah SEKARANG juga.
+const AUTO_SAVE_DELAY_MS = 2500;
+
 type DraftLine = {
   physicalQty: string; // "" = belum diisi lokal
   unitCost: string;
-  varianceReason: string;
   saved: boolean;
 };
 
@@ -46,9 +51,28 @@ function toDraftLine(item: OpnameItemRow): DraftLine {
   return {
     physicalQty: item.physicalQty ?? "",
     unitCost: item.unitCost,
-    varianceReason: item.varianceReason ?? "",
     saved: item.physicalQty !== null,
   };
+}
+
+/** Selisih DIHITUNG LANGSUNG dari isian lokal (physicalQty) dikurangi
+ * stok sistem -- BUKAN dibaca dari kolom `variance` di database, yang
+ * SENGAJA null sebelum submit (dihitung server di titik submit). Sebelum
+ * perbaikan ini, kolom Selisih di layar selalu menampilkan "-" untuk
+ * SEMUA baris yang belum disubmit -- bug tampilan murni, ditemukan lewat
+ * uji sungguhan 18 September 2026 (bukan bug hitungan: stock_movements
+ * yang ditulis submitOpnameWithDb() sudah benar dari awal, dihitung fresh
+ * dari physicalQty-systemQty di titik submit, tidak pernah bergantung
+ * pada kolom tampilan ini). */
+function computeVariance(physicalQtyText: string, systemQty: string): { text: string; className: string } | null {
+  if (physicalQtyText.trim() === "") return null; // belum dihitung -- ditampilkan "-" oleh pemanggil
+  const physical = Number(physicalQtyText);
+  const system = Number(systemQty);
+  if (Number.isNaN(physical) || Number.isNaN(system)) return null;
+  const diff = Math.round((physical - system) * 10000) / 10000; // presisi sama kolom DB (4 desimal)
+  if (diff === 0) return { text: "0", className: "text-muted-foreground" };
+  const text = diff > 0 ? `+${diff}` : `${diff}`;
+  return { text, className: diff > 0 ? "text-blue-600 dark:text-blue-400" : "text-red-600 dark:text-red-400" };
 }
 
 export function StockOpnameWorkspace({ outletOptions }: { outletOptions: OpnameOutletOption[] }) {
@@ -61,6 +85,31 @@ export function StockOpnameWorkspace({ outletOptions }: { outletOptions: OpnameO
   const [submitted, setSubmitted] = useState(false);
   const [submitDialogOpen, setSubmitDialogOpen] = useState(false);
   const [isPending, startTransition] = useTransition();
+  const [isSavingAll, setIsSavingAll] = useState(false);
+
+  // Ref, BUKAN state -- dibaca dari dalam timer/callback async yang tidak
+  // boleh menutup atas nilai lama (stale closure). Disinkronkan lewat
+  // useEffect (di LUAR render, bukan ditulis langsung di badan komponen --
+  // react-hooks/refs melarang itu), berjalan tiap render selesai.
+  const linesRef = useRef(lines);
+  const dirtyRef = useRef<Set<string>>(new Set());
+  const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const opnameIdRef = useRef<string | null>(null);
+  const outletIdRef = useRef(outletId);
+  // dirtyCount TETAP state (bukan ref) -- ref tidak boleh dibaca saat
+  // render (react-hooks/refs), dan hint "menyimpan otomatis" memang perlu
+  // ikut me-render ulang saat berubah.
+  const [dirtyCount, setDirtyCount] = useState(0);
+
+  useEffect(() => {
+    linesRef.current = lines;
+  }, [lines]);
+  useEffect(() => {
+    opnameIdRef.current = opnameId;
+  }, [opnameId]);
+  useEffect(() => {
+    outletIdRef.current = outletId;
+  }, [outletId]);
 
   const outletItems = useMemo(() => {
     const map: Record<string, string> = {};
@@ -77,10 +126,20 @@ export function StockOpnameWorkspace({ outletOptions }: { outletOptions: OpnameO
     getActiveDraftsAction(outletId).then((result) => {
       if (Array.isArray(result)) setDrafts(result);
     });
+    // Bersihkan timer auto-save kalau komponen dilepas di tengah jeda.
+    return () => {
+      if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps -- sengaja cuma sekali saat mount
   }, []);
 
   function handleOutletChange(nextOutletId: string) {
+    if (saveTimerRef.current) {
+      clearTimeout(saveTimerRef.current);
+      saveTimerRef.current = null;
+    }
+    dirtyRef.current.clear();
+    setDirtyCount(0);
     setOutletId(nextOutletId);
     setOpnameId(null);
     setItems(null);
@@ -96,6 +155,8 @@ export function StockOpnameWorkspace({ outletOptions }: { outletOptions: OpnameO
       toast.error(result.error ?? strings.common.unexpectedError);
       return;
     }
+    dirtyRef.current.clear();
+    setDirtyCount(0);
     setItems(result.items);
     const nextLines: Record<string, DraftLine> = {};
     for (const item of result.items) {
@@ -125,35 +186,113 @@ export function StockOpnameWorkspace({ outletOptions }: { outletOptions: OpnameO
     });
   }
 
+  /**
+   * Simpan semua baris DIRTY (berubah sejak simpan terakhir) yang sudah
+   * diisi -- baris yang masih kosong DILEWATI, bukan dikirim sebagai nol
+   * (aturan lama, tidak berubah). Dipakai auto-save (dipanggil timer) DAN
+   * tombol "Simpan Semua" (dipanggil langsung, melewati jeda).
+   *
+   * Snapshot nilai SAAT panggilan dimulai -- kalau baris berubah LAGI
+   * sebelum request ini selesai, baris itu TETAP ditandai belum tersimpan
+   * (bukan ditimpa status "tersimpan" yang sudah basi); auto-save
+   * berikutnya (sudah terjadwal ulang dari edit yang lebih baru) yang
+   * akan mengirim versi terbarunya.
+   */
+  async function saveDirtyLines(): Promise<{ saved: number } | null> {
+    const currentOpnameId = opnameIdRef.current;
+    if (!currentOpnameId) return null;
+
+    const idsToSave = Array.from(dirtyRef.current).filter((id) => {
+      const l = linesRef.current[id];
+      return l && l.physicalQty.trim() !== "";
+    });
+    if (idsToSave.length === 0) {
+      dirtyRef.current.clear();
+      setDirtyCount(0);
+      return { saved: 0 };
+    }
+
+    const snapshot = new Map(idsToSave.map((id) => [id, { ...linesRef.current[id]! }]));
+    const payload = idsToSave.map((id) => ({
+      ingredientId: id,
+      physicalQty: snapshot.get(id)!.physicalQty,
+      unitCost: snapshot.get(id)!.unitCost || "0",
+    }));
+
+    const result = await upsertOpnameItemsBulkAction(currentOpnameId, outletIdRef.current, payload);
+    if (result.error) {
+      toast.error(result.error);
+      return null;
+    }
+
+    // Baris yang TIDAK berubah lagi sejak snapshot diambil -- inilah yang
+    // sungguh boleh ditandai tersimpan. Dihitung DI LUAR updater setLines
+    // (updater harus murni, tidak boleh punya efek samping seperti mengubah
+    // ref) -- lihat komentar saveDirtyLines di atas soal race ini.
+    const confirmedIds = idsToSave.filter((id) => {
+      const current = linesRef.current[id];
+      const snap = snapshot.get(id)!;
+      return current && current.physicalQty === snap.physicalQty && current.unitCost === snap.unitCost;
+    });
+
+    setLines((prev) => {
+      const next = { ...prev };
+      for (const id of confirmedIds) {
+        if (next[id]) next[id] = { ...next[id], saved: true };
+      }
+      return next;
+    });
+    for (const id of confirmedIds) dirtyRef.current.delete(id);
+    setDirtyCount(dirtyRef.current.size);
+
+    return { saved: idsToSave.length };
+  }
+
+  function scheduleAutoSave() {
+    if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+    saveTimerRef.current = setTimeout(() => {
+      saveTimerRef.current = null;
+      void saveDirtyLines();
+    }, AUTO_SAVE_DELAY_MS);
+  }
+
   function updateLine(ingredientId: string, patch: Partial<DraftLine>) {
     setLines((prev) => ({
       ...prev,
       [ingredientId]: { ...prev[ingredientId]!, ...patch, saved: false },
     }));
+    dirtyRef.current.add(ingredientId);
+    setDirtyCount(dirtyRef.current.size);
+    scheduleAutoSave();
   }
 
-  function handleSaveLine(ingredientId: string) {
-    if (!opnameId) return;
-    const line = lines[ingredientId];
-    if (!line || line.physicalQty.trim() === "") return;
-    startTransition(async () => {
-      const result = await upsertOpnameItemAction(opnameId, outletId, {
-        ingredientId,
-        physicalQty: line.physicalQty,
-        unitCost: line.unitCost || "0",
-        varianceReason: line.varianceReason.trim() || undefined,
-      });
-      if (result.error) {
-        toast.error(result.error);
-        return;
-      }
-      setLines((prev) => ({ ...prev, [ingredientId]: { ...prev[ingredientId]!, saved: true } }));
-    });
+  async function handleSaveAll() {
+    if (saveTimerRef.current) {
+      clearTimeout(saveTimerRef.current);
+      saveTimerRef.current = null;
+    }
+    setIsSavingAll(true);
+    const result = await saveDirtyLines();
+    setIsSavingAll(false);
+    if (!result) return;
+    if (result.saved > 0) {
+      toast.success(strings.stockOpnames.saveAllSuccess.replace("{count}", String(result.saved)));
+    } else {
+      toast.info(strings.stockOpnames.saveAllNothing);
+    }
   }
 
   function handleSubmit() {
     if (!opnameId) return;
     startTransition(async () => {
+      // Pastikan semua yang masih tertunda tersimpan dulu SEBELUM submit --
+      // kalau tidak, baris yang baru diketik tapi belum sempat auto-save
+      // akan terlewat dianggap "belum dihitung" oleh submitOpnameWithDb().
+      const pending = await saveDirtyLines();
+      if (pending === null) {
+        toast.error(strings.common.unexpectedError);
+        return;
+      }
       const result = await submitOpnameAction(opnameId, outletId);
       setSubmitDialogOpen(false);
       if (result.error) {
@@ -226,11 +365,12 @@ export function StockOpnameWorkspace({ outletOptions }: { outletOptions: OpnameO
         <p className="text-sm text-muted-foreground">{strings.common.loading}</p>
       ) : (
         <div className="flex flex-col gap-4">
-          <div className="flex items-center justify-between">
+          <div className="flex flex-wrap items-center justify-between gap-2">
             <p className="text-sm text-muted-foreground">
               {strings.stockOpnames.itemsCountedOf
                 .replace("{counted}", String(countedCount))
                 .replace("{total}", String(items.length))}
+              {!submitted && dirtyCount > 0 ? ` · ${strings.stockOpnames.autoSavingHint}` : ""}
             </p>
             {submitted ? (
               <Badge variant="secondary">{strings.stockOpnames.submittedBadge}</Badge>
@@ -265,7 +405,6 @@ export function StockOpnameWorkspace({ outletOptions }: { outletOptions: OpnameO
                 <TableHead>{strings.stockOpnames.colPhysicalQty}</TableHead>
                 <TableHead>{strings.stockOpnames.colUnitCost}</TableHead>
                 <TableHead>{strings.stockOpnames.colVariance}</TableHead>
-                <TableHead>{strings.stockOpnames.colReason}</TableHead>
                 <TableHead />
               </TableRow>
             </TableHeader>
@@ -273,6 +412,7 @@ export function StockOpnameWorkspace({ outletOptions }: { outletOptions: OpnameO
               {items.map((item) => {
                 const line = lines[item.ingredientId];
                 if (!line) return null;
+                const variance = computeVariance(line.physicalQty, item.systemQty);
                 return (
                   <TableRow key={item.ingredientId}>
                     <TableCell>{item.ingredientName}</TableCell>
@@ -304,40 +444,27 @@ export function StockOpnameWorkspace({ outletOptions }: { outletOptions: OpnameO
                         className="w-28"
                       />
                     </TableCell>
-                    <TableCell className="text-sm text-muted-foreground">
-                      {item.variance ?? "-"}
-                    </TableCell>
-                    <TableCell>
-                      <Input
-                        placeholder={strings.stockOpnames.reasonPlaceholder}
-                        value={line.varianceReason}
-                        disabled={submitted}
-                        onChange={(e) =>
-                          updateLine(item.ingredientId, { varianceReason: e.target.value })
-                        }
-                        className="w-48"
-                      />
+                    <TableCell className={`text-sm font-medium ${variance?.className ?? "text-muted-foreground"}`}>
+                      {variance?.text ?? "-"}
                     </TableCell>
                     <TableCell>
                       {submitted ? null : line.saved ? (
                         <Badge variant="default">{strings.stockOpnames.savedBadge}</Badge>
-                      ) : (
-                        <Button
-                          type="button"
-                          size="sm"
-                          variant="outline"
-                          disabled={isPending || line.physicalQty.trim() === ""}
-                          onClick={() => handleSaveLine(item.ingredientId)}
-                        >
-                          {strings.stockOpnames.saveItemButton}
-                        </Button>
-                      )}
+                      ) : null}
                     </TableCell>
                   </TableRow>
                 );
               })}
             </TableBody>
           </Table>
+
+          {!submitted && (
+            <div className="sticky bottom-0 flex justify-end border-t bg-background py-3">
+              <Button type="button" onClick={handleSaveAll} disabled={isSavingAll}>
+                {isSavingAll ? strings.stockOpnames.savingAllLabel : strings.stockOpnames.saveAllButton}
+              </Button>
+            </div>
+          )}
         </div>
       )}
     </div>

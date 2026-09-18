@@ -9,8 +9,12 @@
  *   4. Selisih NEGATIF dan POSITIF keduanya tercatat benar di ledger
  *   5. WRITE-ONCE: upsert setelah submitted DITOLAK
  *   6. WRITE-ONCE: submit ulang DITOLAK
- *   7. Alasan wajib untuk selisih besar (threshold dari outlet settings)
+ *   7. Selisih besar TIDAK PERLU alasan (dihapus 18 September 2026) --
+ *      submit berhasil tanpa varianceReason sama sekali
  *   8. Submit tanpa item sama sekali berhasil (0 movement, 0 item)
+ *   9. getOpnameItemsForSession menampilkan semua bahan
+ *  10. Bulk upsert (Simpan Semua): banyak baris sekaligus, systemQty
+ *      snapshot tetap benar, write-once tetap berlaku
  */
 
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
@@ -31,6 +35,7 @@ import {
   createOpnameWithDb,
   getOpnameItemsForSession,
   submitOpnameWithDb,
+  upsertOpnameItemsBulkWithDb,
   upsertOpnameItemWithDb,
 } from "../manage";
 import { createUserDbFixture, type UserDbFixture } from "@/lib/db/__tests__/helpers/user-db-fixture";
@@ -232,9 +237,6 @@ describe.skipIf(!hasEnv)("stock-opnames/manage", () => {
         ingredientId: ing2Id,
         physicalQty: "95",  // 95 pcs fisik vs 100 sistem → selisih -5
         unitCost: "5000",
-        // Selisih Rp 25.000 > varianceAlertValue outlet (Rp 1.000, sengaja
-        // kecil untuk test 7) -- alasan wajib walau ini cuma opname rutin.
-        varianceReason: "Selisih hitung ulang",
       },
     });
 
@@ -284,7 +286,6 @@ describe.skipIf(!hasEnv)("stock-opnames/manage", () => {
         ingredientId: ing2Id,
         physicalQty: String(qtyBefore - 10), // -10 dari sistem
         unitCost: "5000",
-        varianceReason: "Tumpah saat bongkar muat",
       },
     });
 
@@ -346,9 +347,6 @@ describe.skipIf(!hasEnv)("stock-opnames/manage", () => {
         ingredientId: ing2Id,
         physicalQty: String(qtyBefore + addedQty),
         unitCost: String(newCost),
-        // Selisih nilainya > varianceAlertValue outlet (Rp 1.000), sama
-        // alasannya dengan test opname parsial di atas.
-        varianceReason: "Ditemukan stok tambahan saat hitung ulang",
       },
     });
 
@@ -388,13 +386,11 @@ describe.skipIf(!hasEnv)("stock-opnames/manage", () => {
       businessId,
       outletId,
       opnameId,
-      // Bahan A sudah punya systemQty=500 dari test opname pertama di atas
-      // -- selisih ke 10 jauh melebihi varianceAlertValue outlet, alasan wajib.
+      // Bahan A sudah punya systemQty=500 dari test opname pertama di atas.
       item: {
         ingredientId: ing1Id,
         physicalQty: "10",
         unitCost: "4800",
-        varianceReason: "Test write-once",
       },
     });
 
@@ -446,9 +442,9 @@ describe.skipIf(!hasEnv)("stock-opnames/manage", () => {
     ).rejects.toThrow(/sudah disubmit/i);
   });
 
-  // ─── Test 7: Alasan wajib untuk selisih besar ─────────────────────────
+  // ─── Test 7: Selisih besar TIDAK PERLU alasan (dihapus 18 September 2026) ──
 
-  it("selisih besar tanpa alasan DITOLAK, dengan alasan diterima", async () => {
+  it("selisih besar TANPA alasan submit berhasil (aturan wajib alasan sudah dihapus)", async () => {
     const { db, businessId } = fixture;
 
     // Ambil stok bahan C (50 liter, avg_cost 8000)
@@ -458,14 +454,16 @@ describe.skipIf(!hasEnv)("stock-opnames/manage", () => {
       .where(and(eq(stockLevels.ingredientId, ing3Id), eq(stockLevels.outletId, outletId)));
     const qtyCurrent = parseFloat(levelC!.qtyOnHand);
 
-    // Buat selisih besar: -30 liter × Rp 8.000 = Rp 240.000 > threshold Rp 1.000
+    // Selisih besar: -30 liter × Rp 8.000 = Rp 240.000 -- dulu di atas
+    // ambang outlet (Rp 1.000/5%) dan memaksa alasan. Sekarang TIDAK ADA
+    // pemeriksaan ambang sama sekali -- submit langsung berhasil.
     const bigVarianceQty = qtyCurrent - 30;
 
     const opnameId = await createOpnameWithDb(db, {
       businessId,
       outletId,
       businessDate: BUSINESS_DATE,
-      label: "Test Alasan Wajib",
+      label: "Test Selisih Besar Tanpa Alasan",
     });
 
     await upsertOpnameItemWithDb(db, {
@@ -476,30 +474,6 @@ describe.skipIf(!hasEnv)("stock-opnames/manage", () => {
         ingredientId: ing3Id,
         physicalQty: String(bigVarianceQty),
         unitCost: "8000",
-        // Tidak ada varianceReason — harus ditolak
-      },
-    });
-
-    // Submit tanpa alasan → ditolak
-    await expect(
-      submitOpnameWithDb(db, {
-        businessId,
-        outletId,
-        opnameId,
-        businessDate: BUSINESS_DATE,
-      })
-    ).rejects.toThrow(/alasan/i);
-
-    // Tambahkan alasan → submit berhasil
-    await upsertOpnameItemWithDb(db, {
-      businessId,
-      outletId,
-      opnameId,
-      item: {
-        ingredientId: ing3Id,
-        physicalQty: String(bigVarianceQty),
-        unitCost: "8000",
-        varianceReason: "Tumpah karena selang pecah",
       },
     });
 
@@ -571,5 +545,92 @@ describe.skipIf(!hasEnv)("stock-opnames/manage", () => {
     // Bahan yang belum dihitung: physicalQty = null
     const itemA = items.find((i) => i.ingredientId === ing1Id)!;
     expect(itemA.physicalQty).toBeNull();
+  });
+
+  // ─── Test 10: Bulk upsert (Simpan Semua, 18 September 2026) ────────────
+
+  it("upsertOpnameItemsBulkWithDb: banyak baris sekaligus, systemQty snapshot benar, submit normal", async () => {
+    const { db, businessId } = fixture;
+
+    const opnameId = await createOpnameWithDb(db, {
+      businessId,
+      outletId,
+      businessDate: BUSINESS_DATE,
+      label: "Test Bulk Upsert",
+    });
+
+    const [levelBBefore] = await db
+      .select({ qtyOnHand: stockLevels.qtyOnHand })
+      .from(stockLevels)
+      .where(and(eq(stockLevels.ingredientId, ing2Id), eq(stockLevels.outletId, outletId)));
+    const qtyBBefore = parseFloat(levelBBefore!.qtyOnHand);
+
+    // Satu panggilan, dua bahan sekaligus -- ing1 (systemQty snapshot lama
+    // dari test-test sebelumnya, bukan 0 lagi) dan ing2.
+    const { saved } = await upsertOpnameItemsBulkWithDb(db, {
+      businessId,
+      outletId,
+      opnameId,
+      items: [
+        { ingredientId: ing1Id, physicalQty: "12", unitCost: "4800" },
+        { ingredientId: ing2Id, physicalQty: String(qtyBBefore + 3), unitCost: "5000" },
+      ],
+    });
+    expect(saved).toBe(2);
+
+    const items = await getOpnameItemsForSession(db, { businessId, outletId, opnameId });
+    const itemA = items.find((i) => i.ingredientId === ing1Id)!;
+    const itemB = items.find((i) => i.ingredientId === ing2Id)!;
+    expect(itemA.physicalQty).toBe("12.0000");
+    expect(itemB.physicalQty).toBe(`${(qtyBBefore + 3).toFixed(4)}`);
+
+    // Panggil bulk lagi dengan HANYA ing1 diubah -- ing2 TIDAK disentuh di
+    // panggilan ini, tapi baris sebelumnya (dari panggilan pertama) tetap
+    // utuh (bukan slot tetap yang saling menimpa/menghapus).
+    await upsertOpnameItemsBulkWithDb(db, {
+      businessId,
+      outletId,
+      opnameId,
+      items: [{ ingredientId: ing1Id, physicalQty: "15", unitCost: "4800" }],
+    });
+    const itemsAfter = await getOpnameItemsForSession(db, { businessId, outletId, opnameId });
+    expect(itemsAfter.find((i) => i.ingredientId === ing1Id)!.physicalQty).toBe("15.0000");
+    expect(itemsAfter.find((i) => i.ingredientId === ing2Id)!.physicalQty).toBe(`${(qtyBBefore + 3).toFixed(4)}`);
+
+    const result = await submitOpnameWithDb(db, {
+      businessId,
+      outletId,
+      opnameId,
+      submittedByEmployeeId: employeeId,
+      businessDate: BUSINESS_DATE,
+    });
+    expect(result.movementsCreated).toBe(2);
+  });
+
+  it("upsertOpnameItemsBulkWithDb: write-once -- ditolak kalau sesi sudah submitted", async () => {
+    const { db, businessId } = fixture;
+
+    const opnameId = await createOpnameWithDb(db, {
+      businessId,
+      outletId,
+      businessDate: BUSINESS_DATE,
+      label: "Test Bulk Write-Once",
+    });
+
+    await submitOpnameWithDb(db, {
+      businessId,
+      outletId,
+      opnameId,
+      businessDate: BUSINESS_DATE,
+    });
+
+    await expect(
+      upsertOpnameItemsBulkWithDb(db, {
+        businessId,
+        outletId,
+        opnameId,
+        items: [{ ingredientId: ing1Id, physicalQty: "999", unitCost: "4800" }],
+      })
+    ).rejects.toThrow(/sudah disubmit/i);
   });
 });

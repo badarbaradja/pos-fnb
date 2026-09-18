@@ -87,7 +87,11 @@ export function PosScreen({
   }
 
   return (
-    <div className="flex min-h-dvh flex-col md:h-full">
+    // min-h-screen (BUKAN min-h-dvh) pada mobile -- lihat komentar
+    // (pos)/layout.tsx (18 September 2026): dvh recalculate saat browser
+    // chrome sembunyi/muncul selagi discroll, vh tidak. md:h-full tidak
+    // disentuh (desktop, tidak relevan).
+    <div className="flex min-h-screen flex-col md:h-full">
       <PriceTierSelector
         priceTiers={priceTiers}
         value={priceTierId}

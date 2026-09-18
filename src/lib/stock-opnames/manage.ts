@@ -3,7 +3,8 @@
  *
  * Seluruh logika opname fisik gudang:
  *   - Buat sesi (createOpnameWithDb)
- *   - Upsert item per bahan (upsertOpnameItemWithDb)
+ *   - Upsert item per bahan, satu-satu atau sekaligus (upsertOpnameItemWithDb /
+ *     upsertOpnameItemsBulkWithDb)
  *   - Submit sesi + tulis adjustment ke stock_movements (submitOpnameWithDb)
  *
  * Desain kunci:
@@ -14,9 +15,11 @@
  *   - HARGA: unit_cost diisi otomatis dari avg_cost yang sudah ada,
  *     atau dari nilai default yang disediakan pemanggil (opname pertama
  *     dari material.csv). Bisa dioverride pengguna sebelum submit.
- *   - VARIANCE REASON: wajib kalau selisih melampaui ambang outlet.
- *     Ambang dari outlets.varianceAlertValue / outlets.varianceAlertPercent,
- *     BUKAN hardcode.
+ *   - ALASAN SELISIH: TIDAK ADA lagi (dihapus 18 September 2026, instruksi
+ *     eksplisit CEO) -- untuk opname, alasan tidak menambah apa pun, selisih
+ *     sudah tercatat lengkap di stock_movements dan bisa ditelusuri lewat
+ *     kartu stok. Kolom `outlets.varianceAlertValue`/`varianceAlertPercent`
+ *     TETAP ada di skema (tidak dihapus), cuma tidak dibaca di sini lagi.
  */
 
 import { and, eq, inArray } from "drizzle-orm";
@@ -24,7 +27,6 @@ import Decimal from "decimal.js";
 import { getAdminDb, type UserDbHandle } from "@/lib/db/client";
 import {
   ingredients,
-  outlets,
   stockLevels,
   stockMovements,
   stockOpnameItems,
@@ -58,7 +60,6 @@ export type OpnameItemRow = {
   physicalQty: string | null; // null = belum dihitung
   unitCost: string; // Decimal string (20,8)
   variance: string | null; // null sebelum submit
-  varianceReason: string | null;
 };
 
 /** Payload untuk upsert satu baris item sebelum submit */
@@ -66,7 +67,6 @@ export type UpsertOpnameItemPayload = {
   ingredientId: string;
   physicalQty: string; // Decimal string, dalam base_unit
   unitCost: string; // Decimal string per base_unit
-  varianceReason?: string;
 };
 
 /** Hasil submit: ringkasan movement yang dibuat */
@@ -170,7 +170,6 @@ export async function getOpnameItemsForSession(
       physicalQty: stockOpnameItems.physicalQty,
       unitCost: stockOpnameItems.unitCost,
       variance: stockOpnameItems.variance,
-      varianceReason: stockOpnameItems.varianceReason,
       id: stockOpnameItems.id,
     })
     .from(stockOpnameItems)
@@ -205,7 +204,6 @@ export async function getOpnameItemsForSession(
       physicalQty: existing?.physicalQty ?? null,
       unitCost,
       variance: existing?.variance ?? null,
-      varianceReason: existing?.varianceReason ?? null,
     };
   });
 }
@@ -259,13 +257,12 @@ export async function upsertOpnameItemWithDb(
     );
 
   if (existing) {
-    // Update: physicalQty, unitCost, varianceReason. systemQty TETAP.
+    // Update: physicalQty, unitCost. systemQty TETAP.
     await db
       .update(stockOpnameItems)
       .set({
         physicalQty: item.physicalQty,
         unitCost: item.unitCost,
-        varianceReason: item.varianceReason ?? null,
         updatedAt: new Date(),
       })
       .where(eq(stockOpnameItems.id, existing.id));
@@ -292,9 +289,101 @@ export async function upsertOpnameItemWithDb(
       systemQty,
       physicalQty: item.physicalQty,
       unitCost: item.unitCost,
-      varianceReason: item.varianceReason ?? null,
     });
   }
+}
+
+// ---------------------------------------------------------------------------
+// Upsert BANYAK item sekaligus (18 September 2026 -- instruksi eksplisit
+// CEO: 225 baris x satu klik Simpan per baris tidak bisa dipakai)
+// ---------------------------------------------------------------------------
+
+/**
+ * Simpan / perbarui BANYAK baris item opname sekaligus -- dipakai tombol
+ * "Simpan Semua" dan auto-save berkala dari UI. Sama aturan dengan
+ * upsertOpnameItemWithDb (write-once, systemQty snapshot tidak berubah),
+ * cuma status sesi + systemQty bahan baru diambil SEKALI (bukan per baris)
+ * supaya tidak perlu 225 kali bolak-balik ke database.
+ *
+ * Baris dengan physicalQty kosong TIDAK BOLEH masuk ke `items` -- pemanggil
+ * (workspace UI) yang menyaringnya SEBELUM memanggil ini, konsisten dengan
+ * aturan "belum diisi = dilewati, bukan dianggap nol" (lihat komentar
+ * kepala berkas).
+ */
+export async function upsertOpnameItemsBulkWithDb(
+  db: UserDbHandle["db"],
+  params: {
+    businessId: string;
+    outletId: string;
+    opnameId: string;
+    items: UpsertOpnameItemPayload[];
+  }
+): Promise<{ saved: number }> {
+  const { businessId, outletId, opnameId, items } = params;
+  if (items.length === 0) return { saved: 0 };
+
+  // Guard: cek status sesi SEKALI, bukan per baris.
+  const [opname] = await db
+    .select({ status: stockOpnames.status })
+    .from(stockOpnames)
+    .where(and(eq(stockOpnames.id, opnameId), eq(stockOpnames.businessId, businessId)));
+
+  if (!opname) throw new Error("Sesi opname tidak ditemukan");
+  if (opname.status === "submitted") {
+    throw new Error("Sesi opname sudah disubmit dan tidak bisa diubah. Buat sesi baru untuk koreksi.");
+  }
+
+  const ingredientIds = items.map((i) => i.ingredientId);
+
+  // Baris yang SUDAH ada di sesi ini -- systemQty snapshot-nya TIDAK berubah.
+  const existingRows = await db
+    .select({ id: stockOpnameItems.id, ingredientId: stockOpnameItems.ingredientId })
+    .from(stockOpnameItems)
+    .where(
+      and(eq(stockOpnameItems.opnameId, opnameId), inArray(stockOpnameItems.ingredientId, ingredientIds))
+    );
+  const existingMap = new Map(existingRows.map((r) => [r.ingredientId, r.id]));
+
+  // Bahan yang BELUM ada baris di sesi ini -- perlu systemQty dari stock_levels,
+  // diambil SEKALIGUS (bukan satu query per bahan baru).
+  const newIngredientIds = ingredientIds.filter((id) => !existingMap.has(id));
+  const levelRows =
+    newIngredientIds.length > 0
+      ? await db
+          .select({ ingredientId: stockLevels.ingredientId, qtyOnHand: stockLevels.qtyOnHand })
+          .from(stockLevels)
+          .where(
+            and(
+              eq(stockLevels.businessId, businessId),
+              eq(stockLevels.outletId, outletId),
+              inArray(stockLevels.ingredientId, newIngredientIds)
+            )
+          )
+      : [];
+  const levelMap = new Map(levelRows.map((l) => [l.ingredientId, l.qtyOnHand]));
+
+  let saved = 0;
+  for (const item of items) {
+    const existingId = existingMap.get(item.ingredientId);
+    if (existingId) {
+      await db
+        .update(stockOpnameItems)
+        .set({ physicalQty: item.physicalQty, unitCost: item.unitCost, updatedAt: new Date() })
+        .where(eq(stockOpnameItems.id, existingId));
+    } else {
+      await db.insert(stockOpnameItems).values({
+        id: generateId(),
+        opnameId,
+        businessId,
+        ingredientId: item.ingredientId,
+        systemQty: levelMap.get(item.ingredientId) ?? "0",
+        physicalQty: item.physicalQty,
+        unitCost: item.unitCost,
+      });
+    }
+    saved++;
+  }
+  return { saved };
 }
 
 // ---------------------------------------------------------------------------
@@ -305,16 +394,20 @@ export async function upsertOpnameItemWithDb(
  * Submit sesi opname. Setelah ini sesi terkunci (write-once).
  *
  * Alur:
- * 1. Validasi: sesi harus draft, semua item yang perlu alasan sudah ada.
+ * 1. Validasi: sesi harus draft.
  * 2. Untuk setiap item yang physicalQty != null:
  *    a. Hitung variance = physicalQty - systemQty
- *    b. Kalau variance != 0: periksa apakah perlu alasan.
- *       - |variance * unitCost| > outlet.varianceAlertValue, ATAU
- *       - systemQty > 0 DAN |variance/systemQty| > outlet.varianceAlertPercent/100
- *       Kalau ya dan varianceReason kosong → lempar error daftar item yang kurang.
- *    c. Tulis stock_movement (opname_adjust), update stock_levels.
+ *    b. Tulis stock_movement (opname_adjust), update stock_levels.
  * 3. Update opname.status = submitted, isi submitted_by, submitted_at,
  *    variance per item.
+ *
+ * CATATAN (18 September 2026, instruksi eksplisit CEO): alasan selisih
+ * TIDAK LAGI wajib atau memblokir submit -- untuk opname, selisihnya
+ * sendiri sudah tercatat di ledger (stock_movements) dan bisa ditelusuri
+ * lewat kartu stok, alasan tertulis tidak menambah apa pun. Kolom
+ * `outlets.varianceAlertValue`/`varianceAlertPercent` SENGAJA TIDAK
+ * dihapus dari skema (mungkin dipakai lagi untuk keperluan lain nanti),
+ * cuma tidak lagi dibaca/dipakai memblokir apa pun di sini.
  *
  * Menggunakan getAdminDb() karena:
  *   a. stock_movements hanya punya INSERT policy (bukan UPDATE) -- update
@@ -355,20 +448,6 @@ export async function submitOpnameWithDb(
     throw new Error("Sesi opname sudah disubmit. Tidak bisa disubmit ulang.");
   }
 
-  // Ambil setting ambang outlet
-  const [outlet] = await userDb
-    .select({
-      varianceAlertValue: outlets.varianceAlertValue,
-      varianceAlertPercent: outlets.varianceAlertPercent,
-    })
-    .from(outlets)
-    .where(eq(outlets.id, outletId));
-
-  if (!outlet) throw new Error("Outlet tidak ditemukan");
-
-  const alertValue = new Decimal(outlet.varianceAlertValue);
-  const alertPercent = new Decimal(outlet.varianceAlertPercent).div(100);
-
   // Ambil semua item sesi
   const items = await userDb
     .select({
@@ -377,7 +456,6 @@ export async function submitOpnameWithDb(
       systemQty: stockOpnameItems.systemQty,
       physicalQty: stockOpnameItems.physicalQty,
       unitCost: stockOpnameItems.unitCost,
-      varianceReason: stockOpnameItems.varianceReason,
     })
     .from(stockOpnameItems)
     .where(eq(stockOpnameItems.opnameId, opnameId));
@@ -386,50 +464,8 @@ export async function submitOpnameWithDb(
   const counted = items.filter((i) => i.physicalQty !== null);
   const skipped = items.filter((i) => i.physicalQty === null);
 
-  // Validasi alasan variance
-  const missingReasons: string[] = [];
-  for (const item of counted) {
-    const system = new Decimal(item.systemQty);
-    const physical = new Decimal(item.physicalQty!);
-    const variance = physical.minus(system);
-    if (variance.isZero()) continue;
-
-    // systemQty = 0 berarti bahan ini belum pernah punya saldo tercatat
-    // (opname pertama, atau bahan baru) -- TIDAK ADA baseline untuk
-    // "menyimpang" darinya, jadi ini bukan selisih/koreksi yang perlu
-    // dijelaskan, cuma pencatatan stok awal. Tanpa pengecualian ini,
-    // opname pertama untuk 225 bahan akan MEMAKSA alasan di hampir
-    // semua baris (nilai wajar bahan dalam jumlah normal saja sudah
-    // pasti melebihi ambang rupiah) -- persis kegagalan yang diperingatkan
-    // CEO ("pastikan alurnya masuk akal untuk kasus itu, bukan cuma
-    // koreksi kecil"). Ambang tetap berlaku PENUH begitu systemQty > 0
-    // (koreksi rutin sungguhan).
-    const cost = new Decimal(item.unitCost);
-    const absValue = variance.abs().times(cost);
-    const needsReason =
-      !system.isZero() &&
-      (absValue.gt(alertValue) || variance.abs().div(system.abs()).gt(alertPercent));
-
-    if (needsReason && !item.varianceReason?.trim()) {
-      missingReasons.push(item.ingredientId);
-    }
-  }
-
-  if (missingReasons.length > 0) {
-    // Ambil nama bahan untuk pesan error yang jelas
-    const ingNames = await userDb
-      .select({ id: ingredients.id, name: ingredients.name })
-      .from(ingredients)
-      .where(inArray(ingredients.id, missingReasons));
-    const nameList = ingNames.map((i) => i.name).join(", ");
-    throw new Error(
-      `Selisih besar perlu alasan untuk bahan berikut: ${nameList}. ` +
-        `Isi kolom "Alasan Selisih" sebelum submit.`
-    );
-  }
-
-  // Semua validasi lulus — pakai adminDb untuk atomisitas + update tabel
-  // yang tidak punya UPDATE RLS policy (stock_levels, stock_opnames)
+  // Pakai adminDb untuk atomisitas + update tabel yang tidak punya UPDATE
+  // RLS policy (stock_levels, stock_opnames)
   const adminDb = getAdminDb(); // sistem: submit opname adalah operasi transaksional multi-tabel (CLAUDE.md §3.4)
 
   let movementsCreated = 0;
@@ -508,7 +544,11 @@ export async function submitOpnameWithDb(
         refType: "opname",
         refId: opnameId,
         businessDate,
-        note: item.varianceReason ?? null,
+        // Alasan selisih TIDAK LAGI dikumpulkan (18 September 2026) --
+        // selisihnya sendiri sudah tercatat lengkap di baris movement ini
+        // (qty/totalCost/refType='opname'), bisa ditelusuri lewat kartu
+        // stok tanpa perlu catatan tambahan.
+        note: null,
         createdBy: submittedByEmployeeId ?? null,
       });
       movementsCreated++;
