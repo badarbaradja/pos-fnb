@@ -36,14 +36,14 @@ export function ShiftsNeedingReview({ shifts }: { shifts: ShiftNeedingReviewRow[
   }
 
   return (
-    <div className="flex flex-col gap-2 rounded-lg border border-destructive/50 bg-destructive/5 p-3">
-      <h2 className="text-sm font-semibold text-destructive">{strings.shift.needsReviewBadge}</h2>
+    <div className="flex flex-col gap-2 rounded-xl border border-destructive/50 bg-destructive/5 p-3 shadow-xs">
+      <h2 className="font-heading text-sm font-semibold text-destructive">{strings.shift.needsReviewBadge}</h2>
       <p className="text-xs text-muted-foreground">{strings.shift.needsReviewHint}</p>
       <ul className="flex flex-col gap-2">
         {shifts.map((shift) => (
           <li
             key={shift.id}
-            className="flex flex-wrap items-center justify-between gap-2 rounded-lg border bg-background p-2 text-sm"
+            className="flex flex-wrap items-center justify-between gap-2 rounded-lg border bg-background p-2.5 text-sm"
           >
             <div className="flex flex-col">
               <span className="font-medium">

@@ -7,8 +7,8 @@ import { id as strings } from "@/lib/i18n/id";
  */
 export function ProfitPlaceholder() {
   return (
-    <div className="flex flex-col gap-1 rounded-lg border border-dashed p-4">
-      <span className="text-sm font-semibold text-muted-foreground">
+    <div className="flex h-full flex-col justify-center gap-1 rounded-xl border border-dashed p-4">
+      <span className="font-heading text-sm font-semibold text-muted-foreground">
         {strings.dashboardHome.profitTitle}
       </span>
       <span className="text-sm text-muted-foreground">

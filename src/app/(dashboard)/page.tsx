@@ -47,7 +47,7 @@ export default async function DashboardHomePage({
         <div>
           <h1 className="text-xl font-semibold">{strings.dashboardHome.title}</h1>
         </div>
-        <p className="rounded-lg border border-destructive/50 bg-destructive/10 p-4 text-sm text-destructive">
+        <p className="rounded-xl border border-destructive/50 bg-destructive/10 p-4 text-sm text-destructive">
           {strings.common.noOutletAccess}
         </p>
       </div>
@@ -166,7 +166,7 @@ export default async function DashboardHomePage({
     brandSummarySection = (
       <div className="flex flex-col gap-3">
         <div className="flex items-center justify-between">
-          <h2 className="text-sm font-semibold">
+          <h2 className="font-heading text-sm font-semibold">
             {strings.dashboardHome.brandDetailTitle.replace("{brand}", selectedBrand.brandName)}
           </h2>
           <Link href="/" className="text-sm text-muted-foreground hover:underline">
@@ -187,7 +187,7 @@ export default async function DashboardHomePage({
   return (
     <div className="flex flex-col gap-6">
       <div>
-        <h1 className="text-xl font-semibold">{strings.dashboardHome.title}</h1>
+        <h1 className="font-heading text-2xl font-bold">{strings.dashboardHome.title}</h1>
         <p className="text-sm text-muted-foreground">{strings.dashboardHome.subtitle}</p>
       </div>
 

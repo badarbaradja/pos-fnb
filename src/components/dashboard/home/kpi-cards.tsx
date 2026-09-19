@@ -1,24 +1,38 @@
 import { Decimal } from "decimal.js";
+import { TrendingUpIcon } from "lucide-react";
 import type { SalesSummary } from "@/lib/db/queries/sales-report";
 import { formatIDR } from "@/lib/utils/money";
+import { cn } from "@/lib/utils";
 import { id as strings } from "@/lib/i18n/id";
 
 function KpiCard({
   label,
   value,
   badge,
+  primary,
 }: {
   label: string;
   value: string;
   badge?: { text: string; positive: boolean } | null;
+  primary?: boolean;
 }) {
   return (
-    <div className="flex flex-col gap-1 rounded-lg border p-4">
-      <span className="text-xs text-muted-foreground">{label}</span>
-      <span className="text-2xl font-semibold">{value}</span>
+    <div
+      className={cn(
+        "flex flex-col gap-1 rounded-xl border p-4 shadow-xs",
+        primary ? "bg-primary/5 ring-1 ring-primary/15" : "bg-card"
+      )}
+    >
+      <span className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
+        {primary ? <TrendingUpIcon className="size-3.5 text-primary" /> : null}
+        {label}
+      </span>
+      <span className={cn("font-heading font-bold tabular-nums", primary ? "text-3xl text-primary" : "text-xl")}>
+        {value}
+      </span>
       {badge ? (
         <span
-          className={`text-xs font-medium ${badge.positive ? "text-emerald-600 dark:text-emerald-400" : "text-red-600 dark:text-red-400"}`}
+          className={`text-xs font-medium ${badge.positive ? "text-success" : "text-destructive"}`}
         >
           {badge.text}
         </span>
@@ -47,6 +61,7 @@ export function TodayKpiCards({
         label={strings.dashboardHome.kpiOmzet}
         value={formatIDR(new Decimal(today.netSales))}
         badge={badge}
+        primary
       />
       <KpiCard
         label={strings.dashboardHome.kpiOrderCount}

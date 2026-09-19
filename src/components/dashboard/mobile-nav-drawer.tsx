@@ -1,13 +1,12 @@
 "use client";
 
 import { useState } from "react";
-import Link from "next/link";
 import { Dialog as DialogPrimitive } from "@base-ui/react/dialog";
 import { MenuIcon, XIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { SidebarNav, SidebarTopLink } from "@/components/dashboard/sidebar-nav";
+import type { NavItem } from "@/lib/dashboard-nav";
 import { id as strings } from "@/lib/i18n/id";
-
-type NavItem = { href: string; label: string; badge?: number };
 
 /**
  * Sidebar dashboard jadi drawer hamburger di bawah 1024px (T18b) --
@@ -18,6 +17,10 @@ type NavItem = { href: string; label: string; badge?: number };
  * (modal tengah layar) supaya dialog lain di app tidak ikut berubah.
  * Drawer tertutup otomatis saat link nav ditekan -- navigasi = ganti
  * halaman = drawer harus hilang, bukan menutupi halaman baru.
+ *
+ * Nav rendering (grouping + icons + active state) dibagi dengan sidebar
+ * desktop lewat SidebarNav/SidebarTopLink (Phase 2 redesign, 18 September
+ * 2026) -- satu sumber kebenaran untuk struktur nav, bukan diketik ulang.
  */
 export function MobileNavDrawer({
   navItems,
@@ -50,10 +53,10 @@ export function MobileNavDrawer({
       </DialogPrimitive.Trigger>
       <DialogPrimitive.Portal>
         <DialogPrimitive.Backdrop className="fixed inset-0 z-50 bg-black/30 duration-100 data-open:animate-in data-open:fade-in-0 data-closed:animate-out data-closed:fade-out-0 lg:hidden" />
-        <DialogPrimitive.Popup className="fixed inset-y-0 left-0 z-50 flex w-72 flex-col gap-4 border-r bg-background p-4 outline-none duration-150 data-open:animate-in data-open:slide-in-from-left data-closed:animate-out data-closed:slide-out-to-left lg:hidden">
+        <DialogPrimitive.Popup className="fixed inset-y-0 left-0 z-50 flex w-72 flex-col gap-4 border-r bg-sidebar p-4 outline-none duration-150 data-open:animate-in data-open:slide-in-from-left data-closed:animate-out data-closed:slide-out-to-left lg:hidden">
           <div className="flex items-center justify-between">
             <div>
-              <div className="font-semibold">{appName}</div>
+              <div className="font-heading font-semibold text-sidebar-foreground">{appName}</div>
               {roleLabel ? (
                 <div className="text-xs text-muted-foreground capitalize">
                   {roleLabel}
@@ -67,25 +70,10 @@ export function MobileNavDrawer({
               <span className="sr-only">{strings.nav.closeMenu}</span>
             </DialogPrimitive.Close>
           </div>
-          <nav className="flex flex-col gap-1">
-            {navItems.map((item) => (
-              <Link
-                key={item.href}
-                href={item.href}
-                onClick={() => setOpen(false)}
-                className="flex items-center justify-between rounded px-2 py-3 text-sm hover:bg-muted"
-              >
-                <span>{item.label}</span>
-                {item.badge ? (
-                  <span className="rounded-full bg-destructive px-1.5 text-xs text-destructive-foreground">
-                    {item.badge}
-                  </span>
-                ) : null}
-              </Link>
-            ))}
-          </nav>
+          <SidebarTopLink href="/" label={strings.nav.dashboard} icon="layoutDashboard" onClick={() => setOpen(false)} dense />
+          <SidebarNav items={navItems} onNavigate={() => setOpen(false)} dense />
           <form action={logoutAction} className="mt-auto">
-            <Button type="submit" variant="outline" size="sm" className="h-11 w-full">
+            <Button type="submit" variant="outline" size="touch" className="w-full">
               {logoutLabel}
             </Button>
           </form>

@@ -14,22 +14,25 @@ export function ShiftStatusList({
 }) {
   return (
     <div className="flex flex-col gap-2">
-      <h2 className="text-sm font-semibold text-muted-foreground">
+      <h2 className="font-heading text-sm font-semibold">
         {strings.dashboardHome.shiftStatusTitle}
       </h2>
       {shifts.length === 0 ? (
-        <p className="text-sm text-muted-foreground">{strings.dashboardHome.shiftStatusEmpty}</p>
+        <p className="rounded-xl border border-dashed p-4 text-center text-sm text-muted-foreground">
+          {strings.dashboardHome.shiftStatusEmpty}
+        </p>
       ) : (
-        <ul className="flex flex-col gap-2 rounded-lg border p-3">
+        <ul className="flex flex-col gap-1 rounded-xl border bg-card p-2 shadow-xs">
           {shifts.map((shift) => (
-            <li key={shift.id} className="flex items-center justify-between text-sm">
-              <span className="font-medium">
+            <li key={shift.id} className="flex items-center gap-2.5 rounded-lg px-2 py-2 text-sm">
+              <span className="size-2 shrink-0 rounded-full bg-success" />
+              <span className="flex-1 font-medium">
                 {shift.employeeName}
                 {multiOutlet ? (
-                  <span className="ml-2 text-xs text-muted-foreground">{shift.outletName}</span>
+                  <span className="ml-2 text-xs font-normal text-muted-foreground">{shift.outletName}</span>
                 ) : null}
               </span>
-              <span className="text-xs text-muted-foreground">
+              <span className="text-xs text-muted-foreground tabular-nums">
                 {strings.dashboardHome.shiftSince.replace(
                   "{time}",
                   format(toZonedTime(shift.openedAt, timezone), "HH:mm")

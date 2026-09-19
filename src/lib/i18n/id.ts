@@ -85,6 +85,11 @@ export const id = {
     closeMenu: "Tutup menu",
     bukaKasirButton: "Buka Kasir",
     bukaKasirPilihOutlet: "Pilih outlet",
+    groupCatalog: "Katalog",
+    groupTeam: "Tim & Akses",
+    groupInventory: "Inventaris",
+    groupReports: "Laporan",
+    groupSettings: "Pengaturan",
   },
   employees: {
     title: "Karyawan",

@@ -43,10 +43,10 @@ export function SalesTrendChart({ rows }: { rows: SalesByDayRow[] }) {
 
   return (
     <div className="flex flex-col gap-2">
-      <h2 className="text-sm font-semibold text-muted-foreground">
+      <h2 className="font-heading text-sm font-semibold">
         {strings.dashboardHome.trendTitle}
       </h2>
-      <div className="h-56 rounded-lg border p-3">
+      <div className="h-56 rounded-xl border bg-card p-3 shadow-xs">
         <ResponsiveContainer width="100%" height="100%">
           <BarChart data={data} margin={{ top: 4, right: 8, bottom: 0, left: 8 }}>
             <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
