@@ -65,6 +65,11 @@ Kalau ada instruksi yang bertentangan dengan aturan di bawah, **berhenti dan tan
   - `gen_random_uuid()` di Postgres hanya sebagai **fallback**, tidak pernah jadi sumber ID utama.
 - **`getAdminDb()` (`src/lib/db/client.ts`) hanya untuk operasi sistem** (migration, cron, sync, verifikasi PIN kasir, seed) — role `postgres` yang dipakainya punya `BYPASSRLS` eksplisit di Supabase, jadi FORCE ROW LEVEL SECURITY sekalipun tidak menahannya (ditemukan di T07). Setiap pemakaiannya wajib disertai komentar satu baris yang menjelaskan kenapa RLS perlu dilewati.
 - **Query apa pun yang mengambil data atas nama user wajib lewat `getUserDb(accessToken)`.** Tidak ada pengecualian. Jangan pernah pakai `getAdminDb()` untuk melayani request satu user tertentu.
+- **PENGECUALIAN TERTULIS (19 September 2026, disetujui pemilik proyek): endpoint integrasi tarikan untuk sistem laporan Koperumnas** — `GET /api/integrasi/omzet-harian` (`src/app/api/integrasi/omzet-harian/route.ts`). Ini pekerjaan **sistem-ke-sistem**, bukan atas nama user: tidak ada sesi Supabase, jadi `getUserDb()` tidak punya token untuk dipakai. Batas pengecualiannya, jangan dilebarkan tanpa persetujuan baru:
+  1. Koneksi admin dipanggil HANYA di `src/lib/integrasi/omzet-harian.ts` (`ambilOmzetHarianIntegrasi`). `src/app/` tetap TIDAK BOLEH menyebut `getAdminDb` (tes `no-admin-db-in-app` tidak dilonggarkan).
+  2. Hanya AGREGAT per outlet per hari bisnis (jumlah order, uang diterima, penjualan bersih, refund) — tidak ada nama karyawan, pelanggan, produk, atau transaksi individual.
+  3. Baca-saja, terikat ke SATU bisnis (`INTEGRASI_BUSINESS_ID`), rentang maksimal 14 hari, dijaga token Bearer statis (`INTEGRASI_LAPORAN_TOKEN`, min. 32 karakter, dibandingkan waktu-konstan; salah/kosong = 401, belum dikonfigurasi = 503).
+  4. Endpoint baru yang butuh koneksi admin BUKAN otomatis boleh memakai pola ini — tiap endpoint baru butuh pengecualian tertulis sendiri di sini.
 - **RLS adalah lapisan terakhir, bukan satu-satunya.** Setiap query tetap memfilter `business_id` secara eksplisit, jangan mengandalkan RLS saja untuk kebenaran hasil.
 
 ### 3.5 Logika bisnis
