@@ -14,12 +14,12 @@ export function TotalRow({
     <div
       className={
         emphasize
-          ? "flex items-center justify-between border-t pt-1 text-base font-semibold"
+          ? "flex items-center justify-between border-t pt-2 mt-1 text-lg font-bold text-primary"
           : "flex items-center justify-between text-muted-foreground"
       }
     >
       <span>{label}</span>
-      <span>{formatIDR(value)}</span>
+      <span className="tabular-nums">{formatIDR(value)}</span>
     </div>
   );
 }

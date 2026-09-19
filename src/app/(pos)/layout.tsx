@@ -36,5 +36,9 @@ export default async function PosLayout({
   // yang memang tidak butuh mengikuti chrome browser secara dinamis. h-dvh
   // di md: ke atas TIDAK disentuh (desktop tidak punya address bar yang
   // muncul/hilang, dvh di situ sudah stabil, itu bukan bagian yang dicurigai).
-  return <div className="min-h-screen md:h-dvh md:overflow-hidden">{children}</div>;
+  return (
+    <div className="flex h-screen h-dvh w-full flex-col overflow-hidden bg-background text-foreground">
+      {children}
+    </div>
+  );
 }

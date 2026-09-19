@@ -69,7 +69,7 @@ export function CashMovementDialog({ shiftId }: { shiftId: string }) {
     >
       <DialogTrigger
         render={
-          <Button variant="outline" size="sm">
+          <Button variant="outline" size="touch">
             {strings.shift.cashMovementButton}
           </Button>
         }

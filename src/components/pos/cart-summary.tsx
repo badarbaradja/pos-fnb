@@ -57,9 +57,9 @@ export function CartSummary({
 
   return (
     <>
-      <div className="flex flex-col gap-2">
-        <Label>{strings.pos.orderDiscountTitle}</Label>
-        <div className="flex gap-2">
+      <div className="flex flex-col gap-1.5">
+        <Label className="text-xs font-medium text-muted-foreground">{strings.pos.orderDiscountTitle}</Label>
+        <div className="flex flex-wrap gap-1.5">
           {(
             [
               ["none", strings.pos.discountTypeNone],
@@ -70,8 +70,8 @@ export function CartSummary({
             <Button
               key={type}
               type="button"
-              size="sm"
-              className="h-11"
+              size="touch"
+              className="rounded-full"
               variant={discountType === type ? "default" : "outline"}
               onClick={() => setDiscountType(type)}
             >
@@ -82,8 +82,11 @@ export function CartSummary({
         {discountType === "amount" ? (
           <Input
             type="number"
+            inputMode="decimal"
             min={0}
             step="0.01"
+            inputSize="touch"
+            className="text-sm"
             value={orderDiscountAmount.toString()}
             onChange={(e) =>
               setOrderDiscountAmount(
@@ -96,9 +99,12 @@ export function CartSummary({
         {discountType === "percent" ? (
           <Input
             type="number"
+            inputMode="decimal"
             min={0}
             max={100}
             step="0.01"
+            inputSize="touch"
+            className="text-sm"
             value={orderDiscountPercentInput.toString()}
             onChange={(e) =>
               setOrderDiscountPercentInput(
@@ -110,7 +116,10 @@ export function CartSummary({
         ) : null}
       </div>
 
-      <div className="flex flex-col gap-1 text-sm">
+      {/* Total -- anchor visual checkout (instruksi eksplisit Phase 2):
+          baris-baris rincian netral/kecil, baris Total sendiri dipisah
+          lewat border + ukuran jauh lebih besar, bukan cuma warna. */}
+      <div className="flex flex-col gap-1 rounded-lg bg-muted/50 p-3 text-sm">
         <TotalRow label={strings.pos.subtotal} value={calcResult.subtotal} />
         {!calcResult.itemDiscountTotal.isZero() ? (
           <TotalRow
@@ -134,8 +143,8 @@ export function CartSummary({
       </div>
 
       <Button
-        size="lg"
-        className="h-11 w-full"
+        size="touch"
+        className="w-full text-base font-semibold"
         disabled={lines.length === 0}
         onClick={() => {
           // key baru -> PaymentDialog remount penuh -> orderId & baris

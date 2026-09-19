@@ -87,53 +87,48 @@ export function PosScreen({
   }
 
   return (
-    // min-h-screen (BUKAN min-h-dvh) pada mobile -- lihat komentar
-    // (pos)/layout.tsx (18 September 2026): dvh recalculate saat browser
-    // chrome sembunyi/muncul selagi discroll, vh tidak. md:h-full tidak
-    // disentuh (desktop, tidak relevan).
-    <div className="flex min-h-screen flex-col md:h-full">
+    <div className="flex h-full min-h-0 w-full flex-1 flex-col overflow-hidden">
       <PriceTierSelector
         priceTiers={priceTiers}
         value={priceTierId}
         onChange={setPriceTierId}
         trailing={
-          <div className="flex items-center gap-2">
-            {/* T22e -- begitu ada >1 outlet, ini satu-satunya cara kasir
-                lihat tabletnya tersambung ke outlet yang benar SEBELUM
-                transaksi (bukan ketahuan setelah stok terpotong dari
-                outlet keliru). Permanen di layar, sengaja kecil. */}
-            <span className="whitespace-nowrap text-xs font-medium text-muted-foreground">
-              {strings.pos.outletDeviceLabel
-                .replace("{outlet}", outlet.name)
-                .replace("{device}", device.name)}
-            </span>
-            <span className="whitespace-nowrap text-xs text-muted-foreground">
-              {strings.shift.activeShiftLabel}: {shift.employeeName}
-            </span>
-            {outlet.cashEnabled ? <CashMovementDialog shiftId={shift.id} /> : null}
-            <Button
-              variant="outline"
-              size="sm"
-              className="h-11"
-              nativeButton={false}
-              render={<Link href="/pos/shift/close">{strings.shift.closeShiftButton}</Link>}
-            />
-            <Button
-              variant="outline"
-              size="sm"
-              className="h-11"
-              nativeButton={false}
-              render={<Link href="/pos/receipt">{strings.pos.todaysTransactionsButton}</Link>}
-            />
+          // Info pasif (outlet/device, shift) dikelompokkan dalam satu pil
+          // netral, dipisah jelas dari kelompok aksi lewat border-l --
+          // sebelumnya keduanya sejajar tanpa pembeda visual (audit Phase 1).
+          <div className="flex min-w-max items-center gap-2 md:w-full md:justify-between xl:w-auto">
+            <div className="hidden md:flex items-center gap-1.5 rounded-full bg-muted px-3 py-1.5">
+              <span className="whitespace-nowrap text-xs font-medium text-muted-foreground">
+                {strings.pos.outletDeviceLabel
+                  .replace("{outlet}", outlet.name)
+                  .replace("{device}", device.name)}
+              </span>
+              {/* Nama kasir: ada di baris kedua (lg..xl, lega), disembunyikan
+                  di xl..1400px (satu baris, sempit), muncul lagi >=1400px. */}
+              <span className="hidden text-muted-foreground/40 lg:inline xl:hidden min-[1400px]:inline">·</span>
+              <span className="hidden whitespace-nowrap text-xs text-muted-foreground lg:inline xl:hidden min-[1400px]:inline">
+                {strings.shift.activeShiftLabel}: {shift.employeeName}
+              </span>
+            </div>
+            <div className="flex items-center gap-1.5 xl:border-l xl:pl-2">
+              {outlet.cashEnabled ? <CashMovementDialog shiftId={shift.id} /> : null}
+              <Button
+                variant="outline"
+                size="touch"
+                nativeButton={false}
+                render={<Link href="/pos/shift/close">{strings.shift.closeShiftButton}</Link>}
+              />
+              <Button
+                variant="outline"
+                size="touch"
+                nativeButton={false}
+                render={<Link href="/pos/receipt">{strings.pos.todaysTransactionsButton}</Link>}
+              />
+            </div>
           </div>
         }
       />
-      {/* Tablet (md:, 768px+): dua kolom, keranjang 280px. Desktop (lg:,
-          1024px+): keranjang 360px seperti sebelumnya. Mobile: satu
-          kolom penuh -- CartPanel disembunyikan sendiri (hidden md:flex,
-          lihat cart-panel.tsx), diganti MobileCartBar+MobileCartSheet
-          di bawah (T18b). */}
-      <div className="grid grid-cols-1 md:min-h-0 md:flex-1 md:grid-cols-[1fr_280px] lg:grid-cols-[1fr_360px]">
+      <div className="grid min-h-0 flex-1 grid-cols-1 overflow-hidden md:grid-cols-[minmax(0,1fr)_300px] lg:grid-cols-[minmax(0,1fr)_360px] xl:grid-cols-[minmax(0,1fr)_380px]">
         <ProductGrid
           products={products}
           categories={categories}

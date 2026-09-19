@@ -1,9 +1,11 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { SearchIcon, SearchXIcon } from "lucide-react";
 import type { PosCategory, PosProduct } from "@/app/(pos)/pos/get-pos-catalog";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
+import { EmptyState } from "@/components/ui/empty-state";
 import { ProductCard } from "./product-card";
 import { id as strings } from "@/lib/i18n/id";
 
@@ -33,56 +35,58 @@ export function ProductGrid({
   }, [products, search, categoryId]);
 
   return (
-    <div className="flex flex-col gap-3 p-4 md:h-full">
-      <Input
-        value={search}
-        onChange={(e) => setSearch(e.target.value)}
-        placeholder={strings.pos.searchPlaceholder}
-      />
-      {/* flex-nowrap + overflow-x-auto -- TIDAK PERNAH menumpuk ke banyak
-          baris, di semua breakpoint (T18b). 15 kategori Indokopi dulu
-          makan 3 baris dengan flex-wrap, menyita ruang grid produk. */}
-      <div className="flex flex-nowrap gap-2 overflow-x-auto">
-        <Button
-          type="button"
-          size="sm"
-          className="h-11"
-          variant={categoryId === null ? "default" : "outline"}
-          onClick={() => setCategoryId(null)}
-        >
-          {strings.pos.allCategories}
-        </Button>
-        {categories.map((c) => (
+    <div className="flex h-full min-h-0 min-w-0 flex-1 flex-col overflow-hidden p-2.5 sm:p-3 md:p-4">
+      <div className="relative shrink-0">
+        <SearchIcon className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
+        <Input
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          placeholder={strings.pos.searchPlaceholder}
+          inputSize="touch"
+          className="rounded-full text-sm data-[size=touch]:pl-10"
+        />
+      </div>
+      <div className="shrink-0 pt-1 pb-1">
+        <div className="flex w-full min-w-0 flex-nowrap items-center gap-1.5 overflow-x-auto scrollbar-none py-0.5">
           <Button
-            key={c.id}
             type="button"
-            size="sm"
-            className="h-11"
-            variant={categoryId === c.id ? "default" : "outline"}
-            onClick={() => setCategoryId(c.id)}
+            size="touch"
+            className="shrink-0 rounded-full font-medium"
+            variant={categoryId === null ? "default" : "outline"}
+            onClick={() => setCategoryId(null)}
           >
-            {c.name}
+            {strings.pos.allCategories}
           </Button>
-        ))}
+          {categories.map((c) => (
+            <Button
+              key={c.id}
+              type="button"
+              size="touch"
+              className="shrink-0 rounded-full font-medium"
+              variant={categoryId === c.id ? "default" : "outline"}
+              onClick={() => setCategoryId(c.id)}
+            >
+              {c.name}
+            </Button>
+          ))}
+        </div>
       </div>
       {filtered.length === 0 ? (
-        <p className="text-sm text-muted-foreground">{strings.pos.emptyProducts}</p>
+        <div className="flex flex-1 items-center justify-center">
+          <EmptyState icon={SearchXIcon} title={strings.pos.emptyProducts} />
+        </div>
       ) : (
-        // Mobile: scroll halaman biasa, tanpa batas tinggi sendiri --
-        // pb-20 kasih jarak ke MobileCartBar (56px) yang melayang di
-        // bawah (T18b). md ke atas: scroll internal kolom ini sendiri,
-        // min-h-0 wajib supaya flex-1+overflow-y-auto benar-benar
-        // membatasi tinggi (tanpa ini tidak pernah discroll, mendorong
-        // konten di bawahnya).
-        <div className="grid grid-cols-2 gap-3 pb-20 sm:grid-cols-3 md:min-h-0 md:flex-1 md:overflow-y-auto md:pb-4 lg:grid-cols-4">
-          {filtered.map((p) => (
-            <ProductCard
-              key={p.id}
-              product={p}
-              priceTierId={priceTierId}
-              onSelect={onSelectProduct}
-            />
-          ))}
+        <div className="min-h-0 flex-1 overflow-y-auto pt-1 pb-20 md:pb-2">
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 sm:gap-2.5 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6">
+            {filtered.map((p) => (
+              <ProductCard
+                key={p.id}
+                product={p}
+                priceTierId={priceTierId}
+                onSelect={onSelectProduct}
+              />
+            ))}
+          </div>
         </div>
       )}
     </div>

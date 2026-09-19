@@ -141,42 +141,53 @@ export function PaymentDialog({
         <DialogHeader>
           <DialogTitle>{strings.pos.paymentDialogTitle}</DialogTitle>
         </DialogHeader>
-        <div className="flex flex-col gap-4 py-2">
-          <div className="flex items-center justify-between text-sm font-medium">
-            <span>{strings.pos.totalDue}</span>
-            <span>{formatIDR(calcResult.total)}</span>
-          </div>
 
+        {/* Total Tagihan -- di LUAR area scroll, selalu terlihat selama
+            kasir mengisi baris pembayaran. */}
+        <div className="flex shrink-0 items-center justify-between rounded-xl bg-muted/50 p-3 text-sm font-medium">
+          <span>{strings.pos.totalDue}</span>
+          <span className="text-base font-semibold tabular-nums">{formatIDR(calcResult.total)}</span>
+        </div>
+
+        {/* SATU-SATUNYA bagian yang scroll (baris pembayaran) --
+            DialogHeader, Total Tagihan, ringkasan Kembalian, dan
+            DialogFooter (Konfirmasi Bayar) semua shrink-0, selalu
+            terlihat/terjangkau tidak peduli berapa baris ditambahkan
+            (components/ui/dialog.tsx Popup max-h-[85vh] + overflow-hidden). */}
+        <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto">
           <div className="flex flex-col gap-3">
             {rows.map((row) => {
               const selectedMethod = paymentMethods.find(
                 (pm) => pm.id === row.paymentMethodId
               );
               return (
-                <div key={row.id} className="flex flex-col gap-2 rounded-lg border p-2">
+                <div key={row.id} className="flex flex-col gap-2.5 rounded-lg border p-3">
+                  <div className="flex flex-col gap-1">
+                    <Label className="text-xs">{strings.pos.paymentMethodLabel}</Label>
+                    <div className="flex flex-wrap gap-1.5">
+                      {paymentMethods.map((pm) => (
+                        <Button
+                          key={pm.id}
+                          type="button"
+                          size="touch"
+                          className="rounded-full"
+                          variant={row.paymentMethodId === pm.id ? "default" : "outline"}
+                          onClick={() => updateRow(row.id, { paymentMethodId: pm.id })}
+                        >
+                          {pm.name}
+                        </Button>
+                      ))}
+                    </div>
+                  </div>
                   <div className="flex items-end gap-2">
                     <div className="flex flex-1 flex-col gap-1">
-                      <Label className="text-xs">{strings.pos.paymentMethodLabel}</Label>
-                      <div className="flex flex-wrap gap-1">
-                        {paymentMethods.map((pm) => (
-                          <Button
-                            key={pm.id}
-                            type="button"
-                            size="sm"
-                            variant={row.paymentMethodId === pm.id ? "default" : "outline"}
-                            onClick={() => updateRow(row.id, { paymentMethodId: pm.id })}
-                          >
-                            {pm.name}
-                          </Button>
-                        ))}
-                      </div>
-                    </div>
-                    <div className="flex w-32 flex-col gap-1">
                       <Label className="text-xs">{strings.pos.paymentAmountLabel}</Label>
                       <Input
                         type="number"
+                        inputMode="decimal"
                         min={0}
                         step="0.01"
+                        inputSize="touch"
                         value={row.amount}
                         onChange={(e) => updateRow(row.id, { amount: e.target.value })}
                       />
@@ -185,7 +196,7 @@ export function PaymentDialog({
                       <Button
                         type="button"
                         variant="ghost"
-                        size="sm"
+                        size="touch"
                         onClick={() => removeRow(row.id)}
                       >
                         {strings.pos.removePaymentRow}
@@ -196,6 +207,7 @@ export function PaymentDialog({
                     <div className="flex flex-col gap-1">
                       <Label className="text-xs">{strings.pos.paymentReferenceLabel}</Label>
                       <Input
+                        inputSize="touch"
                         value={row.reference}
                         placeholder={strings.pos.paymentReferencePlaceholder}
                         onChange={(e) => updateRow(row.id, { reference: e.target.value })}
@@ -210,29 +222,35 @@ export function PaymentDialog({
           <Button
             type="button"
             variant="outline"
-            size="sm"
+            size="touch"
             className="self-start"
             onClick={addRow}
           >
             {strings.pos.addPaymentRow}
           </Button>
 
-          <div className="flex flex-col gap-1 border-t pt-3 text-sm">
-            <div className="flex items-center justify-between text-muted-foreground">
-              <span>{strings.pos.totalReceived}</span>
-              <span>{formatIDR(totalReceived)}</span>
-            </div>
-            <div className="flex items-center justify-between text-base font-semibold">
-              <span>{strings.pos.changeDue}</span>
-              <span>{formatIDR(change)}</span>
-            </div>
+        </div>
+
+        {/* Ringkasan bawah -- di LUAR area scroll (ditemukan verifikasi
+            visual Phase 2A: di dalam area scroll, Kembalian tenggelam di
+            bawah lipatan begitu ada >1 baris pembayaran). Kembalian =
+            highlight visual TERBESAR di dialog ini. */}
+        <div className="flex shrink-0 flex-col gap-1.5 border-t pt-3 text-sm">
+          <div className="flex items-center justify-between text-muted-foreground">
+            <span>{strings.pos.totalReceived}</span>
+            <span className="tabular-nums">{formatIDR(totalReceived)}</span>
+          </div>
+          <div className="flex items-center justify-between rounded-xl bg-primary/10 px-3 py-2.5">
+            <span className="text-sm font-medium">{strings.pos.changeDue}</span>
+            <span className="text-2xl font-bold text-primary tabular-nums">{formatIDR(change)}</span>
           </div>
         </div>
-        <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={isPending}>
+
+        <DialogFooter className="flex-row">
+          <Button variant="outline" size="touch" onClick={() => onOpenChange(false)} disabled={isPending}>
             {strings.pos.cancel}
           </Button>
-          <Button onClick={handleConfirm} disabled={!canConfirm}>
+          <Button size="touch" className="flex-1 sm:flex-none" onClick={handleConfirm} disabled={!canConfirm}>
             {isPending ? strings.pos.processingPayment : strings.pos.confirmPayment}
           </Button>
         </DialogFooter>

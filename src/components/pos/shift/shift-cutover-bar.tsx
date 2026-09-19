@@ -65,7 +65,7 @@ export function ShiftCutoverBar({
   const isPast = minutesLeft < 0;
 
   return (
-    <div className="flex flex-wrap items-center justify-between gap-2 border-b bg-amber-50 p-2 text-sm text-amber-900 dark:bg-amber-950 dark:text-amber-100">
+    <div className="flex shrink-0 flex-wrap items-center justify-between gap-2 border-b bg-amber-50 p-2 text-sm text-amber-900 dark:bg-amber-950 dark:text-amber-100">
       <span>
         {isPast
           ? strings.shift.cutoverWarningUrgent

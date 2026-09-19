@@ -31,17 +31,19 @@ export function MobileCartBar({
     <button
       type="button"
       onClick={onOpen}
-      // h-14 (56px) -- jauh di atas target sentuh 44px (T18b), seluruh
-      // bar bisa di-tap, bukan cuma sebagian.
-      className="fixed inset-x-0 bottom-0 z-40 flex h-14 items-center justify-between gap-3 bg-primary px-4 text-primary-foreground md:hidden"
+      // min-h-14 (56px) -- jauh di atas target sentuh 44px (T18b), seluruh
+      // bar bisa di-tap, bukan cuma sebagian. Padding bawah tambahan (bukan
+      // tinggi tetap) supaya safe-area inset menambah ruang, bukan
+      // memampatkan kontennya, di HP tanpa tombol fisik/gesture bar.
+      className="fixed inset-x-0 bottom-0 z-40 flex min-h-14 items-center justify-between gap-3 rounded-t-2xl bg-primary px-4 pb-[env(safe-area-inset-bottom,0px)] text-primary-foreground shadow-primary md:hidden"
     >
       <span className="flex items-center gap-2 text-sm font-medium">
-        <span className="flex h-6 min-w-6 items-center justify-center rounded-full bg-primary-foreground/20 px-1.5 text-xs font-semibold">
+        <span className="flex h-6 min-w-6 items-center justify-center rounded-full bg-primary-foreground/20 px-1.5 text-xs font-bold">
           {itemCount.toString()}
         </span>
         {strings.pos.viewCartButton}
       </span>
-      <span className="font-semibold">{formatIDR(total)}</span>
+      <span className="font-bold">{formatIDR(total)}</span>
     </button>,
     document.body
   );

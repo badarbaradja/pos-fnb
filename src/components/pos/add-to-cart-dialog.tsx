@@ -104,7 +104,10 @@ export function AddToCartDialog({
         <DialogHeader>
           <DialogTitle>{product.name}</DialogTitle>
         </DialogHeader>
-        <div className="flex flex-col gap-4 py-2">
+        {/* min-h-0 flex-1 overflow-y-auto: isi tengah scroll sendiri, footer
+            (tombol Tambah) tetap terjangkau -- DialogContent max-h-[85vh]
+            memotong apa pun yang meluap, jadi wrapper ini WAJIB. */}
+        <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto py-2">
           {product.variants.length > 0 ? (
             <div className="flex flex-col gap-2">
               <Label>{strings.pos.variantLabel}</Label>
@@ -185,10 +188,10 @@ export function AddToCartDialog({
           </div>
         </div>
         <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)}>
+          <Button variant="outline" size="touch" onClick={() => onOpenChange(false)}>
             {strings.pos.cancel}
           </Button>
-          <Button onClick={handleConfirm} disabled={!canConfirm}>
+          <Button size="touch" onClick={handleConfirm} disabled={!canConfirm}>
             {strings.pos.addToCart}
           </Button>
         </DialogFooter>

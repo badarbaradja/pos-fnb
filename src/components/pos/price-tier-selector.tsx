@@ -17,24 +17,22 @@ export function PriceTierSelector({
   trailing?: React.ReactNode;
 }) {
   return (
-    // flex-col di mobile (trailing/shift-info pindah ke baris kedua supaya
-    // tidak berdesakan dengan tier yang sudah scroll horizontal), flex-row
-    // dari md ke atas -- semua satu baris seperti sebelumnya (T18b).
-    <div className="flex flex-col gap-2 border-b p-3 md:flex-row md:items-center md:gap-3">
-      <div className="flex min-w-0 items-center gap-3">
-        <Label className="shrink-0 text-xs text-muted-foreground">
+    // Satu baris (tier | aksi) baru dari xl -- di bawah itu ditumpuk dua
+    // baris supaya chip tier (kontrol utama) tidak terpotong & tombol aksi
+    // tidak meluap (verifikasi visual Phase 2A: di 768px tombol paling kanan
+    // keluar viewport dan chip "GoFood" tersembunyi).
+    <div className="flex shrink-0 flex-col gap-2 border-b bg-card px-3 py-2 shadow-xs sm:px-4 xl:flex-row xl:items-center xl:justify-between min-w-0 max-w-full overflow-hidden">
+      <div className="flex min-w-0 items-center gap-2 overflow-hidden">
+        <Label className="shrink-0 text-xs font-medium text-muted-foreground">
           {strings.pos.priceTierLabel}
         </Label>
-        {/* flex-nowrap + overflow-x-auto -- TIDAK PERNAH menumpuk ke banyak
-            baris, di semua breakpoint (T18b). Sebelumnya flex-wrap makan
-            3 baris dengan 15 kategori/tier, menyita ruang grid produk. */}
-        <div className="flex flex-nowrap gap-2 overflow-x-auto">
+        <div className="flex min-w-0 flex-nowrap items-center gap-1.5 overflow-x-auto scrollbar-none py-0.5">
           {priceTiers.map((tier) => (
             <Button
               key={tier.id}
               type="button"
-              size="sm"
-              className="h-11"
+              size="touch"
+              className="shrink-0 rounded-full font-medium"
               variant={value === tier.id ? "default" : "outline"}
               onClick={() => onChange(tier.id)}
             >
@@ -44,7 +42,7 @@ export function PriceTierSelector({
         </div>
       </div>
       {trailing ? (
-        <div className="flex items-center gap-2 overflow-x-auto md:ml-auto">
+        <div className="flex min-w-0 items-center gap-1.5 overflow-x-auto scrollbar-none xl:shrink-0">
           {trailing}
         </div>
       ) : null}
