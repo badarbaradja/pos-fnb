@@ -31,7 +31,10 @@ import { id } from "@/lib/i18n/id";
 // PERNAH membaca tabel `products`, dan `stock_opname_items`/
 // `stock_transfer_items` cuma punya kolom ingredient_id (TIDAK ADA
 // barang_id) -- jadi Produk, Tingkat Harga, Grup Modifier, Satuan, Bahan,
-// Resep, Stock Opname murni konsep dapur/resep F&B.
+// Resep, Stock Opname, DAN Transfer Stok (keputusan CEO 24 September
+// 2026 -- schema stock_transfer_items tidak punya barang_id, manajer
+// thrifting-only akan melihat menu yang tidak berguna sama sekali kalau
+// ini dibiarkan "bersama") murni konsep dapur/resep/gudang bahan F&B.
 // thrifting-only: Pemilik Titipan, Barang (TT01, comment permissions.ts),
 // Pengaturan Label (subtitle-nya sendiri: "berlaku untuk semua barang
 // titipan"), dan Laporan Stok (comment di reports/stock/page.tsx sendiri:
@@ -40,7 +43,7 @@ import { id } from "@/lib/i18n/id";
 // bersama: Kategori (categories.scope dipakai products.category_id DAN
 // barang.category_id), Metode Pembayaran, Karyawan, Perangkat, Outlet,
 // Tim, Laporan Penjualan (payOrderWithDb DAN sellBarangWithDb sama-sama
-// menulis ke `orders`), Transfer Stok.
+// menulis ke `orders`).
 const navItems: NavItem[] = [
   { href: "/products", label: id.nav.products, icon: "package", group: "catalog", permission: "product.manage", businessType: "fnb" },
   { href: "/categories", label: id.nav.categories, icon: "tags", group: "catalog", permission: "product.manage" },
@@ -58,7 +61,7 @@ const navItems: NavItem[] = [
   { href: "/ingredients", label: id.nav.ingredients, icon: "wheat", group: "inventory", permission: "product.manage", businessType: "fnb" },
   { href: "/recipes", label: id.nav.recipes, icon: "bookOpen", group: "inventory", permission: "product.manage", businessType: "fnb" },
   { href: "/stock-opnames", label: id.nav.stockOpnames, icon: "clipboardCheck", group: "inventory", permission: "stock.opname_input", businessType: "fnb" },
-  { href: "/stock-transfers", label: id.nav.stockTransfers, icon: "arrowLeftRight", group: "inventory", permission: "stock.transfer" },
+  { href: "/stock-transfers", label: id.nav.stockTransfers, icon: "arrowLeftRight", group: "inventory", permission: "stock.transfer", businessType: "fnb" },
   { href: "/reports/sales", label: id.nav.reports, icon: "trendingUp", group: "reports", permission: "report.sales" },
   { href: "/reports/stock", label: id.nav.stockReport, icon: "boxes", group: "reports", permission: "report.sales", businessType: "thrifting" },
   { href: "/reports/bagi-hasil", label: id.nav.bagiHasilReport, icon: "pieChart", group: "reports", permission: "report.sales", businessType: "thrifting" },
