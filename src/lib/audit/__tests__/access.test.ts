@@ -25,7 +25,6 @@ import { getAdminDb, getUserDb, type UserDbHandle } from "@/lib/db/client";
 import { createSupabaseAdminClient, createSupabaseAnonClient } from "@/lib/auth/supabase";
 import { brands, devices, employees, memberships, outlets, profiles, shifts } from "@/lib/db/schema";
 import { hashPin } from "@/lib/auth/pin";
-import { generateId } from "@/lib/utils/id";
 import { createUserDbFixture, type UserDbFixture } from "@/lib/db/__tests__/helpers/user-db-fixture";
 import { getAuditDailyReport } from "../report";
 import { getAuditReviewsForBusinessDate, markAuditReviewedWithDb } from "../reviews";
