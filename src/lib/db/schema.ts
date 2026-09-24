@@ -1123,6 +1123,37 @@ export const shifts = pgTable(
     // (jejak historis bahwa ini pernah ditutup paksa, bukan ditutup
     // normal oleh pemiliknya sendiri).
     forceClosedAt: timestamp("force_closed_at", { withTimezone: true }),
+    // Laporan Prepare/Closing (24 September 2026) -- menempel di layar
+    // buka/tutup shift yang sudah ada, BUKAN halaman/aplikasi terpisah
+    // (instruksi eksplisit klien: jangan pindah aplikasi). Path foto pola
+    // sama stock_transfers (lib/pos/shift-report-photo.ts):
+    // {business_id}/{shift_id}/{prepare|closing}.jpg di bucket privat
+    // 'shift-reports'. TEPAT SATU dari {photoPath, photoMissingReason}
+    // per tahap wajib terisi begitu tahap itu disubmit -- ditegakkan di
+    // Zod (lib/pos/shift-report.ts), BUKAN trigger DB (beda dari
+    // stock_transfers yang statusnya sendiri state machine bertingkat;
+    // shift cukup application-level guard `WHERE status='open'` yang
+    // sudah ada).
+    preparePhotoPath: text("prepare_photo_path"),
+    preparePhotoMissingReason: text("prepare_photo_missing_reason"),
+    // Nullable (BUKAN default false) -- null = belum dijawab sama sekali,
+    // beda dari false = "sudah dijawab, tidak ada event". Prasyarat
+    // "prepare belum diisi -> kasir tidak bisa transaksi" (checkShift-
+    // Sellability) memeriksa kolom INI, bukan preparePhotoPath, supaya
+    // "sudah difoto tapi belum menjawab ada-event-atau-tidak" tetap
+    // dianggap belum selesai.
+    prepareHasEvent: boolean("prepare_has_event"),
+    // WAJIB diisi (non-kosong) kalau prepareHasEvent=true, ditegakkan di
+    // Zod -- NULL kalau prepareHasEvent=false/null.
+    prepareEventNote: text("prepare_event_note"),
+    closingPhotoPath: text("closing_photo_path"),
+    closingPhotoMissingReason: text("closing_photo_missing_reason"),
+    // Catatan kebersihan singkat SAAT TUTUP -- SENGAJA cuma satu kolom
+    // teks bebas, BUKAN form Kebersihan per-area (itu pemeriksaan
+    // terpisah oleh role lain dengan irama berbeda, lihat Rencana Revisi
+    // 24 September 2026). Uang shift TIDAK disentuh di sini sama sekali
+    // -- tetap countedCash/expectedCash/cashVariance yang sudah ada.
+    closingCleanlinessNote: text("closing_cleanliness_note"),
   },
   (t) => [
     // Pembatasan akses per outlet, Tahap 5 (13 September 2026, §30) --

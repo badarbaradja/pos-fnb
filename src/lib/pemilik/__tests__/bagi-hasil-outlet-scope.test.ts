@@ -48,6 +48,7 @@ import { generateId } from "@/lib/utils/id";
 import { hashPin } from "@/lib/auth/pin";
 import { businessDate } from "@/lib/utils/business-date";
 import { openShiftWithDb } from "@/lib/pos/shift";
+import { submitPrepareReportWithDb } from "@/lib/pos/shift-report";
 import { sellBarangWithDb } from "@/lib/pos/sell-barang";
 import { confirmDayCutoffWithDb } from "@/lib/outlets/manage";
 import { outletScopeCondition } from "@/lib/auth/outlet-scope";
@@ -145,13 +146,23 @@ describe.skipIf(!hasEnv)("Pembatasan akses per outlet, Tahap 3 -- Laporan Bagi H
       pinHash,
     });
 
-    await openShiftWithDb(db, businessId, {
+    const shiftResult = await openShiftWithDb(db, businessId, {
       id: generateId(),
       outletId: bthrOutletId,
       deviceId: device!.id,
       employeeCode: "BTHRKASIR",
       pin: "135791",
       openingCash: "0",
+    });
+    if (!shiftResult.success) {
+      throw new Error(`Gagal buka shift uji: ${shiftResult.error}`);
+    }
+    // Rencana Revisi 24 September 2026 -- laporan Prepare sekarang gerbang
+    // WAJIB untuk SETIAP shift -- tidak relevan dengan yang diuji file ini.
+    await submitPrepareReportWithDb(db, businessId, {
+      shiftId: shiftResult.success.shiftId,
+      photo: { photoPath: "test/prepare.jpg" },
+      hasEvent: false,
     });
 
     const [salma] = await db

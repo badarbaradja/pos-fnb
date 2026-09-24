@@ -10,6 +10,7 @@ import { formatIDR } from "@/lib/utils/money";
 import { Button } from "@/components/ui/button";
 import { id as strings } from "@/lib/i18n/id";
 import { ShiftOpnameForm } from "./shift-opname-form";
+import { ClosingReportForm } from "./closing-report-form";
 import type { ShiftOpnameItemRow } from "@/lib/stock-opnames/shift-opname";
 
 type ClosingOpname = {
@@ -91,6 +92,7 @@ export function CloseCashlessShiftForm({
           varianceAlertPercent={closingOpname.varianceAlertPercent}
         />
       ) : null}
+      {!closedAt ? <ClosingReportForm shiftId={shiftId} /> : null}
       <div className="flex flex-col gap-1 rounded-lg border p-3 text-sm">
         <h2 className="mb-1 text-base font-semibold">{strings.shift.summaryTitle}</h2>
         <SummaryRow label={strings.shift.summaryEmployee} value={employeeName} />

@@ -47,6 +47,7 @@ import {
 import { hashPin } from "@/lib/auth/pin";
 import { generateId } from "@/lib/utils/id";
 import { openShiftWithDb } from "@/lib/pos/shift";
+import { submitPrepareReportWithDb } from "@/lib/pos/shift-report";
 import { payOrderWithDb } from "@/lib/pos/pay-order";
 import { calculateOrder, type CalcLine, type CalcSettings } from "@/lib/calc/order-calculator";
 import { getSalesByProduct, type SalesReportFilter } from "@/lib/db/queries/sales-report";
@@ -108,6 +109,15 @@ describe.skipIf(!hasEnv)("Kesiapan F&B -- payOrderWithDb: modifier, varian, paja
       openingCash: "0",
     });
     expect(shiftResult.success).toBeTruthy();
+    // Rencana Revisi 24 September 2026 -- laporan Prepare sekarang gerbang
+    // WAJIB (checkShiftSellability -> 'prepare_required') untuk SETIAP
+    // shift, ditulis sebelum fitur itu ada -- tidak relevan dengan yang
+    // diuji file ini (kesiapan payOrderWithDb), jadi diisi otomatis di sini.
+    await submitPrepareReportWithDb(db, businessId, {
+      shiftId: shiftResult.success!.shiftId,
+      photo: { photoPath: "test/prepare.jpg" },
+      hasEvent: false,
+    });
     return device!.id;
   }
 

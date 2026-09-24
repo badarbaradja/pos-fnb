@@ -28,6 +28,7 @@ import {
 import { hashPin } from "@/lib/auth/pin";
 import { generateId } from "@/lib/utils/id";
 import { openShiftWithDb } from "@/lib/pos/shift";
+import { submitPrepareReportWithDb } from "@/lib/pos/shift-report";
 import { payOrderWithDb } from "@/lib/pos/pay-order";
 import { deleteModifierWithDb } from "../manage";
 import { createUserDbFixture, type UserDbFixture } from "@/lib/db/__tests__/helpers/user-db-fixture";
@@ -159,6 +160,13 @@ describe.skipIf(!hasEnv)("modifiers/manage — hapus permanen", () => {
       openingCash: "0",
     });
     expect(shiftResult.success).toBeTruthy();
+    // Rencana Revisi 24 September 2026 -- laporan Prepare sekarang gerbang
+    // WAJIB untuk SETIAP shift -- tidak relevan dengan yang diuji file ini.
+    await submitPrepareReportWithDb(db, businessId, {
+      shiftId: shiftResult.success!.shiftId,
+      photo: { photoPath: "test/prepare.jpg" },
+      hasEvent: false,
+    });
 
     // Dua order terpisah yang sama-sama pakai modifier ini -- dua baris di
     // order_item_modifiers, bukan satu order dengan qty 2 (line item cuma

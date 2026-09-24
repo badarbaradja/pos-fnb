@@ -50,6 +50,7 @@ import {
   submitCountedCashWithDb,
   type OpenShiftRow,
 } from "../shift";
+import { submitClosingReportWithDb, submitPrepareReportWithDb } from "../shift-report";
 import { payOrderWithDb } from "../pay-order";
 
 const hasEnv = Boolean(
@@ -91,6 +92,7 @@ describe("checkShiftSellability", () => {
       expectedCash: null,
       cashVariance: null,
       openingOpnameStatus: "not_required",
+      prepareCompleted: true,
       ...overrides,
     };
   }
@@ -123,6 +125,40 @@ describe("checkShiftSellability", () => {
 
   it("openingOpnameStatus 'done' -> tidak memblokir (opname buka sudah submitted)", () => {
     expect(checkShiftSellability(makeShift({ openingOpnameStatus: "done" }), TIMEZONE, CUTOFF)).toBeNull();
+  });
+
+  // Rencana Revisi 24 September 2026 -- "prepare belum diisi -> kasir
+  // tidak bisa transaksi" (test wajib). Unconditional (BEDA dari opname,
+  // tidak bergantung bahan berflag), tapi mendahului closing_in_progress/
+  // stale sama seperti opname_required -- shift yang belum prepare belum
+  // pernah "sungguh-sungguh mulai" jualan.
+  it("prepareCompleted=false -> 'prepare_required', mendahului closing_in_progress/stale", () => {
+    expect(checkShiftSellability(makeShift({ prepareCompleted: false }), TIMEZONE, CUTOFF)).toBe(
+      "prepare_required"
+    );
+    expect(
+      checkShiftSellability(
+        makeShift({ prepareCompleted: false, countedCash: "1000", businessDate: "2000-01-01" }),
+        TIMEZONE,
+        CUTOFF
+      )
+    ).toBe("prepare_required");
+  });
+
+  it("opname_required didahulukan di atas prepare_required (opname_required belum tentu prepare sudah diisi)", () => {
+    expect(
+      checkShiftSellability(
+        makeShift({ openingOpnameStatus: "pending", prepareCompleted: false }),
+        TIMEZONE,
+        CUTOFF
+      )
+    ).toBe("opname_required");
+  });
+
+  it("prepareCompleted=true DAN openingOpnameStatus bukan 'pending' -> tidak memblokir", () => {
+    expect(
+      checkShiftSellability(makeShift({ prepareCompleted: true, openingOpnameStatus: "done" }), TIMEZONE, CUTOFF)
+    ).toBeNull();
   });
 
   it("countedCash sudah terisi -> 'closing_in_progress', walau businessDate masih hari ini", () => {
@@ -259,6 +295,34 @@ describe.skipIf(!hasEnv)("T15 — siklus shift", () => {
     }
   });
 
+  // Rencana Revisi 24 September 2026 -- laporan Prepare/Closing sekarang
+  // gerbang WAJIB (checkShiftSellability -> 'prepare_required') untuk
+  // SETIAP shift, tidak cuma yang punya bahan berflag seperti opname.
+  // Test file ini ditulis SEBELUM fitur itu ada, jadi shift yang dibuka
+  // di sini butuh laporan prepare (dan, untuk yang benar-benar ditutup,
+  // laporan closing) diisi manual supaya skenario ASLI yang diuji (PIN,
+  // toleransi kas, dst) tidak keburu terhalang gerbang prepare/closing --
+  // bukan fokus test-test T15 ini. Lewat submitPrepareReportWithDb/
+  // submitClosingReportWithDb sungguhan (bukan UPDATE langsung) supaya
+  // helper ini sendiri juga tervalidasi lewat jalur produksi yang benar.
+  async function markPrepared(shiftId: string): Promise<void> {
+    const result = await submitPrepareReportWithDb(db, businessId, {
+      shiftId,
+      photo: { photoPath: "test/prepare.jpg" },
+      hasEvent: false,
+    });
+    if (result.error) throw new Error(`markPrepared gagal: ${result.error}`);
+  }
+
+  async function markClosingReported(shiftId: string): Promise<void> {
+    const result = await submitClosingReportWithDb(db, businessId, {
+      shiftId,
+      photo: { photoPath: "test/closing.jpg" },
+      cleanlinessNote: "Sudah dibersihkan (data uji)",
+    });
+    if (result.error) throw new Error(`markClosingReported gagal: ${result.error}`);
+  }
+
   it("data uji benar-benar terbentuk sebelum diuji (bukan hijau karena kosong)", () => {
     expect(businessId).toBeTruthy();
     expect(outletId).toBeTruthy();
@@ -281,6 +345,7 @@ describe.skipIf(!hasEnv)("T15 — siklus shift", () => {
 
     expect(result.error).toBeUndefined();
     expect(result.success?.employeeName).toContain(PREFIX);
+    await markPrepared(result.success!.shiftId);
 
     const active = await getOpenShiftForDevice(db, businessId, deviceId);
     expect(active).not.toBeNull();
@@ -339,6 +404,7 @@ describe.skipIf(!hasEnv)("T15 — siklus shift", () => {
     });
     expect(openResult.success).toBeTruthy();
     const staleShiftId = openResult.success!.shiftId;
+    await markPrepared(staleShiftId);
 
     // openShiftWithDb sendiri TIDAK PUNYA cara menerima businessDate dari
     // luar (dan memang tidak boleh) -- dipaksa mundur langsung di DB di
@@ -441,6 +507,7 @@ describe.skipIf(!hasEnv)("T15 — siklus shift", () => {
   it("WRITE-ONCE: submitCountedCash kedua kali ditolak, counted_cash di DB tidak berubah", async () => {
     const shift = await getOpenShiftForDevice(db, businessId, deviceId);
     expect(shift).not.toBeNull();
+    await markClosingReported(shift!.id);
 
     const first = await submitCountedCashWithDb(db, businessId, {
       shiftId: shift!.id,
@@ -508,6 +575,7 @@ describe.skipIf(!hasEnv)("T15 — siklus shift", () => {
 
     // Lengkapi dengan alasan supaya shift ini tidak nyangkut 'open' dan
     // mengganggu test lain / cleanup.
+    await markClosingReported(shiftId);
     const confirmed = await confirmShiftCloseWithDb(db, businessId, {
       shiftId,
       reason: "Selisih uji otomatis -- kasir salah hitung receh",
@@ -542,6 +610,7 @@ describe.skipIf(!hasEnv)("T15 — siklus shift", () => {
     });
     expect(beforeLock.error).toBeUndefined();
 
+    await markClosingReported(shiftId);
     await submitCountedCashWithDb(db, businessId, { shiftId, countedCash: "0" });
 
     const afterLock = await addCashMovementWithDb(db, businessId, {
@@ -854,6 +923,7 @@ describe.skipIf(!hasEnv)("T15 — siklus shift", () => {
       // toleransi fixture (20000), TAPI SENGAJA BUKAN NOL -- CEO eksplisit:
       // "kalau selisih selalu nol di test, berarti tidak ada yang diuji".
       const { deviceId: oldDeviceId, shiftId: oldShiftId } = await openIsolatedShiftWithOpeningCash("A", "100000");
+      await markClosingReported(oldShiftId);
 
       const result = await closeAndReopenShiftWithDb(db, businessId, {
         oldShiftId,
@@ -913,6 +983,7 @@ describe.skipIf(!hasEnv)("T15 — siklus shift", () => {
 
     it("selisih di luar toleransi DENGAN alasan -> TETAP LANJUT (tidak diblokir), shift baru tetap terbuka, selisih besar tercatat apa adanya", async () => {
       const { deviceId: oldDeviceId, shiftId: oldShiftId } = await openIsolatedShiftWithOpeningCash("C", "100000");
+      await markClosingReported(oldShiftId);
 
       const result = await closeAndReopenShiftWithDb(db, businessId, {
         oldShiftId,
@@ -941,6 +1012,10 @@ describe.skipIf(!hasEnv)("T15 — siklus shift", () => {
 
     it("PIN shift baru SALAH -> shift lama TIDAK ditutup sama sekali (gagal sebelum transaksi DB apa pun)", async () => {
       const { deviceId: oldDeviceId, shiftId: oldShiftId } = await openIsolatedShiftWithOpeningCash("D", "100000");
+      // Laporan closing WAJIB diisi dulu supaya test ini benar-benar menguji
+      // kegagalan PIN (bukan kebetulan lolos karena alasan lain -- gerbang
+      // isClosingReportComplete dicek LEBIH DULU di closeAndReopenShiftWithDb).
+      await markClosingReported(oldShiftId);
 
       const result = await closeAndReopenShiftWithDb(db, businessId, {
         oldShiftId,
@@ -990,6 +1065,7 @@ describe.skipIf(!hasEnv)("T15 — siklus shift", () => {
       });
       expect(opened.success).toBeTruthy();
       const oldShiftId = opened.success!.shiftId;
+      await markClosingReported(oldShiftId);
 
       const result = await closeAndReopenShiftWithDb(db, businessId, {
         oldShiftId,

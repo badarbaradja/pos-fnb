@@ -47,6 +47,7 @@ import {
 import { hashPin } from "@/lib/auth/pin";
 import { generateId } from "@/lib/utils/id";
 import { openShiftWithDb } from "@/lib/pos/shift";
+import { submitPrepareReportWithDb } from "@/lib/pos/shift-report";
 import { payOrderWithDb } from "@/lib/pos/pay-order";
 
 const hasEnv = Boolean(
@@ -84,6 +85,14 @@ describe.skipIf(!hasEnv)("B3-B5 -- potong stok saat bayar, modifier, snapshot HP
       openingCash: "0",
     });
     expect(shiftResult.success).toBeTruthy();
+    // Rencana Revisi 24 September 2026 -- laporan Prepare sekarang gerbang
+    // WAJIB (checkShiftSellability -> 'prepare_required') untuk SETIAP
+    // shift -- tidak relevan dengan yang diuji file ini, diisi otomatis.
+    await submitPrepareReportWithDb(db, businessId, {
+      shiftId: shiftResult.success!.shiftId,
+      photo: { photoPath: "test/prepare.jpg" },
+      hasEvent: false,
+    });
     return device!.id;
   }
 

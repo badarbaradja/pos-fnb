@@ -423,6 +423,46 @@ export const id = {
     reasonPlaceholder: "mis. tumpah, salah hitung, dsb.",
     noFlaggedIngredients: "Tidak ada bahan yang ditandai wajib dihitung tiap shift.",
   },
+  // Rencana Revisi 24 September 2026 -- laporan Prepare (buka shift) dan
+  // Closing (tutup shift), menempel di layar buka/tutup yang sudah ada.
+  // Foto pakai components/camera-capture.tsx + strings.stockTransfers.
+  // photo* yang generik (lihat catatan di sana) -- di sini cuma label
+  // yang spesifik konteks shift.
+  shiftReport: {
+    photoRequiredError: "Foto wajib diambil, atau (kalau kamera benar-benar tidak bisa dibuka) alasan tercatat -- tidak boleh dua-duanya kosong",
+    eventNoteRequiredError: "Jawaban \"Ada event\" wajib disertai keterangan singkat.",
+    cleanlinessNoteRequiredError: "Catatan kebersihan wajib diisi.",
+    photoMissingReasonStepPrepare: "membuka shift",
+    photoMissingReasonStepClosing: "menutup shift",
+
+    prepareTitle: "Laporan Persiapan Outlet",
+    prepareHint: "Foto kondisi outlet dan info hari ini, sebelum mulai jualan.",
+    preparePhotoLabel: "Foto kondisi outlet (wajib)",
+    prepareEventQuestion: "Ada event hari ini?",
+    prepareEventYes: "Ya",
+    prepareEventNo: "Tidak",
+    prepareEventNotePlaceholder: "Ceritakan singkat event apa, mis. \"Ulang tahun anak, reservasi 20 orang jam 18.00\"",
+    prepareSubmitButton: "Simpan & Mulai Jualan",
+    prepareSubmitting: "Menyimpan...",
+    preparePhotoContinueWithoutConfirm: "Lanjutkan tanpa foto? Alasan ini akan tersimpan otomatis dan shift ini akan ditandai untuk ditinjau manajer.",
+
+    closingTitle: "Laporan Penutupan Outlet",
+    closingHint: "Foto kondisi outlet saat ditinggalkan dan catatan kebersihan singkat, sebelum menutup shift.",
+    closingPhotoLabel: "Foto kondisi outlet saat ditinggalkan (wajib)",
+    closingCleanlinessLabel: "Catatan kebersihan singkat (wajib)",
+    closingCleanlinessPlaceholder: "mis. \"Lantai dan meja sudah dilap, sampah sudah dibuang\"",
+    closingPhotoContinueWithoutConfirm: "Lanjutkan tanpa foto? Alasan ini akan tersimpan otomatis dan shift ini akan ditandai untuk ditinjau manajer.",
+    closingSaved: "Laporan penutupan tersimpan.",
+    closingSaveButton: "Simpan Laporan Penutupan",
+    closingSaving: "Menyimpan...",
+    closingReportRequiredError: "Isi laporan penutupan (foto + catatan kebersihan) dulu sebelum menutup shift.",
+
+    // Layar manajer (getShiftsNeedingReview) -- shift yang kamera prepare/
+    // closing-nya gagal dibuka, ditandai supaya manajer tahu evidence-nya
+    // tidak lengkap tanpa harus membuka tiap shift satu-satu.
+    reviewReasonPreparePhotoFailed: "Foto persiapan gagal diambil",
+    reviewReasonClosingPhotoFailed: "Foto penutupan gagal diambil",
+  },
   stockOpnames: {
     title: "Stock Opname",
     subtitle: "Hitung fisik bahan per outlet -- selisih otomatis jadi penyesuaian stok, bukan diketik manual",
@@ -540,7 +580,10 @@ export const id = {
     photoUseButton: "Gunakan Foto Ini",
     photoFlipCameraLabel: "Balik kamera",
     photoRequestingPermission: "Meminta izin kamera...",
-    photoPermissionDenied: "Butuh izin kamera untuk memotret bukti transfer. Buka Pengaturan -> Situs -> izinkan Kamera, lalu coba lagi.",
+    // Generik (dipakai components/camera-capture.tsx untuk SEMUA
+    // pemakai, bukan cuma transfer stok -- lihat juga lib/pos/shift-
+    // report.ts) -- sengaja tidak menyebut "transfer" di teksnya.
+    photoPermissionDenied: "Butuh izin kamera untuk memotret. Buka Pengaturan -> Situs -> izinkan Kamera, lalu coba lagi.",
     photoNotSupported: "Kamera tidak bisa diakses dari alamat ini. Pastikan alamat website diawali https://, lalu coba lagi.",
     photoCameraFailedRetry: "Coba Lagi",
     photoCameraFailedTitle: "Kamera tidak bisa dibuka di perangkat ini",
@@ -550,7 +593,8 @@ export const id = {
     photoMissingReasonStepSend: "mengirim",
     photoMissingReasonStepReceive: "menerima",
     photoMissingBadge: "Tanpa foto",
-    photoPreviewAlt: "Pratinjau foto bukti transfer",
+    // Generik juga (lihat catatan photoPermissionDenied di atas).
+    photoPreviewAlt: "Pratinjau foto",
 
     // Halaman detail
     detailTitle: "Detail Transfer Stok",
@@ -960,6 +1004,10 @@ export const id = {
     // Rencana Revisi 24 September 2026 §7 poin 4 -- shift punya bahan wajib
     // hitung tapi opname BUKA-nya belum disubmit.
     openingOpnameRequiredError: "Hitung stok awal dulu sebelum mulai jualan.",
+    // Rencana Revisi 24 September 2026 -- laporan Prepare (foto + jawaban
+    // event) belum diisi. Dicek SESUDAH opname_required (layar prepare
+    // muncul setelah opname, kalau ada) di checkShiftSellability.
+    prepareRequiredError: "Isi laporan persiapan (foto kondisi outlet + jawaban ada-tidaknya event) dulu sebelum mulai jualan.",
     barangDuplikatDiKeranjangError: "Barang yang sama tidak bisa ada dua kali di satu keranjang -- ini barang unik satu potong.",
     barangTidakSiapJualError: "Barang {kode} sudah terjual atau belum ditandai siap jual -- tidak bisa dijual lagi.",
     barangSudahTerjualSaatBayarError: "Salah satu barang di keranjang baru saja terjual duluan (kemungkinan kasir lain memindainya bersamaan). Keluarkan dari keranjang lalu coba lagi.",
@@ -1073,6 +1121,11 @@ export const id = {
     reconcileSubmitButton: "Hitung & Selesaikan",
     reconcileSuccess: "Rekonsiliasi selesai.",
     staleShiftListLabel: "Basi (belum ditutup)",
+    // Sebelumnya label baris SELALU staleShiftListLabel walau reviewReason-
+    // nya "force_closed_awaiting_cash" -- diperbaiki sekalian saat menambah
+    // dua reviewReason baru (Rencana Revisi 24 September 2026, lihat
+    // components/dashboard/home/shifts-needing-review.tsx).
+    awaitingCashListLabel: "Ditutup paksa, menunggu hitungan kas",
 
     // §14 prasyarat shift, poin Indokopi 24 jam (13 September 2026) --
     // peringatan pergantian hari bisnis + alur "tutup & buka shift baru"

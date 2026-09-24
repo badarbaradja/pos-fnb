@@ -288,6 +288,13 @@
       "when": 1790224678897,
       "tag": "0040_parallel_magneto",
       "breakpoints": true
+    },
+    {
+      "idx": 41,
+      "version": "7",
+      "when": 1790249821450,
+      "tag": "0041_lonely_mastermind",
+      "breakpoints": true
     }
   ]
 }

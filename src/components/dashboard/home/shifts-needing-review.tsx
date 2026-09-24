@@ -25,14 +25,31 @@ import { id as strings } from "@/lib/i18n/id";
 
 /**
  * components/dashboard/home/shifts-needing-review.tsx — §14 prasyarat
- * shift (13 September 2026). Dua kategori baris (lihat
- * getShiftsNeedingReview): shift BASI (masih 'open', tidak bisa dipakai
- * jualan lagi -- tombol "Tutup Paksa") dan shift yang SUDAH ditutup
- * paksa tapi kas belum dihitung (tombol "Hitung Kas & Selesaikan").
+ * shift (13 September 2026), diperluas Rencana Revisi 24 September 2026.
+ * Empat kategori baris (lihat getShiftsNeedingReview): shift BASI (masih
+ * 'open', tidak bisa dipakai jualan lagi -- tombol "Tutup Paksa"), shift
+ * yang SUDAH ditutup paksa tapi kas belum dihitung (tombol "Hitung Kas &
+ * Selesaikan"), dan dua kategori BARU yang murni informasional (foto
+ * prepare/closing gagal diambil) -- tidak ada aksi manajer yang berarti
+ * di sini (foto tidak bisa "diambil ulang" dari dashboard), cuma
+ * penanda supaya manajer tahu evidence shift itu tidak lengkap.
  */
 export function ShiftsNeedingReview({ shifts }: { shifts: ShiftNeedingReviewRow[] }) {
   if (shifts.length === 0) {
     return null;
+  }
+
+  function reasonLabel(reason: ShiftNeedingReviewRow["reviewReason"]): string {
+    switch (reason) {
+      case "stale":
+        return strings.shift.staleShiftListLabel;
+      case "force_closed_awaiting_cash":
+        return strings.shift.awaitingCashListLabel;
+      case "prepare_photo_failed":
+        return strings.shiftReport.reviewReasonPreparePhotoFailed;
+      case "closing_photo_failed":
+        return strings.shiftReport.reviewReasonClosingPhotoFailed;
+    }
   }
 
   return (
@@ -40,9 +57,9 @@ export function ShiftsNeedingReview({ shifts }: { shifts: ShiftNeedingReviewRow[
       <h2 className="font-heading text-sm font-semibold text-destructive">{strings.shift.needsReviewBadge}</h2>
       <p className="text-xs text-muted-foreground">{strings.shift.needsReviewHint}</p>
       <ul className="flex flex-col gap-2">
-        {shifts.map((shift) => (
+        {shifts.map((shift, i) => (
           <li
-            key={shift.id}
+            key={`${shift.id}-${shift.reviewReason}-${i}`}
             className="flex flex-wrap items-center justify-between gap-2 rounded-lg border bg-background p-2.5 text-sm"
           >
             <div className="flex flex-col">
@@ -51,14 +68,14 @@ export function ShiftsNeedingReview({ shifts }: { shifts: ShiftNeedingReviewRow[
                 <span className="ml-2 text-xs text-muted-foreground">{shift.outletName}</span>
               </span>
               <span className="text-xs text-muted-foreground">
-                {strings.shift.staleShiftListLabel} · {shift.businessDate}
+                {reasonLabel(shift.reviewReason)} · {shift.businessDate}
               </span>
             </div>
             {shift.reviewReason === "stale" ? (
               <ForceCloseDialog shiftId={shift.id} employeeName={shift.employeeName} />
-            ) : (
+            ) : shift.reviewReason === "force_closed_awaiting_cash" ? (
               <ReconcileDialog shiftId={shift.id} employeeName={shift.employeeName} />
-            )}
+            ) : null}
           </li>
         ))}
       </ul>

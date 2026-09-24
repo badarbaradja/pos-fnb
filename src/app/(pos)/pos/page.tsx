@@ -60,6 +60,11 @@ export default async function PosPage() {
       // Kasir tidak boleh transaksi dulu.
       redirect("/pos/shift/opname-buka");
     }
+    if (shiftIssue === "prepare_required") {
+      // Rencana Revisi 24 September 2026 -- laporan Prepare (foto + jawaban
+      // event) belum diisi. Unconditional, dicek sesudah opname_required.
+      redirect("/pos/shift/prepare");
+    }
     if (shiftIssue === "closing_in_progress") {
       // counted_cash sudah terkunci (sedang proses tutup) -- tidak boleh
       // jualan lagi sampai proses tutup itu selesai.

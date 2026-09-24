@@ -42,6 +42,7 @@ import { hashPin } from "@/lib/auth/pin";
 import { generateId } from "@/lib/utils/id";
 import { businessDate } from "@/lib/utils/business-date";
 import { openShiftWithDb } from "@/lib/pos/shift";
+import { submitPrepareReportWithDb } from "@/lib/pos/shift-report";
 import { payOrderWithDb } from "@/lib/pos/pay-order";
 import { getSalesByBrand } from "../sales-report";
 
@@ -95,6 +96,13 @@ describe.skipIf(!hasEnv)("Pembatasan akses per outlet, Tahap 3 -- getSalesByBran
       openingCash: "0",
     });
     expect(openResult.success).toBeTruthy();
+    // Rencana Revisi 24 September 2026 -- laporan Prepare sekarang gerbang
+    // WAJIB untuk SETIAP shift -- tidak relevan dengan yang diuji file ini.
+    await submitPrepareReportWithDb(db, businessId, {
+      shiftId: openResult.success!.shiftId,
+      photo: { photoPath: "test/prepare.jpg" },
+      hasEvent: false,
+    });
 
     return { outletId, deviceId: device!.id };
   }

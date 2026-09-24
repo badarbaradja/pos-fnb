@@ -50,6 +50,7 @@ import {
 import { hashPin } from "@/lib/auth/pin";
 import { generateId } from "@/lib/utils/id";
 import { closeCashlessShiftWithDb, getShiftSalesSummary, openShiftWithDb } from "../shift";
+import { submitClosingReportWithDb, submitPrepareReportWithDb } from "../shift-report";
 import { payOrderWithDb } from "../pay-order";
 import { refundOrderWithDb, voidOrderWithDb } from "../void-refund";
 
@@ -84,6 +85,14 @@ describe.skipIf(!hasEnv)("T16 — void & refund", () => {
       openingCash: "0",
     });
     expect(result.success).toBeTruthy();
+    // Rencana Revisi 24 September 2026 -- laporan Prepare sekarang gerbang
+    // WAJIB (checkShiftSellability -> 'prepare_required') untuk SETIAP
+    // shift -- tidak relevan dengan yang diuji file ini, diisi otomatis.
+    await submitPrepareReportWithDb(db, businessId, {
+      shiftId: result.success!.shiftId,
+      photo: { photoPath: "test/prepare.jpg" },
+      hasEvent: false,
+    });
     return result.success!.shiftId;
   }
 
@@ -235,6 +244,11 @@ describe.skipIf(!hasEnv)("T16 — void & refund", () => {
     const shiftId = await openShiftOnDevice(closedDeviceId);
     const { orderId } = await payOrder("1", closedDeviceId);
 
+    await submitClosingReportWithDb(db, businessId, {
+      shiftId,
+      photo: { photoPath: "test/closing.jpg" },
+      cleanlinessNote: "Sudah dibersihkan (data uji)",
+    });
     const closeResult = await closeCashlessShiftWithDb(db, businessId, { shiftId });
     expect(closeResult.success).toBeTruthy();
 

@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { and, eq, isNotNull, isNull, desc, sql } from "drizzle-orm";
+import { and, eq, gte, isNotNull, isNull, desc, or, sql } from "drizzle-orm";
 import { Decimal } from "decimal.js";
 import type { UserDbHandle } from "@/lib/db/client";
 import {
@@ -25,6 +25,7 @@ import {
   getOpeningOpnameStatus,
   type OpeningOpnameStatus,
 } from "@/lib/stock-opnames/shift-opname";
+import { isClosingReportComplete, isPrepareReportComplete } from "@/lib/pos/shift-report";
 
 /**
  * lib/pos/shift.ts — logika inti T15, pola thin-wrapper yang sama dengan
@@ -86,6 +87,10 @@ export type OpenShiftRow = {
   // yang menandai bahan apa pun) -- kolom ini TIDAK mengubah perilaku
   // shift manapun sampai Ita mengisi checkbox di halaman Bahan.
   openingOpnameStatus: OpeningOpnameStatus;
+  // Rencana Revisi 24 September 2026 -- laporan Prepare (foto + jawaban
+  // event) sudah lengkap atau belum. Lihat isPrepareReportComplete()
+  // (lib/pos/shift-report.ts) untuk definisi "lengkap".
+  prepareCompleted: boolean;
 };
 
 /**
@@ -115,6 +120,9 @@ export async function getOpenShiftForDevice(
       countedCash: shifts.countedCash,
       expectedCash: shifts.expectedCash,
       cashVariance: shifts.cashVariance,
+      preparePhotoPath: shifts.preparePhotoPath,
+      preparePhotoMissingReason: shifts.preparePhotoMissingReason,
+      prepareHasEvent: shifts.prepareHasEvent,
     })
     .from(shifts)
     .innerJoin(employees, eq(shifts.employeeId, employees.id))
@@ -129,16 +137,22 @@ export async function getOpenShiftForDevice(
     .limit(1);
   if (!row) return null;
 
+  const { preparePhotoPath, preparePhotoMissingReason, prepareHasEvent, ...rest } = row;
   const openingOpnameStatus = await getOpeningOpnameStatus(db, {
     businessId,
     shiftId: row.id,
   });
-  return { ...row, openingOpnameStatus };
+  return {
+    ...rest,
+    openingOpnameStatus,
+    prepareCompleted: isPrepareReportComplete({ preparePhotoPath, preparePhotoMissingReason, prepareHasEvent }),
+  };
 }
 
 export type ShiftSellabilityIssue =
   | "no_shift"
   | "opname_required"
+  | "prepare_required"
   | "closing_in_progress"
   | "stale";
 
@@ -177,6 +191,14 @@ export function checkShiftSellability(
   if (shift.openingOpnameStatus === "pending") {
     return "opname_required";
   }
+  // Rencana Revisi 24 September 2026 -- laporan Prepare (foto + jawaban
+  // event), dicek SESUDAH opname_required (layar prepare menempel
+  // "sesudah opname" per instruksi) tapi SEBELUM closing_in_progress/
+  // stale -- unconditional untuk SEMUA shift (tidak bergantung bahan
+  // berflag sama sekali, beda dari opname).
+  if (!shift.prepareCompleted) {
+    return "prepare_required";
+  }
   if (shift.countedCash !== null) {
     return "closing_in_progress";
   }
@@ -193,6 +215,8 @@ export function getShiftSellabilityErrorMessage(issue: ShiftSellabilityIssue): s
       return strings.pos.noActiveShiftError;
     case "opname_required":
       return strings.pos.openingOpnameRequiredError;
+    case "prepare_required":
+      return strings.pos.prepareRequiredError;
     case "closing_in_progress":
       return strings.pos.shiftClosingInProgressError;
     case "stale":
@@ -267,7 +291,11 @@ export async function getOpenShiftsForBusiness(
     .orderBy(shifts.openedAt);
 }
 
-export type ShiftReviewReason = "stale" | "force_closed_awaiting_cash";
+export type ShiftReviewReason =
+  | "stale"
+  | "force_closed_awaiting_cash"
+  | "prepare_photo_failed"
+  | "closing_photo_failed";
 
 export type ShiftNeedingReviewRow = {
   id: string;
@@ -366,6 +394,64 @@ export async function getShiftsNeedingReview(
       )
     );
 
+  // Rencana Revisi 24 September 2026 -- shift yang kamera prepare/closing-
+  // nya gagal dibuka (photoMissingReason terisi). Dibatasi 48 jam terakhir
+  // (openedAt) SUPAYA SENGAJA -- kolom-kolom ini permanen di baris shift
+  // (tidak pernah "dibersihkan" seperti stale/awaiting_cash yang otomatis
+  // hilang begitu kondisinya selesai), jadi tanpa batas waktu daftar ini
+  // akan menumpuk foto gagal dari berbulan-bulan lalu. 48 jam menutup
+  // shift manapun "hari ini" termasuk outlet dengan jam cutoff larut malam,
+  // tanpa perlu hitung businessDate per outlet lagi di sini (staleRows di
+  // atas sudah melakukan itu untuk kebutuhan berbeda).
+  const photoFailedCutoff = new Date(Date.now() - 48 * 60 * 60 * 1000);
+  const photoFailedRows = await db
+    .select({
+      id: shifts.id,
+      outletId: shifts.outletId,
+      outletName: outlets.name,
+      employeeId: shifts.employeeId,
+      employeeName: sql<string>`coalesce(${shifts.servedByName}, ${employees.fullName})`,
+      businessDate: shifts.businessDate,
+      status: shifts.status,
+      openedAt: shifts.openedAt,
+      closedAt: shifts.closedAt,
+      preparePhotoMissingReason: shifts.preparePhotoMissingReason,
+      closingPhotoMissingReason: shifts.closingPhotoMissingReason,
+    })
+    .from(shifts)
+    .innerJoin(employees, eq(shifts.employeeId, employees.id))
+    .innerJoin(outlets, eq(shifts.outletId, outlets.id))
+    .where(
+      and(
+        eq(shifts.businessId, businessId),
+        gte(shifts.openedAt, photoFailedCutoff),
+        or(isNotNull(shifts.preparePhotoMissingReason), isNotNull(shifts.closingPhotoMissingReason)),
+        outletScopeCondition(allowedOutletIds, shifts.outletId)
+      )
+    );
+
+  const photoFailedFlatRows: ShiftNeedingReviewRow[] = photoFailedRows.flatMap((r) => {
+    const base = {
+      id: r.id,
+      outletId: r.outletId,
+      outletName: r.outletName,
+      employeeId: r.employeeId,
+      employeeName: r.employeeName,
+      businessDate: r.businessDate,
+      status: (r.status === "open" ? "open" : "closed") as "open" | "closed",
+      openedAt: r.openedAt,
+      closedAt: r.closedAt,
+    };
+    const rows: ShiftNeedingReviewRow[] = [];
+    if (r.preparePhotoMissingReason !== null) {
+      rows.push({ ...base, reviewReason: "prepare_photo_failed" });
+    }
+    if (r.closingPhotoMissingReason !== null) {
+      rows.push({ ...base, reviewReason: "closing_photo_failed" });
+    }
+    return rows;
+  });
+
   return [
     ...staleRows,
     ...awaitingCashRows.map(
@@ -382,6 +468,7 @@ export async function getShiftsNeedingReview(
         closedAt: r.closedAt,
       })
     ),
+    ...photoFailedFlatRows,
   ];
 }
 
@@ -456,14 +543,19 @@ export async function openShiftWithDb(
     // Diambil LEBIH DULU (bukan sekadar "ada shift open -> tolak") supaya
     // shift BASI (businessDate sudah bukan hari ini) TIDAK menghalangi
     // shift baru dibuka -- itu justru jalan keluarnya (§14 prasyarat
-    // shift, 13 September 2026). Shift yang sedang mid-close
-    // (countedCash terkunci) TETAP menghalangi -- itu proses aktif hari
-    // ini, tidak boleh dilewati begitu saja dengan buka shift baru.
+    // shift, 13 September 2026). Shift LAIN APA PUN yang masih aktif hari
+    // ini (sellable, sedang mid-close, ATAU menunggu opname/prepare-nya
+    // sendiri diisi -- Rencana Revisi 24 September 2026) TETAP menghalangi
+    // -- "stale" SATU-SATUNYA alasan yang boleh dilewati begitu saja
+    // dengan buka shift baru. Ditulis sebagai allow-list ("izinkan HANYA
+    // stale"), bukan blocklist per-nilai, supaya ShiftSellabilityIssue
+    // baru di masa depan otomatis ikut memblokir tanpa perlu diingat
+    // menambahkannya di sini juga.
     const existing = await getOpenShiftForDevice(db, businessId, data.deviceId);
     const existingIssue = existing
       ? checkShiftSellability(existing, business.timezone, outlet.dayCutoffTime)
       : "no_shift";
-    if (existingIssue === null || existingIssue === "closing_in_progress") {
+    if (existing !== null && existingIssue !== "stale") {
       return { error: strings.shift.alreadyOpenError };
     }
 
@@ -771,6 +863,15 @@ export async function submitCountedCashWithDb(
     // confirmShiftCloseWithDb (titik penutupan sesungguhnya) sebagai
     // gantinya.
     if (!requiresReason) {
+      // Rencana Revisi 24 September 2026 -- laporan Closing (foto + catatan
+      // kebersihan) WAJIB sudah tersimpan (lewat submitClosingReportWithDb,
+      // dipanggil kasir SEBELUM menekan tombol ini) sebelum shift benar-benar
+      // closed di sini. Dicek SEBELUM opname tutup (murah, tidak menyentuh
+      // DB) -- kalau belum lengkap, shift tetap 'open', tidak ada movement
+      // opname yang ditulis untuk kemudian dibatalkan.
+      if (!isClosingReportComplete(shift)) {
+        return { error: strings.shiftReport.closingReportRequiredError };
+      }
       try {
         await finalizeShiftClosingOpnameIfAny(db, {
           businessId,
@@ -849,6 +950,9 @@ export async function confirmShiftCloseWithDb(
         countedCash: shifts.countedCash,
         outletId: shifts.outletId,
         businessDate: shifts.businessDate,
+        closingPhotoPath: shifts.closingPhotoPath,
+        closingPhotoMissingReason: shifts.closingPhotoMissingReason,
+        closingCleanlinessNote: shifts.closingCleanlinessNote,
       })
       .from(shifts)
       .where(and(eq(shifts.id, data.shiftId), eq(shifts.businessId, businessId)));
@@ -863,8 +967,11 @@ export async function confirmShiftCloseWithDb(
     }
 
     // Titik penutupan sesungguhnya untuk shift yang selisih kasnya di luar
-    // toleransi (lihat komentar sama di submitCountedCashWithDb) -- opname
-    // tutup dicek di sini, bukan di sana, untuk jalur ini.
+    // toleransi (lihat komentar sama di submitCountedCashWithDb) -- laporan
+    // closing DAN opname tutup dicek di sini, bukan di sana, untuk jalur ini.
+    if (!isClosingReportComplete(shift)) {
+      return { error: strings.shiftReport.closingReportRequiredError };
+    }
     try {
       await finalizeShiftClosingOpnameIfAny(db, {
         businessId,
@@ -970,7 +1077,14 @@ export async function closeCashlessShiftWithDb(
 
   try {
     const [shift] = await db
-      .select({ status: shifts.status, outletId: shifts.outletId, businessDate: shifts.businessDate })
+      .select({
+        status: shifts.status,
+        outletId: shifts.outletId,
+        businessDate: shifts.businessDate,
+        closingPhotoPath: shifts.closingPhotoPath,
+        closingPhotoMissingReason: shifts.closingPhotoMissingReason,
+        closingCleanlinessNote: shifts.closingCleanlinessNote,
+      })
       .from(shifts)
       .where(and(eq(shifts.id, data.shiftId), eq(shifts.businessId, businessId)));
     if (!shift) {
@@ -988,6 +1102,10 @@ export async function closeCashlessShiftWithDb(
     // wajib lewat submitCountedCashWithDb()/confirmShiftCloseWithDb().
     if (!outlet || outlet.cashEnabled) {
       return { error: strings.shift.cashEnabledError };
+    }
+
+    if (!isClosingReportComplete(shift)) {
+      return { error: strings.shiftReport.closingReportRequiredError };
     }
 
     // Satu-satunya titik penutupan untuk jalur cashless -- lihat komentar
@@ -1526,6 +1644,15 @@ export async function closeAndReopenShiftWithDb(
     // sudah tersimpan lewat upsertOpnameItemsBulkWithDb sebelum tombol ini
     // ditekan, sama pola dengan countedCash di atas: satu angka/isian yang
     // sudah final saat form ini dikirim, bukan dihitung ulang di sini.
+    // Rencana Revisi 24 September 2026 -- laporan Closing shift LAMA
+    // (foto + catatan kebersihan) WAJIB sudah tersimpan lewat
+    // submitClosingReportWithDb SEBELUM tombol tutup-dan-buka ini
+    // ditekan -- dicek di sini, murah dan tanpa efek samping, sebelum
+    // opname tutup di bawah.
+    if (!isClosingReportComplete(oldShift)) {
+      return { error: strings.shiftReport.closingReportRequiredError };
+    }
+
     // Kalau alasan selisih stok belum diisi, ini throw SEBELUM transaksi
     // apa pun dimulai -- shift lama tetap 'open', tidak pernah menutup lalu
     // gagal di step lain (sama jaminan seperti fungsi tutup shift lainnya).

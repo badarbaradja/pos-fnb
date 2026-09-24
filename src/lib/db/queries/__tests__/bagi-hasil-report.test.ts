@@ -34,6 +34,7 @@ import {
 import { generateId } from "@/lib/utils/id";
 import { hashPin } from "@/lib/auth/pin";
 import { openShiftWithDb } from "@/lib/pos/shift";
+import { submitPrepareReportWithDb } from "@/lib/pos/shift-report";
 import { sellBarangWithDb } from "@/lib/pos/sell-barang";
 import { getBagiHasilLaporan } from "../bagi-hasil-report";
 
@@ -154,6 +155,13 @@ describe.skipIf(!hasEnv)("TT11 — laporan bagi hasil bulanan penuh", () => {
     if (!shiftResult.success) {
       throw new Error("Gagal buka shift untuk fixture test bagi hasil");
     }
+    // Rencana Revisi 24 September 2026 -- laporan Prepare sekarang gerbang
+    // WAJIB untuk SETIAP shift -- tidak relevan dengan yang diuji file ini.
+    await submitPrepareReportWithDb(db, businessId, {
+      shiftId: shiftResult.success.shiftId,
+      photo: { photoPath: "test/prepare.jpg" },
+      hasEvent: false,
+    });
 
     const [pA] = await db
       .insert(pemilik)

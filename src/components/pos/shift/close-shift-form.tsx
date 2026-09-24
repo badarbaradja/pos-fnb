@@ -12,6 +12,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { id as strings } from "@/lib/i18n/id";
 import { ShiftOpnameForm } from "./shift-opname-form";
+import { ClosingReportForm } from "./closing-report-form";
 import type { ShiftOpnameItemRow } from "@/lib/stock-opnames/shift-opname";
 
 type ClosingOpname = {
@@ -258,6 +259,7 @@ export function CloseShiftForm({
           varianceAlertPercent={closingOpname.varianceAlertPercent}
         />
       ) : null}
+      <ClosingReportForm shiftId={shiftId} />
       <form onSubmit={handleSubmitCount} className="flex w-full max-w-sm flex-col gap-4">
         <p className="text-sm text-muted-foreground">{strings.shift.countedCashHint}</p>
         <div className="flex flex-col gap-2">

@@ -38,6 +38,7 @@ import { hashPin } from "@/lib/auth/pin";
 import { generateId } from "@/lib/utils/id";
 import { businessDate } from "@/lib/utils/business-date";
 import { openShiftWithDb } from "@/lib/pos/shift";
+import { submitPrepareReportWithDb } from "@/lib/pos/shift-report";
 import { payOrderWithDb } from "@/lib/pos/pay-order";
 import { refundOrderWithDb, voidOrderWithDb } from "@/lib/pos/void-refund";
 import { getSalesByPaymentMethod, getSalesSummary } from "@/lib/db/queries/sales-report";
@@ -198,6 +199,13 @@ describe.skipIf(!hasEnv)("integrasi -- omzet harian", () => {
       openingCash: "0",
     });
     expect(openResult.success).toBeTruthy();
+    // Rencana Revisi 24 September 2026 -- laporan Prepare sekarang gerbang
+    // WAJIB untuk SETIAP shift -- tidak relevan dengan yang diuji file ini.
+    await submitPrepareReportWithDb(db, businessId, {
+      shiftId: openResult.success!.shiftId,
+      photo: { photoPath: "test/prepare.jpg" },
+      hasEvent: false,
+    });
   });
 
   afterAll(async () => {
