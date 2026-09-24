@@ -118,8 +118,83 @@ describe.skipIf(!hasEnv)("stock-opnames/shift-opname", () => {
     const { db, businessId } = fixture;
     // Bisnis fixture ini belum punya bahan berflag apa pun sejauh ini.
     const shiftId = await makeShift(businessId, new Date());
-    const status = await getOpeningOpnameStatus(db, { businessId, shiftId });
+    const status = await getOpeningOpnameStatus(db, { businessId, outletId, shiftId });
     expect(status).toBe("not_required");
+  });
+
+  // ─── Bug ditemukan 24 September 2026 (SEBELUM sempat dipakai), lihat
+  // komentar getFlaggedIngredientIds di shift-opname.ts -- bahan berflag
+  // TANPA baris stock_levels di outlet ini tidak boleh masuk opname sama
+  // sekali, walau hitungTiapShift=true. Ini yang membuat outlet thrifting
+  // (nol stock_levels selamanya) otomatis tidak pernah kena gerbang ini. ──
+
+  it("bahan berflag TAPI TIDAK PUNYA stock_levels di outlet ini -> tidak dianggap berflag SAMA SEKALI di outlet ini, gerbang dilewati (nol bahan)", async () => {
+    const { db, businessId } = fixture;
+
+    const [outletLain] = await db
+      .insert(outlets)
+      .values({ businessId, brandId: (await db.select({ id: brands.id }).from(brands).limit(1))[0]!.id, code: "SOPB", name: "Outlet Lain (thrifting-like)" })
+      .returning({ id: outlets.id });
+    const outletLainId = outletLain!.id;
+
+    const [emp2] = await db
+      .insert(employees)
+      .values({ businessId, code: "SOPR2", fullName: "Petugas Outlet Lain", role: "cashier", pinHash: null })
+      .returning({ id: employees.id });
+
+    const [ing] = await db
+      .insert(ingredients)
+      .values({
+        businessId,
+        name: "Bahan Cuma Ada Di Outlet SOP",
+        baseUnit: "gram",
+        purchaseUnit: "kg",
+        purchaseFactor: "1000",
+        hitungTiapShift: true,
+      })
+      .returning({ id: ingredients.id });
+    // Stok bahan ini HANYA ada di outlet SOP -- SENGAJA TIDAK diberi baris
+    // stock_levels di outletLainId sama sekali (persis kondisi Bestie
+    // Thrift: nol stock_levels untuk bahan F&B apa pun).
+    await db.insert(stockLevels).values({ businessId, ingredientId: ing!.id, outletId, qtyOnHand: "50", avgCost: "1000" });
+
+    const [shiftLainRow] = await db
+      .insert(shifts)
+      .values({
+        id: generateId(),
+        businessId,
+        outletId: outletLainId,
+        employeeId: emp2!.id,
+        status: "open",
+        openedAt: new Date(),
+        businessDate: BUSINESS_DATE,
+        openingCash: "0",
+      })
+      .returning({ id: shifts.id });
+
+    const status = await getOpeningOpnameStatus(db, {
+      businessId,
+      outletId: outletLainId,
+      shiftId: shiftLainRow!.id,
+    });
+    expect(status).toBe("not_required"); // gerbang dilewati -- persis "nol bahan" sebelumnya
+
+    const { items } = await getShiftOpnameItemsForSession(db, {
+      businessId,
+      outletId: outletLainId,
+      opnameId: (
+        await getOrCreateShiftOpnameWithDb(db, {
+          businessId,
+          outletId: outletLainId,
+          shiftId: shiftLainRow!.id,
+          jenis: "buka",
+          businessDate: BUSINESS_DATE,
+        })
+      ).id,
+      jenis: "buka",
+      shiftId: shiftLainRow!.id,
+    });
+    expect(items).toEqual([]); // bahan itu TIDAK muncul di opname outlet ini
   });
 
   // ─── Test wajib #3: shift pertama -> tidak ada selisih palsu ───────────
@@ -139,12 +214,19 @@ describe.skipIf(!hasEnv)("stock-opnames/shift-opname", () => {
       })
       .returning({ id: ingredients.id });
     const ingredientId = ing!.id;
+    // Bahan ini SUDAH tercatat stok (qty berapa pun) di outlet ini --
+    // supaya berflag DI OUTLET INI sesuai aturan baru (getFlaggedIngredientIds
+    // sekarang mensyaratkan baris stock_levels di outlet, bukan cuma
+    // hitungTiapShift=true business-wide). Qty di sini TIDAK PENTING untuk
+    // yang diuji (previousClosingBalance null karena belum ada
+    // stock_movements SEBELUM shift ini, bukan karena stock_levels kosong).
+    await db.insert(stockLevels).values({ businessId, ingredientId, outletId, qtyOnHand: "0", avgCost: "0" });
 
     // Shift PERTAMA di outlet ini -- belum ada shift lain sama sekali,
     // dan bahan ini belum pernah punya stock_movements.
     const shiftId = await makeShift(businessId, new Date());
 
-    const status = await getOpeningOpnameStatus(db, { businessId, shiftId });
+    const status = await getOpeningOpnameStatus(db, { businessId, outletId, shiftId });
     expect(status).toBe("pending"); // ada 1 bahan berflag, opname belum submitted
 
     const opname = await getOrCreateShiftOpnameWithDb(db, {
@@ -185,7 +267,7 @@ describe.skipIf(!hasEnv)("stock-opnames/shift-opname", () => {
       })
     ).resolves.toMatchObject({ movementsCreated: 1 });
 
-    const doneStatus = await getOpeningOpnameStatus(db, { businessId, shiftId });
+    const doneStatus = await getOpeningOpnameStatus(db, { businessId, outletId, shiftId });
     expect(doneStatus).toBe("done");
   });
 

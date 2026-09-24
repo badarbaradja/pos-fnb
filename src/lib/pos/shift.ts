@@ -140,6 +140,7 @@ export async function getOpenShiftForDevice(
   const { preparePhotoPath, preparePhotoMissingReason, prepareHasEvent, ...rest } = row;
   const openingOpnameStatus = await getOpeningOpnameStatus(db, {
     businessId,
+    outletId: row.outletId,
     shiftId: row.id,
   });
   return {

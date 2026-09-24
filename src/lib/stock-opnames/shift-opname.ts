@@ -1,8 +1,11 @@
 /**
  * lib/stock-opnames/shift-opname.ts — Rencana Revisi 24 September 2026, §7
  * poin 4: opname 'buka'/'tutup' terikat ke SATU shift, HANYA untuk bahan
- * `ingredients.hitungTiapShift = true` (daftar pendek, BUKAN 225 bahan --
- * lihat komentar kolom itu di lib/db/schema.ts).
+ * `ingredients.hitungTiapShift = true` DAN yang punya baris `stock_levels`
+ * di OUTLET shift itu sendiri (daftar pendek per-OUTLET, bukan per-bisnis
+ * -- lihat komentar getFlaggedIngredientIds() di bawah untuk bug yang
+ * diperbaiki 24 September 2026 sebelum sempat dipakai, dan
+ * docs/04-CATATAN-TEKNIS.md §20).
  *
  * File ini TERPISAH dari lib/stock-opnames/manage.ts (opname 'berkala', yang
  * sengaja TIDAK diubah) supaya jelas: apa pun di sini boleh berevolusi
@@ -12,11 +15,12 @@
  * pembungkus yang tahu soal shift dan daftar bahan terbatas.
  */
 
-import { and, desc, eq, inArray, lt } from "drizzle-orm";
+import { and, desc, eq, exists, inArray, lt, sql } from "drizzle-orm";
 import type { UserDbHandle } from "@/lib/db/client";
 import {
   ingredients,
   shifts,
+  stockLevels,
   stockMovements,
   stockOpnameItems,
   stockOpnames,
@@ -26,8 +30,24 @@ import { getOpnameItemsForSession, submitOpnameWithDb, type OpnameItemRow } from
 
 type Db = UserDbHandle["db"];
 
-/** Semua ingredientId aktif yang ditandai wajib dihitung tiap shift, bisnis ini. */
-export async function getFlaggedIngredientIds(db: Db, businessId: string): Promise<string[]> {
+/**
+ * Bug ditemukan 24 September 2026, DIPERBAIKI SEBELUM sempat dipakai
+ * sungguhan (nol bahan ditandai hari itu) -- dicatat di
+ * docs/04-CATATAN-TEKNIS.md §20 alasan lengkapnya.
+ *
+ * Bahan masuk opname buka/tutup shift DI SATU OUTLET hanya kalau
+ * hitungTiapShift=true DAN bahan itu punya baris stock_levels DI OUTLET
+ * ITU (exists, bukan cuma businessId) -- bahan yang tidak pernah
+ * tercatat stok di outlet tertentu memang tidak relevan dihitung di
+ * sana. SEBELUM perbaikan ini, fungsi ini murni business-scoped (tidak
+ * menerima outletId sama sekali) -- begitu SATU bahan ditandai untuk
+ * outlet F&B, SEMUA outlet lain di bisnis yang sama (termasuk outlet
+ * thrifting yang secara struktural tidak pernah punya stock_levels
+ * bahan apa pun) ikut diminta opname bahan itu, walau systemQty-nya
+ * SELALU nol di sana -- bukan cuma thrifting, outlet F&B mana pun yang
+ * kebetulan tidak menyimpan bahan tertentu kena masalah yang sama.
+ */
+export async function getFlaggedIngredientIds(db: Db, businessId: string, outletId: string): Promise<string[]> {
   const rows = await db
     .select({ id: ingredients.id })
     .from(ingredients)
@@ -35,7 +55,19 @@ export async function getFlaggedIngredientIds(db: Db, businessId: string): Promi
       and(
         eq(ingredients.businessId, businessId),
         eq(ingredients.isActive, true),
-        eq(ingredients.hitungTiapShift, true)
+        eq(ingredients.hitungTiapShift, true),
+        exists(
+          db
+            .select({ one: sql`1` })
+            .from(stockLevels)
+            .where(
+              and(
+                eq(stockLevels.businessId, businessId),
+                eq(stockLevels.outletId, outletId),
+                eq(stockLevels.ingredientId, ingredients.id)
+              )
+            )
+        )
       )
     );
   return rows.map((r) => r.id);
@@ -57,9 +89,9 @@ export type OpeningOpnameStatus = "not_required" | "pending" | "done";
  */
 export async function getOpeningOpnameStatus(
   db: Db,
-  params: { businessId: string; shiftId: string }
+  params: { businessId: string; outletId: string; shiftId: string }
 ): Promise<OpeningOpnameStatus> {
-  const flagged = await getFlaggedIngredientIds(db, params.businessId);
+  const flagged = await getFlaggedIngredientIds(db, params.businessId, params.outletId);
   if (flagged.length === 0) return "not_required";
 
   const [existing] = await db
@@ -146,7 +178,7 @@ export async function getShiftOpnameItemsForSession(
 ): Promise<{ items: ShiftOpnameItemRow[]; isFirstShiftAtOutlet: boolean }> {
   const { businessId, outletId, opnameId, jenis, shiftId } = params;
 
-  const flaggedIds = await getFlaggedIngredientIds(db, businessId);
+  const flaggedIds = await getFlaggedIngredientIds(db, businessId, outletId);
 
   const [shift] = await db
     .select({ openedAt: shifts.openedAt })
@@ -248,7 +280,7 @@ export async function finalizeShiftClosingOpnameIfAny(
     submittedByEmployeeId?: string;
   }
 ): Promise<void> {
-  const flagged = await getFlaggedIngredientIds(db, params.businessId);
+  const flagged = await getFlaggedIngredientIds(db, params.businessId, params.outletId);
   if (flagged.length === 0) return;
 
   const opname = await getOrCreateShiftOpnameWithDb(db, {

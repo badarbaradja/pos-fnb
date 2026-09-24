@@ -272,6 +272,49 @@ terjadi di praktik, cukup catat sebagai keterbatasan yang diterima.
 setelah dikonfirmasi ke Indokopi apakah pola beli-kemasan-ganda ini
 benar terjadi.
 
+**6.5 (baru, diangkat 24 September 2026 saat opname terikat shift
+dibangun) — Opname untuk outlet THRIFTING: bentuknya apa?** Opname
+buka/tutup shift yang baru dibangun (§7 poin 4, Rencana Revisi 24
+September 2026) HANYA berlaku untuk `ingredients` (bahan dapur F&B) --
+tidak menyentuh `barang` (barang titipan thrifting) sama sekali, dan
+sengaja TIDAK diperluas ke situ tanpa jawaban klien lebih dulu.
+
+Alasannya bukan sekadar "belum sempat", tapi model datanya BEDA:
+- `ingredients` = kuantitas bulk (kg/liter/pcs, systemQty vs
+  physicalQty, selisih = angka). `barang` = **identitas unik per baris**
+  (kolom `kode`, satu barcode per potong fisik, `unique(businessId,
+  kode)`) -- "menghitung jumlah" tidak berarti apa-apa untuk barang
+  yang qty-nya selalu 1. Yang masuk akal secara struktural: **verifikasi
+  kehadiran fisik per barang** (conteng "ada"/"tidak ketemu" per baris
+  `siap_jual`/`baru_masuk`), bukan hitung ulang stok.
+- `barangStatusEnum` (schema.ts) cuma `baru_masuk | siap_jual | terjual
+  | rusak` -- **tidak ada nilai untuk "hilang/tidak ditemukan saat
+  opname"**. Memaksakan ke `rusak` mencampur dua kejadian berbeda
+  (rusak fisik vs hilang/dicuri).
+- `barang.pemilikId` menautkan ke pemilik titipan -- barang hilang saat
+  opname punya konsekuensi bagi-hasil (siapa menanggung kerugian: toko
+  atau pemilik titipan?) yang `ingredients` sama sekali tidak punya.
+  Ini keputusan BISNIS, bukan teknis, dan HARUS datang dari klien.
+
+**Rancangan kasar (BELUM DISETUJUI, jangan dibangun sebelum ada
+jawaban)**: tabel `barang_opnames` + `barang_opname_items` TERPISAH
+dari `stock_opnames`/`stock_opname_items` -- kolom-kolom tabel yang ada
+sekarang (`systemQty`/`physicalQty`/`unitCost` numerik, `variance`
+terhitung) dibangun total untuk kuantitas bulk, memaksakan barang unik
+ke bentuk itu berarti sebagian besar kolomnya jadi tidak berarti (qty
+selalu 1) sambil harus menambah kolom yang tidak relevan buat
+ingredients (barangId, status hasil opname). `barang_opname_items`
+kasarnya: `barangId`, `statusSebelum`, `ditemukan` (boolean), `catatan`.
+Belum diputuskan apakah opname thrifting ikut siklus buka/tutup per
+shift yang sama seperti ingredients, atau berkala terpisah seperti
+opname 'berkala' ingredients hari ini -- itu salah satu yang perlu
+ditanyakan ke klien.
+
+**Jangan diselesaikan sekarang** -- menunggu klien menjawab bentuk
+opname thrifting yang sebenarnya mereka mau (siklus per-shift atau
+berkala, dan bagaimana "barang hilang milik pemilik titipan"
+ditangani di bagi hasil).
+
 ---
 
 ## 7. Yang TIDAK dikerjakan dulu (tetap di rencana lama, tidak berubah urutannya)

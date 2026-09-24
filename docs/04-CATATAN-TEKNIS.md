@@ -814,3 +814,61 @@ di `user-db-fixture.ts` kalau `afterAll` test tiba-tiba gagal dengan
 pesan "FK NO ACTION ke tabel lain di luar daftar ini" — tambahkan
 manual cleanup di file test itu, jangan bongkar helper bersama untuk
 satu kasus.
+
+## 20. Bug ditemukan SEBELUM sempat dipakai: `getFlaggedIngredientIds` cuma di-scope ke bisnis, bukan ke outlet (diperbaiki 24 September 2026)
+
+Ditemukan saat menyelidiki pertanyaan terpisah ("opname thrifting
+bentuknya apa" — lihat `docs/05-RENCANA-FASE-2.md` §6.5), sebelum satu
+pun bahan sungguh-sungguh ditandai `hitung_tiap_shift = true` oleh
+user di produksi. Tidak pernah salah menghitung data nyata, tapi kalau
+tidak diperbaiki sebelum user mulai mencentang bahan, akan langsung
+salah pada bahan PERTAMA yang ditandai.
+
+**Bug-nya:** `getFlaggedIngredientIds(db, businessId)` (fungsi di
+`lib/stock-opnames/shift-opname.ts`, dipakai oleh gerbang opname
+buka/tutup shift, Rencana Revisi 24 September 2026 §7 poin 4) memfilter
+`ingredients` HANYA dengan `businessId` + `isActive` + `hitungTiapShift`
+— tidak melihat outlet sama sekali. `ingredients` sendiri memang
+business-wide (tidak ada kolom `outletId`), jadi ini kelihatan benar
+sekilas. Tapi akibatnya: begitu SATU bahan ditandai `hitung_tiap_shift`
+di mana pun, SEMUA outlet di bisnis itu — termasuk outlet yang tidak
+pernah menyimpan bahan tersebut sama sekali — ikut diwajibkan mengisi
+opname untuk bahan itu.
+
+**Dua kasus konkret yang kena:**
+- Outlet **thrifting** (mis. Bestie Thrift) tidak pernah punya baris
+  `stock_levels` untuk `ingredients` apa pun (thrifting jual `barang`,
+  bukan `ingredients` — lihat §6.5 di `05-RENCANA-FASE-2.md`). Begitu
+  ada satu bahan F&B ditandai di outlet lain, Bestie Thrift ikut
+  diminta opname bahan yang stoknya "selalu nol" — bukan karena stok
+  benar-benar nol (opname pertama boleh nol), tapi karena bahan itu
+  TIDAK RELEVAN SAMA SEKALI di outlet itu.
+- Outlet **F&B lain** yang tidak menyetok bahan tertentu (mis. outlet
+  tanpa mesin espresso ditandai wajib opname biji kopi) kena masalah
+  yang sama persis, bukan cuma soal thrifting vs F&B.
+
+**Aturan baru:** bahan masuk daftar opname buka/tutup shift di sebuah
+outlet HANYA kalau `hitung_tiap_shift = true` DAN bahan itu punya
+baris `stock_levels` di outlet tersebut (`EXISTS` correlated
+subquery ke `stock_levels` dengan `business_id`, `outlet_id`,
+`ingredient_id`). Bahan yang tidak pernah tercatat stoknya di satu
+outlet memang tidak relevan dihitung di sana — aturan ini otomatis
+menyelesaikan kedua kasus di atas tanpa perlu tahu apakah outlet itu
+thrifting atau F&B; tidak ada percabangan berdasarkan `posMode` di
+kode ini.
+
+**Yang diubah:** `getFlaggedIngredientIds(db, businessId, outletId)`
+sekarang wajib menerima `outletId`; tiga pemanggilnya
+(`getOpeningOpnameStatus`, `getShiftOpnameItemsForSession`,
+`finalizeShiftClosingOpnameIfAny` di file yang sama, plus call site di
+`lib/pos/shift.ts` dan `app/(pos)/pos/shift/close/page.tsx`) ikut
+diteruskan `outletId`-nya. Tidak ada migrasi baru — `stock_levels`
+sudah ada, ini murni perubahan query.
+
+**Test wajib** (`shift-opname.test.ts`): bahan ditandai
+`hitung_tiap_shift = true` tapi TIDAK punya baris `stock_levels` di
+outlet yang diuji → tidak muncul di `getShiftOpnameItemsForSession`
+outlet itu, dan `getOpeningOpnameStatus` mengembalikan
+`"not_required"` (gerbang dilewati seperti nol-bahan-berflag) —
+sekalipun bahan yang sama PUNYA `stock_levels` (dan karena itu
+benar-benar aktif diopname) di outlet lain.

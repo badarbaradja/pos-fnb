@@ -52,7 +52,7 @@ export default async function CloseShiftPage() {
       varianceAlertValue: string;
       varianceAlertPercent: string;
     } | null = null;
-    const flaggedIds = await getFlaggedIngredientIds(db, businessId);
+    const flaggedIds = await getFlaggedIngredientIds(db, businessId, outlet.id);
     if (flaggedIds.length > 0) {
       const opname = await getOrCreateShiftOpnameWithDb(db, {
         businessId,
