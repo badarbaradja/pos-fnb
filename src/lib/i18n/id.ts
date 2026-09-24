@@ -329,6 +329,10 @@ export const id = {
     colPurchaseUnit: "Satuan Beli",
     colConversion: "Konversi",
     colStatus: "Status",
+    // Rencana Revisi 24 September 2026 §7 poin 4 -- satu kolom di halaman
+    // Bahan yang sudah ada (bukan halaman baru), daftar pendek bahan yang
+    // wajib dihitung di opname buka/tutup shift.
+    colHitungTiapShift: "Hitung Tiap Shift",
     colActions: "Aksi",
     duplicateCode: "Kode sudah dipakai bahan lain",
     baseUnitNotFound: "Satuan dasar '{code}' tidak terdaftar di halaman Satuan",
@@ -395,6 +399,29 @@ export const id = {
     allDoneMessage: "Semua produk aktif sudah punya resep.",
     noIngredientsWarning: "Belum ada bahan terdaftar sama sekali.",
     goToIngredients: "Buka halaman Bahan",
+  },
+  // Rencana Revisi 24 September 2026 §7 poin 4 -- opname 'buka'/'tutup'
+  // terikat shift, HANYA bahan hitungTiapShift. Terpisah dari `stockOpnames`
+  // (opname berkala/dashboard) supaya labelnya bisa beda konteks (mis.
+  // "Stok Akhir Shift Sebelumnya", bukan istilah dashboard).
+  shiftOpname: {
+    openingTitle: "Opname Stok Awal",
+    openingHint: "Hitung fisik bahan berikut sebelum mulai jualan shift ini.",
+    openingSubmitButton: "Simpan & Mulai Jualan",
+    openingSubmitting: "Menyimpan...",
+    openingSubmittedSuccess: "Opname stok awal tersimpan.",
+    closingTitle: "Opname Stok Akhir",
+    closingHint: "Hitung fisik bahan berikut sebelum menutup shift.",
+    colIngredient: "Bahan",
+    colPreviousClosing: "Stok Akhir Shift Sebelumnya",
+    colSystemQty: "Stok Sistem",
+    colPhysicalQty: "Stok Fisik",
+    colVariance: "Selisih",
+    firstShiftNote: "Opname pertama -- belum ada shift sebelumnya di outlet ini untuk dibandingkan.",
+    noBaselineNote: "Belum ada pembanding untuk bahan ini.",
+    reasonRequiredLabel: "Alasan selisih (wajib -- di luar ambang)",
+    reasonPlaceholder: "mis. tumpah, salah hitung, dsb.",
+    noFlaggedIngredients: "Tidak ada bahan yang ditandai wajib dihitung tiap shift.",
   },
   stockOpnames: {
     title: "Stock Opname",
@@ -930,6 +957,9 @@ export const id = {
     noActiveShiftError: "Tidak ada shift terbuka untuk perangkat ini. Buka shift dulu.",
     shiftClosingInProgressError: "Shift ini sedang dalam proses tutup (menunggu alasan selisih kas). Selesaikan penutupannya dulu.",
     staleShiftError: "Shift kemarin belum ditutup. Buka shift baru dulu.",
+    // Rencana Revisi 24 September 2026 §7 poin 4 -- shift punya bahan wajib
+    // hitung tapi opname BUKA-nya belum disubmit.
+    openingOpnameRequiredError: "Hitung stok awal dulu sebelum mulai jualan.",
     barangDuplikatDiKeranjangError: "Barang yang sama tidak bisa ada dua kali di satu keranjang -- ini barang unik satu potong.",
     barangTidakSiapJualError: "Barang {kode} sudah terjual atau belum ditandai siap jual -- tidak bisa dijual lagi.",
     barangSudahTerjualSaatBayarError: "Salah satu barang di keranjang baru saja terjual duluan (kemungkinan kasir lain memindainya bersamaan). Keluarkan dari keranjang lalu coba lagi.",

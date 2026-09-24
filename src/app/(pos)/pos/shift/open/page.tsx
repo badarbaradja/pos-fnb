@@ -39,6 +39,9 @@ export default async function OpenShiftPage() {
     if (existingIssue === null) {
       redirect("/pos");
     }
+    if (existingIssue === "opname_required") {
+      redirect("/pos/shift/opname-buka");
+    }
     if (existingIssue === "closing_in_progress") {
       redirect("/pos/shift/close");
     }

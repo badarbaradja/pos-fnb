@@ -54,6 +54,12 @@ export default async function PosPage() {
       business?.timezone ?? "Asia/Jakarta",
       paired.outlet.dayCutoffTime
     );
+    if (shiftIssue === "opname_required") {
+      // Rencana Revisi 24 September 2026 §7 poin 4 -- ada bahan berflag
+      // (hitungTiapShift) TAPI opname stok awal shift ini belum submitted.
+      // Kasir tidak boleh transaksi dulu.
+      redirect("/pos/shift/opname-buka");
+    }
     if (shiftIssue === "closing_in_progress") {
       // counted_cash sudah terkunci (sedang proses tutup) -- tidak boleh
       // jualan lagi sampai proses tutup itu selesai.

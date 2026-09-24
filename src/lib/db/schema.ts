@@ -1810,6 +1810,16 @@ export const ingredients = pgTable(
       .default("100"), // 1 kg ayam → 800 g siap saji → 80
     isSemiFinished: boolean("is_semi_finished").notNull().default(false),
     shelfLifeDays: integer("shelf_life_days"),
+    // Rencana Revisi 24 September 2026, §7 poin 2 -- daftar PENDEK bahan yang
+    // wajib dihitung fisik di opname BUKA dan TUTUP setiap shift (BUKAN semua
+    // bahan -- opname penuh dua kali sehari untuk seluruh bahan tidak akan
+    // dikerjakan orang, bukti: 2 laporan terkirim dari 24 penugasan sistem
+    // laporan Koperumnas). Diisi manual oleh Ita/dapur lewat checkbox di
+    // halaman bahan yang sudah ada -- BUKAN keputusan agent, lihat §8 rencana
+    // revisi. Default false untuk semua bahan lama DAN baru -- flag ini
+    // eksplisit dinyalakan satu-satu, tidak pernah ditebak dari kategori atau
+    // nilai bahan.
+    hitungTiapShift: boolean("hitung_tiap_shift").notNull().default(false),
     isActive: boolean("is_active").notNull().default(true),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
@@ -2593,6 +2603,16 @@ export const stockOpnameStatusEnum = pgEnum("stock_opname_status", [
   "submitted",
 ]);
 
+// Rencana Revisi 24 September 2026, §7 poin 4 -- 'berkala' adalah opname
+// penuh yang SUDAH ADA sebelum revisi ini (sengaja TIDAK diubah perilakunya:
+// tanpa shift_id, tanpa gerbang alasan-selisih). 'buka'/'tutup' adalah opname
+// TERBATAS (hanya ingredients.hitungTiapShift) yang terikat ke satu shift.
+export const stockOpnameJenisEnum = pgEnum("stock_opname_jenis", [
+  "buka",
+  "tutup",
+  "berkala",
+]);
+
 export const stockOpnames = pgTable(
   "stock_opnames",
   {
@@ -2604,6 +2624,13 @@ export const stockOpnames = pgTable(
       .notNull()
       .references(() => outlets.id),
     status: stockOpnameStatusEnum("status").notNull().default("draft"),
+    // Default 'berkala' -- SEMUA baris lama (dan kode lama yang belum
+    // menyebut jenis eksplisit, mis. createOpnameWithDb dashboard) otomatis
+    // tetap 'berkala', perilakunya tidak berubah sama sekali.
+    jenis: stockOpnameJenisEnum("jenis").notNull().default("berkala"),
+    // Nullable -- HANYA terisi untuk jenis 'buka'/'tutup'. 'berkala' selalu
+    // null (opname berkala tidak terikat shift mana pun).
+    shiftId: uuid("shift_id").references(() => shifts.id),
     businessDate: date("business_date").notNull(),
     // Judul opsional -- "Opname Bulanan September" atau kosong
     label: text("label"),
@@ -2620,6 +2647,12 @@ export const stockOpnames = pgTable(
   },
   (t) => [
     index("stock_opnames_outlet_date_idx").on(t.outletId, t.businessDate),
+    // Satu shift maksimal satu opname 'buka' dan satu 'tutup' -- mencegah
+    // dua sesi dobel kalau layar dibuka dua kali (tab ganda, refresh saat
+    // race). NULL (semua baris 'berkala') tidak kena constraint ini --
+    // Postgres tidak menganggap dua NULL sama, jadi banyak baris 'berkala'
+    // tetap bebas seperti sebelumnya.
+    unique("stock_opnames_shift_jenis_unique").on(t.shiftId, t.jenis),
     pgPolicy("stock_opnames_select", {
       for: "select",
       using: sql`${t.businessId} = any(auth_business_ids())`,

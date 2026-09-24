@@ -20,6 +20,11 @@ import { verifyCashierPin } from "@/lib/auth/pin";
 import { generateId } from "@/lib/utils/id";
 import { id as strings } from "@/lib/i18n/id";
 import { outletScopeCondition, type OutletScope } from "@/lib/auth/outlet-scope";
+import {
+  finalizeShiftClosingOpnameIfAny,
+  getOpeningOpnameStatus,
+  type OpeningOpnameStatus,
+} from "@/lib/stock-opnames/shift-opname";
 
 /**
  * lib/pos/shift.ts — logika inti T15, pola thin-wrapper yang sama dengan
@@ -75,6 +80,12 @@ export type OpenShiftRow = {
   countedCash: string | null;
   expectedCash: string | null;
   cashVariance: string | null;
+  // Rencana Revisi 24 September 2026 §7 poin 4 -- lihat
+  // lib/stock-opnames/shift-opname.ts getOpeningOpnameStatus() untuk arti
+  // ketiga nilainya. "not_required" untuk SEMUA bisnis hari ini (belum ada
+  // yang menandai bahan apa pun) -- kolom ini TIDAK mengubah perilaku
+  // shift manapun sampai Ita mengisi checkbox di halaman Bahan.
+  openingOpnameStatus: OpeningOpnameStatus;
 };
 
 /**
@@ -116,10 +127,20 @@ export async function getOpenShiftForDevice(
     )
     .orderBy(desc(shifts.openedAt))
     .limit(1);
-  return row ?? null;
+  if (!row) return null;
+
+  const openingOpnameStatus = await getOpeningOpnameStatus(db, {
+    businessId,
+    shiftId: row.id,
+  });
+  return { ...row, openingOpnameStatus };
 }
 
-export type ShiftSellabilityIssue = "no_shift" | "closing_in_progress" | "stale";
+export type ShiftSellabilityIssue =
+  | "no_shift"
+  | "opname_required"
+  | "closing_in_progress"
+  | "stale";
 
 /**
  * Kenapa ini ada (13 September 2026, temuan CEO -- §14 prasyarat shift):
@@ -148,6 +169,14 @@ export function checkShiftSellability(
   if (shift === null) {
     return "no_shift";
   }
+  // Rencana Revisi 24 September 2026 §7 poin 4 -- dicek SEBELUM
+  // closing_in_progress/stale: shift yang opname buka-nya belum submitted
+  // belum pernah "sungguh-sungguh mulai" sama sekali, jadi tidak relevan
+  // dicek apakah sedang proses tutup atau basi. "not_required" (nol bahan
+  // berflag, kondisi SEMUA bisnis hari ini) tidak pernah masuk cabang ini.
+  if (shift.openingOpnameStatus === "pending") {
+    return "opname_required";
+  }
   if (shift.countedCash !== null) {
     return "closing_in_progress";
   }
@@ -162,6 +191,8 @@ export function getShiftSellabilityErrorMessage(issue: ShiftSellabilityIssue): s
   switch (issue) {
     case "no_shift":
       return strings.pos.noActiveShiftError;
+    case "opname_required":
+      return strings.pos.openingOpnameRequiredError;
     case "closing_in_progress":
       return strings.pos.shiftClosingInProgressError;
     case "stale":
@@ -730,6 +761,28 @@ export async function submitCountedCashWithDb(
     const requiresReason = cashVariance.abs().greaterThan(tolerance);
     const now = new Date();
 
+    // Rencana Revisi 24 September 2026 §7 poin 4 -- shift akan benar-benar
+    // menjadi 'closed' DI SINI kalau selisih kas masih dalam toleransi
+    // (requiresReason=false). Opname tutup HARUS selesai sebelum baris
+    // shifts diupdate -- kalau gagal (alasan selisih stok belum diisi),
+    // shift tetap 'open' dan kasir menerima error itu, bukan shift
+    // terlanjur closed lalu gagal belakangan. Kalau requiresReason=true,
+    // shift belum benar-benar closed di sini -- opname tutup dicek di
+    // confirmShiftCloseWithDb (titik penutupan sesungguhnya) sebagai
+    // gantinya.
+    if (!requiresReason) {
+      try {
+        await finalizeShiftClosingOpnameIfAny(db, {
+          businessId,
+          outletId: shift.outletId,
+          shiftId: shift.id,
+          businessDate: shift.businessDate,
+        });
+      } catch (err) {
+        return { error: err instanceof Error ? err.message : strings.common.unexpectedError };
+      }
+    }
+
     // Guard `isNull(countedCash)` di WHERE (bukan cuma cek di atas) supaya
     // dua submit bersamaan (double-tap/race) tidak bisa dua-duanya lolos --
     // ini yang menegakkan write-once di level DB, atomik.
@@ -791,7 +844,12 @@ export async function confirmShiftCloseWithDb(
 
   try {
     const [shift] = await db
-      .select({ status: shifts.status, countedCash: shifts.countedCash })
+      .select({
+        status: shifts.status,
+        countedCash: shifts.countedCash,
+        outletId: shifts.outletId,
+        businessDate: shifts.businessDate,
+      })
       .from(shifts)
       .where(and(eq(shifts.id, data.shiftId), eq(shifts.businessId, businessId)));
     if (!shift) {
@@ -802,6 +860,20 @@ export async function confirmShiftCloseWithDb(
     }
     if (shift.countedCash === null) {
       return { error: strings.shift.countedCashRequiredError };
+    }
+
+    // Titik penutupan sesungguhnya untuk shift yang selisih kasnya di luar
+    // toleransi (lihat komentar sama di submitCountedCashWithDb) -- opname
+    // tutup dicek di sini, bukan di sana, untuk jalur ini.
+    try {
+      await finalizeShiftClosingOpnameIfAny(db, {
+        businessId,
+        outletId: shift.outletId,
+        shiftId: data.shiftId,
+        businessDate: shift.businessDate,
+      });
+    } catch (err) {
+      return { error: err instanceof Error ? err.message : strings.common.unexpectedError };
     }
 
     const now = new Date();
@@ -898,7 +970,7 @@ export async function closeCashlessShiftWithDb(
 
   try {
     const [shift] = await db
-      .select({ status: shifts.status, outletId: shifts.outletId })
+      .select({ status: shifts.status, outletId: shifts.outletId, businessDate: shifts.businessDate })
       .from(shifts)
       .where(and(eq(shifts.id, data.shiftId), eq(shifts.businessId, businessId)));
     if (!shift) {
@@ -916,6 +988,19 @@ export async function closeCashlessShiftWithDb(
     // wajib lewat submitCountedCashWithDb()/confirmShiftCloseWithDb().
     if (!outlet || outlet.cashEnabled) {
       return { error: strings.shift.cashEnabledError };
+    }
+
+    // Satu-satunya titik penutupan untuk jalur cashless -- lihat komentar
+    // sama di submitCountedCashWithDb soal kenapa ini SEBELUM update status.
+    try {
+      await finalizeShiftClosingOpnameIfAny(db, {
+        businessId,
+        outletId: shift.outletId,
+        shiftId: data.shiftId,
+        businessDate: shift.businessDate,
+      });
+    } catch (err) {
+      return { error: err instanceof Error ? err.message : strings.common.unexpectedError };
     }
 
     const now = new Date();
@@ -1432,6 +1517,27 @@ export async function closeAndReopenShiftWithDb(
       newOpeningCash = countedCash.toFixed(2);
       expectedCashOut = expectedCash.toFixed(2);
       cashVarianceOut = cashVariance.toFixed(2);
+    }
+
+    // Rencana Revisi 24 September 2026 §7 poin 4 -- opname tutup untuk
+    // shift LAMA. HARUS tetap satu langkah (closeAndReopenShiftWithDb tidak
+    // boleh dipecah) -- selisih stok sudah dihitung & ditampilkan live di
+    // layar (client-side, sebelum submit ini dipanggil) dan item-itemnya
+    // sudah tersimpan lewat upsertOpnameItemsBulkWithDb sebelum tombol ini
+    // ditekan, sama pola dengan countedCash di atas: satu angka/isian yang
+    // sudah final saat form ini dikirim, bukan dihitung ulang di sini.
+    // Kalau alasan selisih stok belum diisi, ini throw SEBELUM transaksi
+    // apa pun dimulai -- shift lama tetap 'open', tidak pernah menutup lalu
+    // gagal di step lain (sama jaminan seperti fungsi tutup shift lainnya).
+    try {
+      await finalizeShiftClosingOpnameIfAny(db, {
+        businessId,
+        outletId: oldShift.outletId,
+        shiftId: oldShift.id,
+        businessDate: oldShift.businessDate,
+      });
+    } catch (err) {
+      return { error: err instanceof Error ? err.message : strings.common.unexpectedError };
     }
 
     // --- Identitas shift BARU (PIN) -- diverifikasi SEBELUM transaksi DB

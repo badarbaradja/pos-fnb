@@ -90,12 +90,39 @@ describe("checkShiftSellability", () => {
       countedCash: null,
       expectedCash: null,
       cashVariance: null,
+      openingOpnameStatus: "not_required",
       ...overrides,
     };
   }
 
   it("shift null -> 'no_shift'", () => {
     expect(checkShiftSellability(null, TIMEZONE, CUTOFF)).toBe("no_shift");
+  });
+
+  // Rencana Revisi 24 September 2026 §7 poin 4 -- "kalau NOL bahan
+  // berflag, lewati sepenuhnya, jangan blokir apa pun": openingOpnameStatus
+  // "not_required" (kondisi SEMUA bisnis hari ini) tidak boleh memblokir
+  // sama sekali, walau shift ini juga sedang closing_in_progress -- test
+  // ini membuktikan "not_required" bukan false-positive utk 'pending'.
+  it("openingOpnameStatus 'not_required' (nol bahan berflag) -> tidak memblokir sama sekali", () => {
+    expect(checkShiftSellability(makeShift({}), TIMEZONE, CUTOFF)).toBeNull();
+  });
+
+  it("openingOpnameStatus 'pending' -> 'opname_required', mendahului closing_in_progress/stale", () => {
+    expect(
+      checkShiftSellability(makeShift({ openingOpnameStatus: "pending" }), TIMEZONE, CUTOFF)
+    ).toBe("opname_required");
+    expect(
+      checkShiftSellability(
+        makeShift({ openingOpnameStatus: "pending", countedCash: "1000", businessDate: "2000-01-01" }),
+        TIMEZONE,
+        CUTOFF
+      )
+    ).toBe("opname_required");
+  });
+
+  it("openingOpnameStatus 'done' -> tidak memblokir (opname buka sudah submitted)", () => {
+    expect(checkShiftSellability(makeShift({ openingOpnameStatus: "done" }), TIMEZONE, CUTOFF)).toBeNull();
   });
 
   it("countedCash sudah terisi -> 'closing_in_progress', walau businessDate masih hari ini", () => {

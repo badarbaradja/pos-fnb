@@ -11,6 +11,16 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { id as strings } from "@/lib/i18n/id";
+import { ShiftOpnameForm } from "./shift-opname-form";
+import type { ShiftOpnameItemRow } from "@/lib/stock-opnames/shift-opname";
+
+type ClosingOpname = {
+  opnameId: string;
+  items: ShiftOpnameItemRow[];
+  isFirstShiftAtOutlet: boolean;
+  varianceAlertValue: string;
+  varianceAlertPercent: string;
+};
 
 type ReconciliationState = {
   countedCash: string;
@@ -100,6 +110,9 @@ export function CloseShiftForm({
   initialExpectedCash,
   initialCashVariance,
   tolerance,
+  closingOpname,
+  outletId,
+  businessDate,
 }: {
   shiftId: string;
   employeeName: string;
@@ -109,6 +122,9 @@ export function CloseShiftForm({
   initialExpectedCash: string | null;
   initialCashVariance: string | null;
   tolerance: string;
+  closingOpname: ClosingOpname | null;
+  outletId: string;
+  businessDate: string;
 }) {
   const router = useRouter();
   const [countedCashInput, setCountedCashInput] = useState("");
@@ -229,23 +245,37 @@ export function CloseShiftForm({
   }
 
   return (
-    <form onSubmit={handleSubmitCount} className="flex w-full max-w-sm flex-col gap-4">
-      <p className="text-sm text-muted-foreground">{strings.shift.countedCashHint}</p>
-      <div className="flex flex-col gap-2">
-        <Label htmlFor="countedCash">{strings.shift.countedCashLabel}</Label>
-        <Input
-          id="countedCash"
-          type="number"
-          min={0}
-          step="0.01"
-          value={countedCashInput}
-          onChange={(e) => setCountedCashInput(e.target.value)}
-          required
+    <>
+      {closingOpname ? (
+        <ShiftOpnameForm
+          jenis="tutup"
+          opnameId={closingOpname.opnameId}
+          outletId={outletId}
+          businessDate={businessDate}
+          items={closingOpname.items}
+          isFirstShiftAtOutlet={closingOpname.isFirstShiftAtOutlet}
+          varianceAlertValue={closingOpname.varianceAlertValue}
+          varianceAlertPercent={closingOpname.varianceAlertPercent}
         />
-      </div>
-      <Button type="submit" disabled={isPending}>
-        {isPending ? strings.shift.submittingCount : strings.shift.submitCountButton}
-      </Button>
-    </form>
+      ) : null}
+      <form onSubmit={handleSubmitCount} className="flex w-full max-w-sm flex-col gap-4">
+        <p className="text-sm text-muted-foreground">{strings.shift.countedCashHint}</p>
+        <div className="flex flex-col gap-2">
+          <Label htmlFor="countedCash">{strings.shift.countedCashLabel}</Label>
+          <Input
+            id="countedCash"
+            type="number"
+            min={0}
+            step="0.01"
+            value={countedCashInput}
+            onChange={(e) => setCountedCashInput(e.target.value)}
+            required
+          />
+        </div>
+        <Button type="submit" disabled={isPending}>
+          {isPending ? strings.shift.submittingCount : strings.shift.submitCountButton}
+        </Button>
+      </form>
+    </>
   );
 }

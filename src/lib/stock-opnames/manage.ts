@@ -15,18 +15,25 @@
  *   - HARGA: unit_cost diisi otomatis dari avg_cost yang sudah ada,
  *     atau dari nilai default yang disediakan pemanggil (opname pertama
  *     dari material.csv). Bisa dioverride pengguna sebelum submit.
- *   - ALASAN SELISIH: TIDAK ADA lagi (dihapus 18 September 2026, instruksi
- *     eksplisit CEO) -- untuk opname, alasan tidak menambah apa pun, selisih
- *     sudah tercatat lengkap di stock_movements dan bisa ditelusuri lewat
- *     kartu stok. Kolom `outlets.varianceAlertValue`/`varianceAlertPercent`
- *     TETAP ada di skema (tidak dihapus), cuma tidak dibaca di sini lagi.
+ *   - ALASAN SELISIH (opname 'berkala'): TIDAK ADA (dihapus 18 September
+ *     2026, instruksi eksplisit CEO) -- untuk opname berkala, alasan tidak
+ *     menambah apa pun, selisih sudah tercatat lengkap di stock_movements
+ *     dan bisa ditelusuri lewat kartu stok.
+ *   - ALASAN SELISIH (opname 'buka'/'tutup', Rencana Revisi 24 September
+ *     2026 §7 poin 4): WAJIB kalau selisih melampaui
+ *     `outlets.varianceAlertValue` ATAU `outlets.varianceAlertPercent` --
+ *     gerbang BARU, HANYA untuk dua jenis ini (lihat `validasiAlasanWajib`
+ *     di bawah, cabangnya cuma jalan kalau `opname.jenis !== "berkala"` --
+ *     TIDAK menghidupkan lagi gerbang lama untuk 'berkala').
  */
 
-import { and, eq, inArray } from "drizzle-orm";
+import { and, desc, eq, inArray, lt } from "drizzle-orm";
 import Decimal from "decimal.js";
 import { getAdminDb, type UserDbHandle } from "@/lib/db/client";
 import {
   ingredients,
+  outlets,
+  shifts,
   stockLevels,
   stockMovements,
   stockOpnameItems,
@@ -67,6 +74,13 @@ export type UpsertOpnameItemPayload = {
   ingredientId: string;
   physicalQty: string; // Decimal string, dalam base_unit
   unitCost: string; // Decimal string per base_unit
+  // Opsional -- kolom SUDAH ADA di skema (stockOpnameItems.varianceReason),
+  // dulu diisi lewat jalur ini juga sebelum 18 September 2026. Sekarang
+  // HANYA dipakai layar opname 'buka'/'tutup' (lihat
+  // lib/stock-opnames/shift-opname.ts + validasiAlasanSelisihWajib di
+  // berkas ini) -- pemanggil 'berkala' yang tidak pernah mengisi field ini
+  // TIDAK terpengaruh sama sekali (undefined -> tidak ditulis ke set()).
+  varianceReason?: string;
 };
 
 /** Hasil submit: ringkasan movement yang dibuat */
@@ -263,6 +277,7 @@ export async function upsertOpnameItemWithDb(
       .set({
         physicalQty: item.physicalQty,
         unitCost: item.unitCost,
+        ...(item.varianceReason !== undefined ? { varianceReason: item.varianceReason } : {}),
         updatedAt: new Date(),
       })
       .where(eq(stockOpnameItems.id, existing.id));
@@ -289,6 +304,7 @@ export async function upsertOpnameItemWithDb(
       systemQty,
       physicalQty: item.physicalQty,
       unitCost: item.unitCost,
+      varianceReason: item.varianceReason ?? null,
     });
   }
 }
@@ -368,7 +384,12 @@ export async function upsertOpnameItemsBulkWithDb(
     if (existingId) {
       await db
         .update(stockOpnameItems)
-        .set({ physicalQty: item.physicalQty, unitCost: item.unitCost, updatedAt: new Date() })
+        .set({
+          physicalQty: item.physicalQty,
+          unitCost: item.unitCost,
+          ...(item.varianceReason !== undefined ? { varianceReason: item.varianceReason } : {}),
+          updatedAt: new Date(),
+        })
         .where(eq(stockOpnameItems.id, existingId));
     } else {
       await db.insert(stockOpnameItems).values({
@@ -379,6 +400,7 @@ export async function upsertOpnameItemsBulkWithDb(
         systemQty: levelMap.get(item.ingredientId) ?? "0",
         physicalQty: item.physicalQty,
         unitCost: item.unitCost,
+        varianceReason: item.varianceReason ?? null,
       });
     }
     saved++;
@@ -401,13 +423,16 @@ export async function upsertOpnameItemsBulkWithDb(
  * 3. Update opname.status = submitted, isi submitted_by, submitted_at,
  *    variance per item.
  *
- * CATATAN (18 September 2026, instruksi eksplisit CEO): alasan selisih
- * TIDAK LAGI wajib atau memblokir submit -- untuk opname, selisihnya
- * sendiri sudah tercatat di ledger (stock_movements) dan bisa ditelusuri
- * lewat kartu stok, alasan tertulis tidak menambah apa pun. Kolom
- * `outlets.varianceAlertValue`/`varianceAlertPercent` SENGAJA TIDAK
- * dihapus dari skema (mungkin dipakai lagi untuk keperluan lain nanti),
- * cuma tidak lagi dibaca/dipakai memblokir apa pun di sini.
+ * CATATAN opname 'berkala' (18 September 2026, instruksi eksplisit CEO):
+ * alasan selisih TIDAK wajib atau memblokir submit -- selisihnya sendiri
+ * sudah tercatat di ledger (stock_movements) dan bisa ditelusuri lewat
+ * kartu stok, alasan tertulis tidak menambah apa pun.
+ *
+ * CATATAN opname 'buka'/'tutup' (Rencana Revisi 24 September 2026 §7 poin
+ * 4): kebalikannya -- alasan WAJIB kalau selisih melampaui
+ * `outlets.varianceAlertValue`/`varianceAlertPercent`, ditegakkan oleh
+ * `validasiAlasanSelisihWajib()` SEBELUM baris ini, throw di sana membatalkan
+ * seluruh submit (tidak ada movement yang ditulis).
  *
  * Menggunakan getAdminDb() karena:
  *   a. stock_movements hanya punya INSERT policy (bukan UPDATE) -- update
@@ -419,6 +444,154 @@ export async function upsertOpnameItemsBulkWithDb(
  *
  * @param businessDate tanggal bisnis transaksi (dari outlet.dayCutoffTime)
  */
+/**
+ * Rencana Revisi 24 September 2026, §7 poin 4 -- gerbang alasan-wajib untuk
+ * opname 'buka'/'tutup'. TIDAK PERNAH dipanggil untuk 'berkala' (lihat
+ * pemanggil di submitOpnameWithDb) -- fungsi ini sendiri juga tidak
+ * menerima jenis 'berkala' di tipenya, supaya salah pakai ketahuan di
+ * compile time.
+ *
+ * Baseline selisih BEDA per jenis:
+ *   - 'tutup': physicalQty vs systemQty (snapshot qty_on_hand SAAT sesi
+ *     dibuat -- baseline yang SAMA dipakai submitOpnameWithDb untuk
+ *     menulis movement, lihat komentar kepala berkas).
+ *   - 'buka': physicalQty vs SALDO AKHIR SHIFT SEBELUMNYA, dibaca dari
+ *     movement TERAKHIR (stock_movements.balanceAfter) sebelum shift INI
+ *     dibuka -- BUKAN systemQty. Sengaja query ledger terpisah (bukan
+ *     reuse systemQty yang kebetulan bernilai sama dalam kondisi normal)
+ *     supaya pemeriksaan ini tetap benar walau systemQty pernah drift dari
+ *     ledger karena sebab lain.
+ *
+ * "Opname pertama" (shift pertama di outlet ini, ATAU bahan ini belum
+ * pernah punya movement sama sekali) TIDAK PERNAH mewajibkan alasan --
+ * tidak ada pembanding, jadi tidak ada selisih yang bisa "melampaui ambang"
+ * (Rencana Revisi §7 poin 4, baris "Shift pertama di outlet").
+ *
+ * Threshold PERSEN dilewati (bukan diberlakukan sebagai 0 vs apa pun =
+ * selalu wajib) kalau baseline-nya nol -- pembagian dengan nol tidak
+ * berarti apa-apa; baris begitu tetap kena threshold NILAI ABSOLUT.
+ *
+ * Melempar SATU Error berisi daftar nama bahan yang perlu alasan (bukan
+ * satu error per bahan) -- submitOpnameWithDb menangkapnya sebagai
+ * kegagalan tunggal, konsisten dengan guard status yang sudah ada di sana.
+ */
+async function validasiAlasanSelisihWajib(
+  userDb: UserDbHandle["db"],
+  params: {
+    businessId: string;
+    outletId: string;
+    jenis: "buka" | "tutup";
+    shiftId: string | null;
+    counted: {
+      id: string;
+      ingredientId: string;
+      systemQty: string;
+      physicalQty: string | null;
+      unitCost: string;
+      varianceReason: string | null;
+    }[];
+  }
+): Promise<void> {
+  const { businessId, outletId, jenis, shiftId, counted } = params;
+  if (counted.length === 0) return;
+
+  const [outlet] = await userDb
+    .select({
+      varianceAlertValue: outlets.varianceAlertValue,
+      varianceAlertPercent: outlets.varianceAlertPercent,
+    })
+    .from(outlets)
+    .where(eq(outlets.id, outletId));
+  // Kolom NOT NULL dengan default di skema -- baris outlet yang valid
+  // (sudah dipastikan ada oleh pemanggil createOpnameWithDb) selalu punya
+  // ini. Kalau somehow tidak ketemu, biarkan lolos tanpa gerbang daripada
+  // memblokir submit karena bug pencarian outlet yang tidak berhubungan.
+  if (!outlet) return;
+  const ambangNilai = new Decimal(outlet.varianceAlertValue);
+  const ambangPersen = new Decimal(outlet.varianceAlertPercent);
+
+  // Baseline per ingredientId: 'tutup' pakai systemQty (sudah ada di
+  // `counted`, tidak perlu query lagi); 'buka' pakai saldo akhir shift
+  // sebelumnya dari ledger, atau null kalau tidak ada pembanding.
+  const baseline = new Map<string, Decimal | null>();
+
+  if (jenis === "tutup") {
+    for (const item of counted) baseline.set(item.ingredientId, new Decimal(item.systemQty));
+  } else {
+    // jenis === 'buka'
+    if (!shiftId) return; // seharusnya tidak mungkin (buka selalu shift-linked), jaga-jaga saja
+    const [shift] = await userDb
+      .select({ openedAt: shifts.openedAt, outletId: shifts.outletId })
+      .from(shifts)
+      .where(eq(shifts.id, shiftId));
+    if (!shift) return;
+
+    // "Shift pertama di outlet": ADA shift lain (bukan shift ini sendiri)
+    // yang openedAt-nya lebih awal DAN sudah tidak 'open' lagi (sudah
+    // pernah ditutup) -- kalau TIDAK ada, ini shift pertama, lewati gerbang
+    // untuk SELURUH sesi (Rencana Revisi §7 poin 4, baris "Shift pertama").
+    const [shiftSebelumnya] = await userDb
+      .select({ id: shifts.id })
+      .from(shifts)
+      .where(
+        and(
+          eq(shifts.outletId, shift.outletId),
+          lt(shifts.openedAt, shift.openedAt),
+          inArray(shifts.status, ["closed", "reconciled"])
+        )
+      )
+      .limit(1);
+    if (!shiftSebelumnya) return; // opname pertama outlet ini -- tidak ada pembanding sama sekali
+
+    for (const item of counted) {
+      const [movementTerakhir] = await userDb
+        .select({ balanceAfter: stockMovements.balanceAfter })
+        .from(stockMovements)
+        .where(
+          and(
+            eq(stockMovements.businessId, businessId),
+            eq(stockMovements.outletId, outletId),
+            eq(stockMovements.ingredientId, item.ingredientId),
+            lt(stockMovements.createdAt, shift.openedAt)
+          )
+        )
+        .orderBy(desc(stockMovements.createdAt))
+        .limit(1);
+      // Bahan ini belum pernah punya movement sebelum shift ini (baru
+      // ditandai hitungTiapShift setelah outlet berjalan) -- tidak ada
+      // pembanding untuk BAHAN INI meski outletnya bukan shift pertama.
+      baseline.set(item.ingredientId, movementTerakhir ? new Decimal(movementTerakhir.balanceAfter) : null);
+    }
+  }
+
+  const namaBahanPerluAlasan: string[] = [];
+  for (const item of counted) {
+    const base = baseline.get(item.ingredientId);
+    if (base === null || base === undefined) continue; // tidak ada pembanding -- lewati
+    if (item.varianceReason && item.varianceReason.trim() !== "") continue; // sudah ada alasan
+
+    const physical = new Decimal(item.physicalQty!);
+    const variance = physical.minus(base);
+    const totalCost = variance.abs().times(item.unitCost);
+    const lampauiNilai = totalCost.gt(ambangNilai);
+    const lampauiPersen = !base.isZero() && variance.abs().div(base.abs()).times(100).gt(ambangPersen);
+    if (lampauiNilai || lampauiPersen) namaBahanPerluAlasan.push(item.ingredientId);
+  }
+
+  if (namaBahanPerluAlasan.length === 0) return;
+
+  const namaBahan = await userDb
+    .select({ id: ingredients.id, name: ingredients.name })
+    .from(ingredients)
+    .where(inArray(ingredients.id, namaBahanPerluAlasan));
+  const namaMap = new Map(namaBahan.map((n) => [n.id, n.name]));
+  const daftar = namaBahanPerluAlasan.map((id) => namaMap.get(id) ?? id).join(", ");
+  const labelJenis = jenis === "buka" ? "buka shift" : "tutup shift";
+  throw new Error(
+    `Selisih di luar ambang untuk ${daftar} pada opname ${labelJenis} -- alasan wajib diisi sebelum submit.`
+  );
+}
+
 export async function submitOpnameWithDb(
   userDb: UserDbHandle["db"],
   params: {
@@ -439,6 +612,8 @@ export async function submitOpnameWithDb(
       status: stockOpnames.status,
       businessId: stockOpnames.businessId,
       outletId: stockOpnames.outletId,
+      jenis: stockOpnames.jenis,
+      shiftId: stockOpnames.shiftId,
     })
     .from(stockOpnames)
     .where(and(eq(stockOpnames.id, opnameId), eq(stockOpnames.businessId, businessId)));
@@ -456,6 +631,7 @@ export async function submitOpnameWithDb(
       systemQty: stockOpnameItems.systemQty,
       physicalQty: stockOpnameItems.physicalQty,
       unitCost: stockOpnameItems.unitCost,
+      varianceReason: stockOpnameItems.varianceReason,
     })
     .from(stockOpnameItems)
     .where(eq(stockOpnameItems.opnameId, opnameId));
@@ -463,6 +639,21 @@ export async function submitOpnameWithDb(
   // Pisahkan item yang sudah dihitung vs dilewati
   const counted = items.filter((i) => i.physicalQty !== null);
   const skipped = items.filter((i) => i.physicalQty === null);
+
+  // Rencana Revisi 24 September 2026 §7 poin 4 -- gerbang alasan-wajib BARU,
+  // HANYA untuk 'buka'/'tutup'. Dipanggil SEBELUM transaksi movement mulai
+  // (throw di sini = TIDAK ADA yang ditulis sama sekali, sama seperti guard
+  // status di atas) -- 'berkala' tidak pernah masuk fungsi ini sama sekali,
+  // jadi provably tidak berubah.
+  if (opname.jenis !== "berkala") {
+    await validasiAlasanSelisihWajib(userDb, {
+      businessId,
+      outletId,
+      jenis: opname.jenis,
+      shiftId: opname.shiftId,
+      counted,
+    });
+  }
 
   // Pakai adminDb untuk atomisitas + update tabel yang tidak punya UPDATE
   // RLS policy (stock_levels, stock_opnames)

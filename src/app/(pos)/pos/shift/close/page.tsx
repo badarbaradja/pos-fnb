@@ -1,8 +1,16 @@
 import { redirect } from "next/navigation";
+import { eq } from "drizzle-orm";
 import { createServerSupabaseClient } from "@/lib/auth/supabase";
 import { requirePermissionDb } from "@/lib/auth/permissions";
+import { outlets } from "@/lib/db/schema";
 import { getOpenShiftForDevice, getShiftSalesSummary } from "@/lib/pos/shift";
 import { getPairedDevice } from "@/lib/pos/device-pairing";
+import {
+  getFlaggedIngredientIds,
+  getOrCreateShiftOpnameWithDb,
+  getShiftOpnameItemsForSession,
+  type ShiftOpnameItemRow,
+} from "@/lib/stock-opnames/shift-opname";
 import { CloseShiftForm } from "@/components/pos/shift/close-shift-form";
 import { CloseCashlessShiftForm } from "@/components/pos/shift/close-cashless-shift-form";
 import { id as strings } from "@/lib/i18n/id";
@@ -31,6 +39,51 @@ export default async function CloseShiftPage() {
       .replace("{outlet}", outlet.name)
       .replace("{device}", device.name);
 
+    // Rencana Revisi 24 September 2026 §7 poin 4 -- opname stok akhir
+    // DIGABUNG ke layar tutup shift yang sudah ada (bukan langkah
+    // terpisah). "Kalau NOL bahan berflag, lewati sepenuhnya" -- cek
+    // getFlaggedIngredientIds DULU, jangan panggil getOrCreateShiftOpname-
+    // WithDb kalau kosong, supaya tidak ada baris stock_opnames dibuat
+    // untuk bisnis yang belum menandai bahan apa pun.
+    let closingOpname: {
+      opnameId: string;
+      items: ShiftOpnameItemRow[];
+      isFirstShiftAtOutlet: boolean;
+      varianceAlertValue: string;
+      varianceAlertPercent: string;
+    } | null = null;
+    const flaggedIds = await getFlaggedIngredientIds(db, businessId);
+    if (flaggedIds.length > 0) {
+      const opname = await getOrCreateShiftOpnameWithDb(db, {
+        businessId,
+        outletId: outlet.id,
+        shiftId: shift.id,
+        jenis: "tutup",
+        businessDate: shift.businessDate,
+      });
+      const { items, isFirstShiftAtOutlet } = await getShiftOpnameItemsForSession(db, {
+        businessId,
+        outletId: outlet.id,
+        opnameId: opname.id,
+        jenis: "tutup",
+        shiftId: shift.id,
+      });
+      const [outletThreshold] = await db
+        .select({
+          varianceAlertValue: outlets.varianceAlertValue,
+          varianceAlertPercent: outlets.varianceAlertPercent,
+        })
+        .from(outlets)
+        .where(eq(outlets.id, outlet.id));
+      closingOpname = {
+        opnameId: opname.id,
+        items,
+        isFirstShiftAtOutlet,
+        varianceAlertValue: outletThreshold?.varianceAlertValue ?? "0",
+        varianceAlertPercent: outletThreshold?.varianceAlertPercent ?? "0",
+      };
+    }
+
     if (!outlet.cashEnabled) {
       const summary = await getShiftSalesSummary(db, shift.id);
       return (
@@ -44,6 +97,9 @@ export default async function CloseShiftPage() {
             employeeName={shift.employeeName}
             openedAt={shift.openedAt.toISOString()}
             summary={summary}
+            closingOpname={closingOpname}
+            outletId={outlet.id}
+            businessDate={shift.businessDate}
           />
         </div>
       );
@@ -64,6 +120,9 @@ export default async function CloseShiftPage() {
           initialExpectedCash={shift.expectedCash}
           initialCashVariance={shift.cashVariance}
           tolerance={outlet.cashVarianceTolerance}
+          closingOpname={closingOpname}
+          outletId={outlet.id}
+          businessDate={shift.businessDate}
         />
       </div>
     );

@@ -281,6 +281,13 @@
       "when": 1789636495474,
       "tag": "0039_misty_trish_tilby",
       "breakpoints": true
+    },
+    {
+      "idx": 40,
+      "version": "7",
+      "when": 1790224678897,
+      "tag": "0040_parallel_magneto",
+      "breakpoints": true
     }
   ]
 }

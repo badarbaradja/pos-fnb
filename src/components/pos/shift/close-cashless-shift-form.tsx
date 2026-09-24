@@ -9,6 +9,16 @@ import type { ShiftSalesSummary } from "@/lib/pos/shift";
 import { formatIDR } from "@/lib/utils/money";
 import { Button } from "@/components/ui/button";
 import { id as strings } from "@/lib/i18n/id";
+import { ShiftOpnameForm } from "./shift-opname-form";
+import type { ShiftOpnameItemRow } from "@/lib/stock-opnames/shift-opname";
+
+type ClosingOpname = {
+  opnameId: string;
+  items: ShiftOpnameItemRow[];
+  isFirstShiftAtOutlet: boolean;
+  varianceAlertValue: string;
+  varianceAlertPercent: string;
+};
 
 function SummaryRow({ label, value }: { label: string; value: string }) {
   return (
@@ -31,11 +41,17 @@ export function CloseCashlessShiftForm({
   employeeName,
   openedAt,
   summary,
+  closingOpname,
+  outletId,
+  businessDate,
 }: {
   shiftId: string;
   employeeName: string;
   openedAt: string;
   summary: ShiftSalesSummary;
+  closingOpname: ClosingOpname | null;
+  outletId: string;
+  businessDate: string;
 }) {
   const router = useRouter();
   const [isPending, setIsPending] = useState(false);
@@ -63,6 +79,18 @@ export function CloseCashlessShiftForm({
 
   return (
     <div className="flex w-full max-w-sm flex-col gap-4">
+      {closingOpname && !closedAt ? (
+        <ShiftOpnameForm
+          jenis="tutup"
+          opnameId={closingOpname.opnameId}
+          outletId={outletId}
+          businessDate={businessDate}
+          items={closingOpname.items}
+          isFirstShiftAtOutlet={closingOpname.isFirstShiftAtOutlet}
+          varianceAlertValue={closingOpname.varianceAlertValue}
+          varianceAlertPercent={closingOpname.varianceAlertPercent}
+        />
+      ) : null}
       <div className="flex flex-col gap-1 rounded-lg border p-3 text-sm">
         <h2 className="mb-1 text-base font-semibold">{strings.shift.summaryTitle}</h2>
         <SummaryRow label={strings.shift.summaryEmployee} value={employeeName} />

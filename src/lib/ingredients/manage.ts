@@ -195,6 +195,39 @@ export async function updateIngredientWithDb(
 
 const setActiveSchema = z.object({ id: z.string().uuid(), isActive: z.boolean() });
 
+const setHitungTiapShiftSchema = z.object({
+  id: z.string().uuid(),
+  hitungTiapShift: z.boolean(),
+});
+
+/**
+ * Rencana Revisi 24 September 2026 §7 poin 4 -- centang "hitung tiap shift"
+ * di halaman Bahan yang sudah ada (BUKAN halaman baru). Daftar pendek ini
+ * (bukan 225 bahan) yang menentukan bahan mana masuk opname 'buka'/'tutup'
+ * per shift -- lihat lib/stock-opnames/shift-opname.ts
+ * getFlaggedIngredientIds().
+ */
+export async function setIngredientHitungTiapShiftWithDb(
+  db: Db,
+  businessId: string,
+  rawInput: unknown
+): Promise<IngredientActionResult> {
+  const parsed = setHitungTiapShiftSchema.safeParse(rawInput);
+  if (!parsed.success) {
+    return { error: parsed.error.issues[0]?.message ?? strings.common.unexpectedError };
+  }
+  const { id, hitungTiapShift } = parsed.data;
+
+  const updated = await db
+    .update(ingredients)
+    .set({ hitungTiapShift })
+    .where(and(eq(ingredients.id, id), eq(ingredients.businessId, businessId)))
+    .returning({ id: ingredients.id });
+  assertRowsAffected(updated, "bahan");
+
+  return { success: { ingredientId: id } };
+}
+
 /**
  * Bahan TIDAK PERNAH dihapus lewat jalur ini (master data, CLAUDE.md §3.2),
  * cuma disembunyikan dari pemilihan resep/entri stok baru -- tetap bisa

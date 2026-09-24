@@ -757,3 +757,60 @@ WAJIB ada di query itu.
 Kartu stok memberi tanda visual (ikon ⓘ + `title` tooltip, kolom qty
 dibuat italic/muted) khusus baris `transfer_loss`, supaya manusia yang
 membaca juga tidak salah menyimpulkan itu pengurangan stok kedua.
+
+## 19. Utang: `findTablesBlockingBusinessDelete`/`deleteBlockingRowsForBusiness` tidak melihat FK tidak langsung ke tabel lain (bukan ke `businesses`) — ditemukan lewat `stock_opnames.shift_id -> shifts.id` (Rencana Revisi 24 September 2026 §7 poin 4)
+
+Varian BARU dari batasan §17 di atas, mekanismenya beda jadi ditulis
+terpisah. `lib/db/__tests__/helpers/user-db-fixture.ts` — fungsi
+`findTablesBlockingBusinessDelete` — mencari tabel yang FK-nya
+LANGSUNG ke `businesses(id)` dengan `delete_rule = 'NO ACTION'`, lalu
+`deleteBlockingRowsForBusiness` menghapus baris tabel-tabel itu
+`WHERE business_id = ...` sebelum `businesses` sendiri dihapus.
+
+`stock_opnames` (migrasi 0040, 24 September 2026) menambah kolom
+`shift_id uuid references shifts(id)` — default `ON DELETE NO ACTION`,
+TIDAK diberi `onDelete: "cascade"` secara eksplisit di `schema.ts`.
+Tapi `stock_opnames.business_id` sendiri **`onDelete: "cascade"`** ke
+`businesses` — jadi `stock_opnames` TIDAK PERNAH muncul di hasil
+`findTablesBlockingBusinessDelete` sama sekali (query itu cuma mencari
+`delete_rule = 'NO ACTION'`), padahal baris `stock_opnames` yang
+`shift_id`-nya terisi tetap memblokir `DELETE shifts WHERE
+business_id = ...` yang dijalankan lebih dulu oleh
+`deleteBlockingRowsForBusiness` (`shifts` sendiri DITEMUKAN, karena FK
+`shifts.business_id -> businesses` memang `NO ACTION`).
+
+Beda dari §17 (`refunds` tidak ditemukan karena TIDAK PUNYA kolom
+`business_id` sendiri untuk dicocokkan): di sini `stock_opnames`
+PUNYA `business_id`, tapi tidak pernah masuk daftar sama sekali karena
+FK business_id-nya sendiri CASCADE, bukan NO ACTION — jadi bukan soal
+"kolom yang dicari tidak ada", tapi "tabelnya lolos dari pencarian
+padahal salah satu kolom LAINNYA (`shift_id`) memblokir tabel lain
+yang lebih dulu ditemukan".
+
+**Kapan ini jadi masalah:** hanya kalau test memakai
+`createUserDbFixture` DAN membuat baris `shifts` DAN baris
+`stock_opnames` dengan `shift_id` terisi untuk shift itu (jenis
+'buka'/'tutup'). `src/lib/stock-opnames/__tests__/shift-opname.test.ts`
+(test baru, ditulis bersamaan dengan fitur ini) PERSIS kombinasi itu —
+gejalanya: `deleteBlockingRowsForBusiness` gagal dengan pesan "gagal
+menghapus baris dari shifts ... FK NO ACTION ke tabel lain di luar
+daftar ini". Diperbaiki DI FILE TEST ITU SENDIRI (bukan di helper
+bersama) dengan menghapus baris `stock_opnames` untuk `businessId`
+tersebut secara manual di `afterAll`, sebelum memanggil
+`fixture.cleanup()` — pola sama seperti solusi `refunds` di §17
+(`void-refund.test.ts`).
+
+**Kenapa sengaja tidak diperbaiki di helper bersama:** sama alasan
+dengan §17 — perbaikan umum (N-hop, bukan cuma tabel-tabel yang FK-nya
+langsung ke `businesses`) berarti membangun graph FK penuh + topological
+sort atas seluruh skema `public`, jauh lebih kompleks daripada
+manfaatnya untuk dua kasus (`refunds`, `stock_opnames`) yang sejauh ini
+ditemukan. **Utang ini ditulis supaya orang berikutnya yang menambah
+kolom FK baru menunjuk ke tabel NON-`businesses` (pola sama
+`shift_id`/`opname_id`/dst) tahu harus mengecek dulu apakah test barunya
+kena batasan yang sama** — cari nama fungsi
+`findTablesBlockingBusinessDelete` atau `deleteBlockingRowsForBusiness`
+di `user-db-fixture.ts` kalau `afterAll` test tiba-tiba gagal dengan
+pesan "FK NO ACTION ke tabel lain di luar daftar ini" — tambahkan
+manual cleanup di file test itu, jangan bongkar helper bersama untuk
+satu kasus.

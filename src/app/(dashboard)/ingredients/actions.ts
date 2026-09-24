@@ -7,6 +7,7 @@ import {
   createIngredientWithDb,
   deleteIngredientWithDb,
   setIngredientActiveWithDb,
+  setIngredientHitungTiapShiftWithDb,
   updateIngredientWithDb,
   type IngredientActionResult,
 } from "@/lib/ingredients/manage";
@@ -71,6 +72,24 @@ export async function setIngredientActive(
 
   try {
     const result = await setIngredientActiveWithDb(db, businessId, { id, isActive });
+    if (!result.error) {
+      revalidatePath("/ingredients");
+    }
+    return result;
+  } finally {
+    await closeDb();
+  }
+}
+
+export async function setIngredientHitungTiapShift(
+  id: string,
+  hitungTiapShift: boolean
+): Promise<IngredientActionResult> {
+  const supabase = await createServerSupabaseClient();
+  const { db, closeDb, businessId } = await requirePermissionDb(supabase, "product.manage");
+
+  try {
+    const result = await setIngredientHitungTiapShiftWithDb(db, businessId, { id, hitungTiapShift });
     if (!result.error) {
       revalidatePath("/ingredients");
     }

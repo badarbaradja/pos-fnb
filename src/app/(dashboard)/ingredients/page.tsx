@@ -17,6 +17,7 @@ import { id as strings } from "@/lib/i18n/id";
 import { IngredientFormDialog, type IngredientFormValue } from "./ingredient-form-dialog";
 import {
   IngredientDeleteButton,
+  IngredientHitungTiapShiftCheckbox,
   IngredientToggleActiveButton,
 } from "./ingredient-row-actions";
 
@@ -98,6 +99,7 @@ export default async function IngredientsPage() {
               <TableHead>{strings.ingredients.colBaseUnit}</TableHead>
               <TableHead>{strings.ingredients.colConversion}</TableHead>
               <TableHead>{strings.ingredients.colStatus}</TableHead>
+              <TableHead>{strings.ingredients.colHitungTiapShift}</TableHead>
               <TableHead className="text-right">{strings.ingredients.colActions}</TableHead>
             </TableRow>
           </TableHeader>
@@ -128,6 +130,12 @@ export default async function IngredientsPage() {
                     <Badge variant={row.isActive ? "default" : "secondary"}>
                       {row.isActive ? strings.common.active : strings.common.inactive}
                     </Badge>
+                  </TableCell>
+                  <TableCell>
+                    <IngredientHitungTiapShiftCheckbox
+                      ingredientId={row.id}
+                      hitungTiapShift={row.hitungTiapShift}
+                    />
                   </TableCell>
                   <TableCell className="text-right">
                     <div className="flex items-center justify-end gap-1">
