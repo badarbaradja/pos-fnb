@@ -306,6 +306,17 @@ export const memberships = pgTable(
     role: userRoleEnum("role").notNull(),
     outletIds: uuid("outlet_ids").array(), // null = semua outlet
     isActive: boolean("is_active").notNull().default(true),
+    // Halaman Auditor (24 September 2026) -- grant SEMPIT, TERPISAH dari
+    // outletIds/role. TIDAK PERNAH dibaca oleh outletScopeCondition/
+    // allowedOutletIds atau kode lain di luar lib/audit/* -- satu-satunya
+    // efek kolom ini adalah lolos requireAuditAccess() (lib/audit/access.ts)
+    // dan fungsi SQL auth_can_audit() (lihat migrasi), yang cuma dipakai
+    // SATU halaman baru (laporan auditor lintas outlet). Mengubah kolom
+    // ini TIDAK mengubah outlet mana pun yang terlihat di halaman LAIN --
+    // itu tetap murni fungsi outletIds seperti sebelumnya. Owner-only untuk
+    // mengubahnya, lewat /team (permission "membership.manage" yang sudah
+    // ada, bukan jalur baru).
+    auditAllOutlets: boolean("audit_all_outlets").notNull().default(false),
   },
   (t) => [
     unique().on(t.businessId, t.userId),
@@ -2780,5 +2791,57 @@ export const stockOpnameItems = pgTable(
     }),
     // TIDAK ADA policy DELETE -- item tidak pernah dihapus satu-satu.
     // Seluruh sesi dihapus lewat cascade ON DELETE di opname_id FK.
+  ]
+).enableRLS();
+
+/**
+ * Halaman Auditor (24 September 2026) -- "sudah ditinjau" per outlet per
+ * hari bisnis, dicatat Ita (atau siapa pun yang lolos requireAuditAccess(),
+ * lib/audit/access.ts). RLS SENGAJA business-scoped saja (pola sama
+ * stock_opnames/stock_opname_items -- BUKAN outlet-scoped), karena tabel
+ * ini SENDIRI bukan jalur elevasi lintas outlet -- yang mengelevasi cuma
+ * fungsi SQL auth_can_audit()/audit_shifts_for_business_date() (lihat
+ * migrasi) yang dipakai MEMBACA laporan; menulis tanda "sudah ditinjau"
+ * tidak membocorkan data outlet lain (baris ini cuma bilang "outlet X
+ * tanggal Y sudah ditinjau", bukan angka apa pun), jadi gerbangnya cukup
+ * di app layer (requireAuditAccess) + business_id RLS biasa.
+ */
+export const auditReviews = pgTable(
+  "audit_reviews",
+  {
+    id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+    businessId: uuid("business_id")
+      .notNull()
+      .references(() => businesses.id, { onDelete: "cascade" }),
+    outletId: uuid("outlet_id")
+      .notNull()
+      .references(() => outlets.id),
+    businessDate: date("business_date").notNull(),
+    reviewedBy: uuid("reviewed_by")
+      .notNull()
+      .references(() => profiles.id),
+    reviewedByName: text("reviewed_by_name").notNull(),
+    reviewedAt: timestamp("reviewed_at", { withTimezone: true }).notNull().defaultNow(),
+    note: text("note"),
+  },
+  (t) => [
+    // Satu outlet, satu hari bisnis -> maksimal SATU tanda "sudah
+    // ditinjau" -- meninjau ulang MENIMPA (siapa/kapan/catatan terbaru),
+    // bukan menumpuk baris, supaya "siapa yang meninjau outlet ini hari
+    // ini" selalu satu jawaban tunggal, bukan riwayat yang harus diurutkan.
+    unique("audit_reviews_outlet_date_unique").on(t.outletId, t.businessDate),
+    pgPolicy("audit_reviews_select", {
+      for: "select",
+      using: sql`${t.businessId} = any(auth_business_ids())`,
+    }),
+    pgPolicy("audit_reviews_insert", {
+      for: "insert",
+      withCheck: sql`${t.businessId} = any(auth_business_ids())`,
+    }),
+    pgPolicy("audit_reviews_update", {
+      for: "update",
+      using: sql`${t.businessId} = any(auth_business_ids())`,
+      withCheck: sql`${t.businessId} = any(auth_business_ids())`,
+    }),
   ]
 ).enableRLS();

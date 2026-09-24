@@ -45,6 +45,7 @@ export async function saveMembership(
         role: formData.get("role"),
         outletIds: parseOutletIds(formData),
         isActive: formData.get("isActive") === "on",
+        auditAllOutlets: formData.get("auditAllOutlets") === "on",
       });
     } else {
       result = await inviteMembershipWithDb(db, businessId, userId, {

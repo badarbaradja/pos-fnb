@@ -295,6 +295,13 @@
       "when": 1790249821450,
       "tag": "0041_lonely_mastermind",
       "breakpoints": true
+    },
+    {
+      "idx": 42,
+      "version": "7",
+      "when": 1790254768216,
+      "tag": "0042_moaning_sue_storm",
+      "breakpoints": true
     }
   ]
 }

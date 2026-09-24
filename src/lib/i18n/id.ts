@@ -81,6 +81,7 @@ export const id = {
     reports: "Laporan Penjualan",
     stockReport: "Laporan Stok",
     bagiHasilReport: "Laporan Bagi Hasil",
+    audit: "Laporan Auditor",
     openMenu: "Buka menu",
     closeMenu: "Tutup menu",
     bukaKasirButton: "Buka Kasir",
@@ -203,6 +204,11 @@ export const id = {
     ownerAccountantBadge: "Dikelola di luar halaman ini",
     isActive: "Aktif",
     deactivateHint: "Menonaktifkan TIDAK menghapus riwayat -- anggota ini kehilangan akses dashboard sampai diaktifkan lagi.",
+    // Halaman Auditor (24 September 2026) -- grant SEMPIT, terpisah dari
+    // outletScope di atas. Lihat komentar kolomnya di lib/db/schema.ts.
+    auditAllOutlets: "Bisa meninjau semua outlet (Laporan Auditor)",
+    auditAllOutletsHint: "Membuka satu halaman baru (Laporan Auditor) yang menampilkan SEMUA outlet untuk satu hari -- tidak mengubah outlet yang terlihat di halaman lain sama sekali.",
+    auditAllOutletsBadge: "Auditor",
   },
   outlets: {
     title: "Outlet",
@@ -1445,5 +1451,59 @@ export const id = {
       "Menyusul — laba kotor butuh data HPP (Fase 2) dan laba bersih butuh biaya operasional (Fase 3).",
 
     loading: "Memuat...",
+  },
+  // Halaman Auditor (24 September 2026) -- satu halaman, semua outlet,
+  // satu hari bisnis. Lihat lib/audit/*.
+  audit: {
+    title: "Laporan Auditor",
+    dateLabel: "Hari bisnis",
+    prevDay: "← Hari sebelumnya",
+    nextDay: "Hari berikutnya →",
+    noAccessTitle: "Tidak punya akses",
+    noAccessBody: "Halaman ini butuh izin meninjau lintas outlet -- minta pemilik mengaktifkannya di halaman Tim.",
+    noShiftsToday: "Belum ada shift hari ini.",
+    shiftLabel: "Shift {employee}",
+    shiftTimeRange: "{opened} -- {closed}",
+    shiftStillOpen: "masih berjalan",
+
+    sectionPrepare: "Persiapan",
+    prepareEventYes: "Ada event",
+    prepareEventNo: "Tidak ada event",
+    prepareEventUnanswered: "Belum dijawab",
+    photoFailedLabel: "Foto gagal: {reason}",
+    photoNoneLabel: "Tidak ada foto",
+
+    sectionOpnameBuka: "Opname Buka",
+    sectionOpnameTutup: "Opname Tutup",
+    opnameNoFlagged: "Tidak ada bahan wajib dihitung untuk shift ini.",
+    opnameZeroVarianceSummary: "{count} bahan lain selisihnya nol.",
+    opnameUncountedSummary: "{count} bahan belum dihitung.",
+    opnameFirstShiftNote: "Opname pertama -- tidak ada pembanding.",
+    opnameVarianceLine: "{ingredient}: {physical} {unit} (selisih {variance})",
+    opnameReasonLine: "Alasan: {reason}",
+
+    sectionSales: "Penjualan",
+    salesSummaryLine: "{count} order -- {total}",
+
+    sectionClosing: "Penutupan",
+    cleanlinessNoteLabel: "Catatan kebersihan",
+    cleanlinessNoteNone: "Tidak ada catatan.",
+
+    sectionFlags: "Perlu Perhatian",
+    flagPrepareCameraFailed: "Kamera prepare gagal: {reason}",
+    flagClosingCameraFailed: "Kamera closing gagal: {reason}",
+    flagForceClosed: "Ditutup paksa manajer",
+    flagCashVarianceOutOfTolerance: "Selisih kas di luar toleransi ({variance})",
+    noFlags: "Tidak ada yang perlu perhatian.",
+
+    reviewButtonMark: "Tandai Sudah Ditinjau",
+    reviewButtonUpdate: "Ubah Tanda Tinjauan",
+    reviewedByLine: "Ditinjau oleh {name}, {at}",
+    reviewDialogTitle: "Tandai {outlet} Sudah Ditinjau",
+    reviewNoteLabel: "Catatan (opsional)",
+    reviewNotePlaceholder: "mis. sudah dicek, semua wajar",
+    reviewSubmitButton: "Simpan Tanda Tinjauan",
+    reviewSubmitting: "Menyimpan...",
+    reviewSuccess: "Ditandai sudah ditinjau.",
   },
 } as const;

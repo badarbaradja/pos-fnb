@@ -18,6 +18,12 @@ export type CurrentBusiness = {
   // null = semua outlet (termasuk SELALU null untuk owner/akuntan, apa pun
   // isi outlet_ids mereka di database); array = daftar outlet spesifik.
   allowedOutletIds: OutletScope;
+  // Halaman Auditor (24 September 2026) -- grant SEMPIT, TERPISAH dari
+  // allowedOutletIds. Dibaca LANGSUNG dari memberships.audit_all_outlets --
+  // TIDAK PERNAH mengubah allowedOutletIds atau outletScopeCondition di
+  // tempat lain. Satu-satunya pemakai: lib/audit/access.ts
+  // requireAuditAccess(). Lihat komentar kolomnya di lib/db/schema.ts.
+  auditAllOutlets: boolean;
 };
 
 /**
@@ -71,7 +77,7 @@ export async function getCurrentBusinessFromClient(
 ): Promise<CurrentBusiness | null> {
   const { data, error } = await supabase
     .from("memberships")
-    .select("business_id, role, outlet_ids")
+    .select("business_id, role, outlet_ids, audit_all_outlets")
     .eq("user_id", userId)
     .eq("is_active", true)
     .limit(1)
@@ -85,5 +91,6 @@ export async function getCurrentBusinessFromClient(
     businessId: data.business_id as string,
     role,
     allowedOutletIds: computeAllowedOutletIds(role, data.outlet_ids as string[] | null),
+    auditAllOutlets: Boolean(data.audit_all_outlets),
   };
 }

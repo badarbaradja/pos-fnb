@@ -53,6 +53,12 @@ const updateMembershipSchema = z.object({
   role: z.enum(assignableMembershipRoles),
   outletIds: outletIdsSchema,
   isActive: z.boolean(),
+  // Halaman Auditor (24 September 2026) -- grant SEMPIT, lihat komentar
+  // kolomnya di lib/db/schema.ts. TIDAK ada di inviteMembershipSchema
+  // (anggota baru selalu mulai false, diaktifkan lewat edit sesudahnya) --
+  // sengaja, supaya owner sadar memberikannya sebagai langkah TERPISAH,
+  // bukan tercentang tanpa sadar saat mengundang.
+  auditAllOutlets: z.boolean(),
 });
 
 export type MembershipActionResult = {
@@ -68,6 +74,7 @@ export type MembershipRow = {
   role: string;
   outletIds: string[] | null;
   isActive: boolean;
+  auditAllOutlets: boolean;
 };
 
 export type MembershipListResult = {
@@ -99,6 +106,7 @@ export async function listMembershipsWithDb(db: Db, businessId: string): Promise
       role: memberships.role,
       outletIds: memberships.outletIds,
       isActive: memberships.isActive,
+      auditAllOutlets: memberships.auditAllOutlets,
     })
     .from(memberships)
     .innerJoin(profiles, eq(profiles.id, memberships.userId))
@@ -214,8 +222,8 @@ async function writeMembershipAuditLog(
     // wajib catat BAHWA undangan dibuat, siapa-ke-siapa-kapan -- TANPA
     // tautannya sendiri (bearer token, lihat findOrInviteAuthUser).
     inviteLinkGenerated: boolean;
-    before: { role: string; outletIds: string[] | null; isActive?: boolean } | null;
-    after: { role: string; outletIds: string[] | null; isActive?: boolean };
+    before: { role: string; outletIds: string[] | null; isActive?: boolean; auditAllOutlets?: boolean } | null;
+    after: { role: string; outletIds: string[] | null; isActive?: boolean; auditAllOutlets?: boolean };
   }
 ): Promise<void> {
   await db.insert(auditLogs).values({
@@ -388,7 +396,12 @@ export async function updateMembershipWithDb(
 
   const updated = await db
     .update(memberships)
-    .set({ role: data.role, outletIds: data.outletIds, isActive: data.isActive })
+    .set({
+      role: data.role,
+      outletIds: data.outletIds,
+      isActive: data.isActive,
+      auditAllOutlets: data.auditAllOutlets,
+    })
     .where(and(eq(memberships.id, data.id), eq(memberships.businessId, businessId)))
     .returning({ id: memberships.id });
   assertRowsAffected(updated, "membership");
@@ -400,8 +413,18 @@ export async function updateMembershipWithDb(
     action: "membership_updated",
     targetEmail: null,
     inviteLinkGenerated: false,
-    before: { role: current.role, outletIds: current.outletIds, isActive: current.isActive },
-    after: { role: data.role, outletIds: data.outletIds, isActive: data.isActive },
+    before: {
+      role: current.role,
+      outletIds: current.outletIds,
+      isActive: current.isActive,
+      auditAllOutlets: current.auditAllOutlets,
+    },
+    after: {
+      role: data.role,
+      outletIds: data.outletIds,
+      isActive: data.isActive,
+      auditAllOutlets: data.auditAllOutlets,
+    },
   });
 
   return { success: { membershipId: data.id } };

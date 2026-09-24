@@ -78,6 +78,7 @@ export default async function TeamPage() {
                 role: row.role,
                 outletIds: row.outletIds,
                 isActive: row.isActive,
+                auditAllOutlets: row.auditAllOutlets,
               };
               return (
                 <TableRow key={row.id}>
@@ -90,9 +91,14 @@ export default async function TeamPage() {
                       : row.outletIds.map((id) => outletNameById.get(id) ?? "?").join(", ")}
                   </TableCell>
                   <TableCell>
-                    <Badge variant={row.isActive ? "default" : "secondary"}>
-                      {row.isActive ? strings.common.active : strings.common.inactive}
-                    </Badge>
+                    <div className="flex flex-wrap gap-1">
+                      <Badge variant={row.isActive ? "default" : "secondary"}>
+                        {row.isActive ? strings.common.active : strings.common.inactive}
+                      </Badge>
+                      {row.auditAllOutlets ? (
+                        <Badge variant="outline">{strings.team.auditAllOutletsBadge}</Badge>
+                      ) : null}
+                    </div>
                   </TableCell>
                   <TableCell className="text-right">
                     {isManaged ? (

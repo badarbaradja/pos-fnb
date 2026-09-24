@@ -35,6 +35,7 @@ export type MembershipFormValue = {
   role: string;
   outletIds: string[] | null;
   isActive: boolean;
+  auditAllOutlets: boolean;
 };
 
 const initialState: MembershipFormState = {};
@@ -260,6 +261,18 @@ function MembershipFormBody({
           </div>
         ) : null}
         {membership ? <p className="text-xs text-muted-foreground">{strings.team.deactivateHint}</p> : null}
+
+        {membership ? (
+          <div className="flex flex-col gap-1 rounded-lg border border-input p-3">
+            <div className="flex items-center gap-2">
+              <Checkbox id="auditAllOutlets" name="auditAllOutlets" defaultChecked={membership.auditAllOutlets} />
+              <Label htmlFor="auditAllOutlets" className="text-sm font-normal">
+                {strings.team.auditAllOutlets}
+              </Label>
+            </div>
+            <p className="pl-6 text-xs text-muted-foreground">{strings.team.auditAllOutletsHint}</p>
+          </div>
+        ) : null}
       </div>
       <DialogFooter>
         <Button type="submit" disabled={isPending}>

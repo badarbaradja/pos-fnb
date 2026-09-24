@@ -37,6 +37,7 @@ const navItems: NavItem[] = [
   { href: "/reports/sales", label: id.nav.reports, icon: "trendingUp", group: "reports" },
   { href: "/reports/stock", label: id.nav.stockReport, icon: "boxes", group: "reports" },
   { href: "/reports/bagi-hasil", label: id.nav.bagiHasilReport, icon: "pieChart", group: "reports" },
+  { href: "/audit", label: id.nav.audit, icon: "clipboardCheck", group: "reports" },
 ];
 
 export default async function DashboardLayout({
@@ -90,7 +91,18 @@ export default async function DashboardLayout({
     }
   }
 
-  const navItemsWithBadges = navItems.map((item) =>
+  // Halaman Auditor (24 September 2026) -- disembunyikan dari nav untuk
+  // staf yang tidak lolos requireAuditAccess() (lib/audit/access.ts),
+  // supaya tidak ada tautan mati ke pesan "tidak punya akses". Ini
+  // TIDAK menggantikan gerbang di halaman itu sendiri (nav cuma UX, bukan
+  // keamanan) -- kalau seseorang mengetik /audit langsung, halaman itu
+  // tetap menolaknya sendiri.
+  const canAudit = business
+    ? business.role === "owner" || business.role === "accountant" || business.auditAllOutlets
+    : false;
+  const visibleNavItems = navItems.filter((item) => item.href !== "/audit" || canAudit);
+
+  const navItemsWithBadges = visibleNavItems.map((item) =>
     item.href === "/stock-transfers" && pendingTransferCount > 0
       ? { ...item, badge: pendingTransferCount }
       : item
