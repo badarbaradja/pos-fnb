@@ -44,6 +44,7 @@ export function PayoutDialog({
   cutoffConfirmed,
   bagianPemilik,
   sudahDibayar,
+  defaultTanggalBayar,
 }: {
   outletId: string;
   pemilikId: string;
@@ -53,6 +54,12 @@ export function PayoutDialog({
   cutoffConfirmed: boolean;
   bagianPemilik: string;
   sudahDibayar: string;
+  // Tanggal bisnis HARI INI, dihitung SERVER-SIDE (page.tsx, businessDate())
+  // dan dioper turun lewat BagiHasilView -- BUKAN new Date() di komponen
+  // klien ini. Jam perangkat viewer bisa melenceng atau berada di zona
+  // waktu lain; hanya server yang boleh menentukan tanggal bisnis (bug
+  // ditemukan 25 September 2026, lihat CLAUDE.md).
+  defaultTanggalBayar: string;
 }) {
   const sisa = calculateSisaDibayar(new Decimal(bagianPemilik), new Decimal(sudahDibayar));
   const isZeroSisa = sisa.isZero();
@@ -67,7 +74,7 @@ export function PayoutDialog({
   const [isLoadingHistory, setIsLoadingHistory] = useState(false);
   const [history, setHistory] = useState<PemilikPayoutHistoryRow[]>([]);
   const [jumlah, setJumlah] = useState("");
-  const [tanggalBayar, setTanggalBayar] = useState(() => new Date().toISOString().slice(0, 10));
+  const [tanggalBayar, setTanggalBayar] = useState(defaultTanggalBayar);
   const [catatan, setCatatan] = useState("");
   const [isPending, setIsPending] = useState(false);
 

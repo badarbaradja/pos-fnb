@@ -13,6 +13,7 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { config as loadEnv } from "dotenv";
 import { eq } from "drizzle-orm";
+import { format, parseISO, subDays } from "date-fns";
 loadEnv({ path: [".env.local", ".env"], quiet: true });
 
 import { getAdminDb } from "@/lib/db/client";
@@ -36,6 +37,7 @@ import { hashPin } from "@/lib/auth/pin";
 import { openShiftWithDb } from "@/lib/pos/shift";
 import { submitPrepareReportWithDb } from "@/lib/pos/shift-report";
 import { sellBarangWithDb } from "@/lib/pos/sell-barang";
+import { businessDate } from "@/lib/utils/business-date";
 import { getBagiHasilLaporan } from "../bagi-hasil-report";
 
 const hasEnv = Boolean(
@@ -48,7 +50,15 @@ describe.skipIf(!hasEnv)("TT11 — laporan bagi hasil bulanan penuh", () => {
   const db = getAdminDb();
   const PREFIX = `TEST_BAGIHASIL_${Date.now()}`;
   const TIMEZONE = "Asia/Jakarta";
-  const TODAY = new Date().toISOString().slice(0, 10);
+  // BUKAN new Date().toISOString().slice(0, 10) -- itu tanggal UTC, bukan
+  // tanggal bisnis Jakarta. Bug ditemukan 25 September 2026: dijalankan
+  // pukul 00:00-07:00 WIB, UTC MASIH tanggal KEMARIN, jadi endOfPeriodInstant
+  // (lihat bagi-hasil-report.ts) berhenti di kemarin 23:59:59.999 WIB --
+  // padahal insert baris uji terjadi PERSIS SEKARANG (UTC sudah lewat
+  // ambang itu), jadi barang yang baru dibuat malah dianggap masuk SESUDAH
+  // endDate dan hilang dari dititipkan/terjualKumulatif. Diisi di beforeAll
+  // pola sama sales-report.test.ts, sesudah outlet dibuat (butuh dayCutoffTime).
+  let TODAY: string;
 
   let businessId: string;
   let outletId: string;
@@ -118,8 +128,9 @@ describe.skipIf(!hasEnv)("TT11 — laporan bagi hasil bulanan penuh", () => {
         taxPercent: "0",
         serviceChargePercent: "0",
       })
-      .returning({ id: outlets.id });
+      .returning({ id: outlets.id, dayCutoffTime: outlets.dayCutoffTime });
     outletId = outlet!.id;
+    TODAY = businessDate(new Date(), TIMEZONE, outlet!.dayCutoffTime);
 
     const [device] = await db
       .insert(devices)
@@ -351,8 +362,10 @@ describe.skipIf(!hasEnv)("TT11 — laporan bagi hasil bulanan penuh", () => {
 
     // "Periode lama" yang SUDAH BERAKHIR sebelum barang ini laku -- endDate
     // kemarin (business date, jauh sebelum penjualan yang akan dilakukan
-    // detik ini juga).
-    const yesterday = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+    // detik ini juga). TODAY - 1 hari kalender, BUKAN
+    // new Date(Date.now() - 86400000).toISOString().slice(0, 10) (bug yang
+    // sama seperti TODAY di atas -- lihat komentar di sana).
+    const yesterday = format(subDays(parseISO(TODAY), 1), "yyyy-MM-dd");
 
     const beforeSale = await getBagiHasilLaporan(db, {
       businessId,

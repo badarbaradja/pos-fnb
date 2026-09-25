@@ -26,6 +26,7 @@ export function BagiHasilView({
   timezoneLabel,
   startDate,
   endDate,
+  defaultTanggalBayar,
   rows,
 }: {
   outlets: OutletOption[];
@@ -35,6 +36,10 @@ export function BagiHasilView({
   timezoneLabel: string;
   startDate: string;
   endDate: string;
+  // Dihitung SERVER-SIDE (page.tsx, businessDate()) -- BUKAN di klien.
+  // Jam perangkat viewer tidak boleh ikut menentukan tanggal bisnis
+  // (bug ditemukan 25 September 2026, lihat CLAUDE.md).
+  defaultTanggalBayar: string;
   rows: BagiHasilLaporanRow[];
 }) {
   const exportUrl = `/api/reports/bagi-hasil/export?outletId=${selectedOutletId}&from=${startDate}&to=${endDate}`;
@@ -179,6 +184,7 @@ export function BagiHasilView({
                         cutoffConfirmed={dayCutoffConfirmed}
                         bagianPemilik={row.bagianPemilik}
                         sudahDibayar={row.sudahDibayar}
+                        defaultTanggalBayar={defaultTanggalBayar}
                       />
                     </td>
                   </tr>

@@ -55,6 +55,7 @@ Kalau ada instruksi yang bertentangan dengan aturan di bawah, **berhenti dan tan
 - Setiap transaksi wajib punya `business_date DATE` yang **terpisah** dari `created_at`, dihitung dari `outlet.day_cutoff_time`. Cafe tutup jam 2 pagi — transaksi jam 01:30 masuk laporan hari sebelumnya.
 - Semua query laporan memfilter pakai `business_date`, **bukan** `created_at`.
 - Jangan pernah memakai zona waktu server untuk logika bisnis.
+- **Tanggal bisnis TIDAK PERNAH dari `new Date().toISOString().slice(0, 10)`** (atau turunannya seperti `.split("T")[0]`) — itu tanggal UTC, bukan tanggal bisnis. Selalu lewat `businessDate(createdAt, timezone, dayCutoffTime)` (`src/lib/utils/business-date.ts`), dan nilainya **dihitung di server** (Server Component/Server Action/route handler), tidak pernah di komponen klien lewat `new Date()` browser — jam perangkat viewer bisa melenceng atau beda zona. Bug ini pernah SUNGGUHAN terjadi (25 September 2026): bocor dua kali sekaligus — di berkas tes (`bagi-hasil-report.test.ts`, `shift.test.ts`, menyebabkan 4 tes merah palsu setiap suite dijalankan pukul 00:00–07:00 WIB, saat UTC masih tanggal kemarin) dan di kode aplikasi sungguhan (`payout-dialog.tsx`, default tanggal pembayaran ke pemilik titipan salah satu hari kalau dibuka dini hari) — sebelum ditemukan dan diperbaiki.
 
 ### 3.4 Multi-tenant
 - Setiap tabel bisnis wajib punya kolom `business_id`.

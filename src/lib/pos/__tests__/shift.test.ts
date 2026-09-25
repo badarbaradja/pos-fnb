@@ -15,6 +15,8 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { config as loadEnv } from "dotenv";
 import { and, eq } from "drizzle-orm";
+import { format, subDays } from "date-fns";
+import { toZonedTime } from "date-fns-tz";
 loadEnv({ path: [".env.local", ".env"], quiet: true });
 
 import { getAdminDb } from "@/lib/db/client";
@@ -72,7 +74,18 @@ describe("checkShiftSellability", () => {
     // Duplikasi minimal logika businessDate() cuma untuk mendapat "hari
     // ini" versi test, TANPA impor businessDate() -- sengaja, supaya
     // test ini benar-benar independen dari implementasi yang diuji.
-    return new Date().toISOString().slice(0, 10);
+    // BUKAN new Date().toISOString().slice(0, 10) -- itu tanggal UTC,
+    // bukan tanggal bisnis Jakarta (bug sungguhan ditemukan 25 September
+    // 2026 di bagi-hasil-report.test.ts: dijalankan 00:00-07:00 WIB, UTC
+    // masih tanggal kemarin, jadi TODAY versi test meleset dari yang
+    // sungguhan dihitung checkShiftSellability). Duplikasi CUTOFF="04:00:00"
+    // di sini harus tetap sinkron manual kalau konstanta itu di atas berubah.
+    const zoned = toZonedTime(new Date(), TIMEZONE);
+    const localSeconds = zoned.getHours() * 3600 + zoned.getMinutes() * 60 + zoned.getSeconds();
+    const cutoffSeconds = 4 * 3600;
+    const localDate = new Date(zoned.getFullYear(), zoned.getMonth(), zoned.getDate());
+    const businessDay = localSeconds < cutoffSeconds ? subDays(localDate, 1) : localDate;
+    return format(businessDay, "yyyy-MM-dd");
   }
 
   function makeShift(overrides: Partial<OpenShiftRow>): OpenShiftRow {

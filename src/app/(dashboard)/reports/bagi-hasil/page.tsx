@@ -106,6 +106,7 @@ export default async function BagiHasilReportPage({
         timezoneLabel={timezoneLabel}
         startDate={startDate}
         endDate={endDate}
+        defaultTanggalBayar={today}
         rows={rows}
       />
     );
