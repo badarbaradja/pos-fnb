@@ -3,6 +3,7 @@ import { createServerSupabaseClient } from "@/lib/auth/supabase";
 import { requirePermissionDb } from "@/lib/auth/permissions";
 import { outlets } from "@/lib/db/schema";
 import { listMembershipsWithDb } from "@/lib/memberships/manage";
+import { listIdentityLinksForBusiness } from "@/lib/auth/identity-links";
 import { Button } from "@/components/ui/button";
 import {
   Table,
@@ -15,6 +16,8 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { id as strings } from "@/lib/i18n/id";
 import { TeamFormDialog, type MembershipFormValue } from "./team-form-dialog";
+import { IdentityLinkDialog } from "./identity-link-dialog";
+import { IdentityLinkDeleteButton } from "./identity-link-delete-button";
 
 export default async function TeamPage() {
   const supabase = await createServerSupabaseClient();
@@ -23,6 +26,7 @@ export default async function TeamPage() {
   let memberRows;
   let emailListTruncated;
   let outletRows;
+  let identityLinkRows;
   try {
     const listResult = await listMembershipsWithDb(db, businessId);
     memberRows = listResult.rows;
@@ -32,6 +36,10 @@ export default async function TeamPage() {
       .from(outlets)
       .where(eq(outlets.businessId, businessId))
       .orderBy(asc(outlets.name));
+    // listIdentityLinksForBusiness() sendiri pakai koneksi admin (lihat
+    // komentarnya) -- requirePermissionDb di atas sudah jadi gerbang izin
+    // yang dibutuhkan sebelum baris ini dipanggil.
+    identityLinkRows = await listIdentityLinksForBusiness(businessId);
   } finally {
     await closeDb();
   }
@@ -121,6 +129,48 @@ export default async function TeamPage() {
           </TableBody>
         </Table>
       )}
+
+      <div className="flex flex-col gap-3 border-t pt-6">
+        <div className="flex items-center justify-between">
+          <div>
+            <p className="text-sm font-medium">{strings.team.identityLinksTitle}</p>
+            <p className="text-sm text-muted-foreground">{strings.team.identityLinksSubtitle}</p>
+          </div>
+          <IdentityLinkDialog
+            members={memberRows.map((r) => ({ userId: r.userId, fullName: r.fullName, email: r.email }))}
+            trigger={<Button variant="outline">{strings.team.identityLinksAddButton}</Button>}
+          />
+        </div>
+
+        {identityLinkRows.length === 0 ? (
+          <p className="text-sm text-muted-foreground">{strings.team.identityLinksEmpty}</p>
+        ) : (
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>{strings.team.identityLinksColReportEmail}</TableHead>
+                <TableHead>{strings.team.identityLinksColPosMember}</TableHead>
+                <TableHead>{strings.team.identityLinksColCreatedAt}</TableHead>
+                <TableHead className="text-right">{strings.common.actions}</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {identityLinkRows.map((link) => (
+                <TableRow key={link.id}>
+                  <TableCell>{link.reportEmail}</TableCell>
+                  <TableCell>{link.posFullName}</TableCell>
+                  <TableCell className="text-sm text-muted-foreground">
+                    {link.createdAt.toLocaleDateString("id-ID", { dateStyle: "medium" })}
+                  </TableCell>
+                  <TableCell className="text-right">
+                    <IdentityLinkDeleteButton id={link.id} />
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        )}
+      </div>
     </div>
   );
 }

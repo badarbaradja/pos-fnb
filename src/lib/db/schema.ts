@@ -363,6 +363,54 @@ export const memberships = pgTable(
   ]
 ).enableRLS();
 
+// Handoff satu-pintu-masuk dari reportkoperumnasgroup (25 September 2026) --
+// pos-fnb TETAP sumber kebenaran identitas/role/outlet, reportkoperumnasgroup
+// cuma pembawa token pendek yang membuktikan "orang ini sedang login di
+// sana sebagai email X". Tabel ini pemetaan MANUAL, diisi owner satu per
+// satu (lihat app/(dashboard)/team/actions.ts) -- TIDAK PERNAH otomatis dari
+// token. Dikunci ke email report (bukan UUID) SENGAJA: email
+// @koperumnas.local di reportkoperumnasgroup ditetapkan HRD/CEO, bukan bisa
+// diubah user sendiri seperti email pribadi -- cukup stabil untuk jadi kunci
+// tanpa perlu alat cari-UUID terpisah. `pos_profile_id` yang jadi sumber
+// kebenaran SUNGGUHAN (role/outlet ikut membership profil itu, bukan
+// disimpan di sini).
+//
+// RLS: TIDAK ADA POLICY SAMA SEKALI (default deny Postgres begitu RLS
+// dinyalakan) -- tabel ini sengaja HANYA bisa disentuh lewat getAdminDb()
+// (route /handoff dan Server Action pengelola tautan di /team, keduanya
+// sudah menggerbang izin di app layer sebelum menyentuh tabel ini). Bukan
+// tabel per-bisnis (report_email lintas bisnis), jadi tidak ada business_id
+// untuk dipagari auth_business_ids() seperti tabel lain.
+export const reportIdentityLinks = pgTable(
+  "report_identity_links",
+  {
+    id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+    reportEmail: text("report_email").notNull().unique(),
+    posProfileId: uuid("pos_profile_id")
+      .notNull()
+      .references(() => profiles.id, { onDelete: "cascade" }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    createdBy: uuid("created_by").references(() => profiles.id),
+  }
+).enableRLS();
+
+// Anti-replay untuk token handoff (lihat reportIdentityLinks di atas) --
+// nonce dari token dicatat di sini SEKALI saat ditukar; percobaan kedua
+// dengan nonce yang sama menabrak primary key dan ditolak. exp token sendiri
+// cuma 60 detik, jadi tabel ini tumbuh lambat (dipakai jarang, populasi
+// kecil) -- belum ada job pembersihan, TIDAK masalah di skala ini, catat
+// sebagai utang kecil kalau nanti dipakai ratusan orang per hari.
+// RLS: sama seperti reportIdentityLinks, TIDAK ADA POLICY -- cuma disentuh
+// getAdminDb() di route /handoff.
+export const handoffNonces = pgTable(
+  "handoff_nonces",
+  {
+    nonce: uuid("nonce").primaryKey(),
+    reportEmail: text("report_email").notNull(),
+    usedAt: timestamp("used_at", { withTimezone: true }).notNull().defaultNow(),
+  }
+).enableRLS();
+
 // Pegawai TIDAK harus punya akun auth (belajar dari Kasirini: "tambah
 // pegawai tanpa daftar") — userId nullable, tidak wajib terhubung profiles.
 export const employees = pgTable(

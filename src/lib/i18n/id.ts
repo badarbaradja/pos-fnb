@@ -209,6 +209,23 @@ export const id = {
     auditAllOutlets: "Bisa meninjau semua outlet (Laporan Auditor)",
     auditAllOutletsHint: "Membuka satu halaman baru (Laporan Auditor) yang menampilkan SEMUA outlet untuk satu hari -- tidak mengubah outlet yang terlihat di halaman lain sama sekali.",
     auditAllOutletsBadge: "Auditor",
+    // Handoff satu pintu masuk dari reportkoperumnasgroup (25 September
+    // 2026) -- pemetaan MANUAL email di reportkoperumnasgroup ke anggota
+    // tim pos-fnb ini. Lihat lib/auth/identity-links.ts.
+    identityLinksTitle: "Tautan Akun Laporan",
+    identityLinksSubtitle: "Hubungkan email di reportkoperumnasgroup ke anggota tim di sini, supaya mereka bisa buka dashboard pos-fnb ini dari tombol di laporan tanpa login ulang.",
+    identityLinksAddButton: "Tambah Tautan",
+    identityLinksEmpty: "Belum ada tautan.",
+    identityLinksColReportEmail: "Email di reportkoperumnasgroup",
+    identityLinksColPosMember: "Anggota tim pos-fnb",
+    identityLinksColCreatedAt: "Dibuat",
+    identityLinksReportEmail: "Email di reportkoperumnasgroup",
+    identityLinksReportEmailPlaceholder: "nama@koperumnas.local",
+    identityLinksReportEmailInvalid: "Format email tidak valid",
+    identityLinksPosMember: "Anggota tim pos-fnb",
+    identityLinksPosMemberPlaceholder: "Pilih anggota tim...",
+    identityLinksDuplicate: "Email ini sudah ditautkan ke anggota lain -- hapus tautan lama dulu kalau mau mengganti.",
+    identityLinksDeleteConfirm: "Hapus tautan ini? Orang ini tidak akan bisa lagi memakai tombol handoff dari laporan sampai ditautkan ulang.",
   },
   outlets: {
     title: "Outlet",
@@ -1505,5 +1522,16 @@ export const id = {
     reviewSubmitButton: "Simpan Tanda Tinjauan",
     reviewSubmitting: "Menyimpan...",
     reviewSuccess: "Ditandai sudah ditinjau.",
+  },
+  // Handoff satu pintu masuk dari reportkoperumnasgroup (25 September 2026)
+  // -- lihat CLAUDE.md §3.4 dan lib/auth/handoff*.ts. Dua pesan gagal
+  // SENGAJA beda kata-kata ("tautan" vs "akun") tapi keduanya sama-sama
+  // TIDAK menyebut apakah email tertentu ada/tidak ada di pos-fnb.
+  handoff: {
+    tokenInvalidTitle: "Tautan sudah tidak berlaku",
+    tokenInvalidBody: "Kembali ke laporan dan coba lagi.",
+    notProvisionedTitle: "Akun toko belum disiapkan",
+    notProvisionedBody: "Hubungi admin untuk mengaktifkan akses Anda ke sistem kasir.",
+    backToLogin: "Ke halaman login POS",
   },
 } as const;
